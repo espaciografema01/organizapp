@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 680 680">
+  <!-- Fondo: azul noche profundo, elegante, neutro -->
+  <rect x="0" y="0" width="680" height="680" rx="120" fill="#1a1f2e"/>
+  <!-- Corchete izquierdo [ -->
+  <rect x="190" y="170" width="28" height="340" rx="6" fill="#ffffff" opacity="0.92"/>
+  <rect x="190" y="170" width="90" height="28" rx="6" fill="#ffffff" opacity="0.92"/>
+  <rect x="190" y="482" width="90" height="28" rx="6" fill="#ffffff" opacity="0.92"/>
+  <!-- Corchete derecho ] -->
+  <rect x="462" y="170" width="28" height="340" rx="6" fill="#ffffff" opacity="0.92"/>
+  <rect x="400" y="170" width="90" height="28" rx="6" fill="#ffffff" opacity="0.92"/>
+  <rect x="400" y="482" width="90" height="28" rx="6" fill="#ffffff" opacity="0.92"/>
+  <!-- Líneas decorativas — ahora en dorado cálido para contraste elegante -->
+  <rect x="264" y="268" width="152" height="16" rx="8" fill="#c9954a" opacity="0.85"/>
+  <rect x="264" y="316" width="110" height="16" rx="8" fill="#c9954a" opacity="0.60"/>
+  <rect x="264" y="364" width="130" height="16" rx="8" fill="#c9954a" opacity="0.55"/>
+  <rect x="264" y="412" width="88"  height="16" rx="8" fill="#c9954a" opacity="0.40"/>
+  <!-- Círculo de check — dorado -->
+  <circle cx="340" cy="228" r="24" fill="#c9954a" opacity="0.95"/>
+  <path d="M328 228 l8 9 l16-17" stroke="#1a1f2e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
