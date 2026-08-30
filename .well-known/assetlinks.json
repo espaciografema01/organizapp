@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.espaciografema01.organizapp",
+    "sha256_cert_fingerprints": ["C3:9D:C6:75:79:38:A4:4E:32:58:E0:7F:2E:1D:02:3E:F3:93:37:24:03:B8:73:29:CA:3F:6A:3B:95:B2:C4:D0"]
+  }
+}]
