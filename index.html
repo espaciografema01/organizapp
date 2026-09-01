@@ -364,7 +364,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 .themeBtn.active{border-color:var(--accent);background:var(--accent-bg);}
 </style>
 </head>
-<body class="theme-terracota">
+<body class="theme-light task-size-medium">
 <div id="splash">
   <div style="text-align:center;user-select:none;">
 
@@ -1003,7 +1003,7 @@ var TEXTS = {
 
   // ── Notificación de racha alcanzada (primera vez en el día) ──────────────
   streakTitle: "¡Día {dias} de racha!",
-  streakBody: "Cumpliste el umbral de tareas hoy. Tu racha sube a {dias} días.",
+  streakBody: "Cumpliste el la meta de tareas hoy. Tu racha sube a {dias} días.",
   streakBonusBody: "Cumpliste el umbral. +{bonus} XP de bonus por constancia.",
   streakMilestone7: "¡Una semana entera!",
   streakMilestone30: "¡30 días cumplidos!",
@@ -1012,12 +1012,12 @@ var TEXTS = {
 
   // ── Aviso de límite de tareas ────────────────────────────────────────────
   tasksLimitTitle: "Generación de tareas pausada",
-  tasksLimitBody: "Llegaste al máximo de tareas para este período. La creación de nuevas tareas estará bloqueada por un tiempo. Aprovechá para enfocarte en lo que ya tienes.",
+  tasksLimitBody: "Llegaste al máximo de tareas para este período. La creación de nuevas tareas estará bloqueada por un tiempo. Aprovecha para enfocarte en lo que ya tienes.",
   tasksLimitButton: "Entendido",
 
   // ── Botón reinicio + avisos ──────────────────────────────────────────────
   resetDisabledTitle: "Reinicio no disponible",
-  resetDisabledBody: "El botón de reinicio solo se habilita los sábados y domingos. Si reiniciás, las tareas volverán a entregar experiencia al completarse de nuevo.",
+  resetDisabledBody: "El botón de reinicio solo se habilita los sábados y domingos. Si reinicias, las tareas volverán a entregar experiencia al completarse de nuevo.",
   resetAvailableTitle: "Reinicio disponible",
   resetAvailableBody: "Hoy puedes reiniciar tus tareas. Si no lo haces, el lunes a las 4 AM se reiniciará automáticamente y volverán a entregar experiencia.",
   resetConfirmTitle: "Reiniciar checks",
@@ -1080,35 +1080,33 @@ var HIPERFOCO_COOLDOWN_DAYS = 30;
 // 30 tareas genéricas sencillas para quien no sabe qué anotar — se elige 1 al azar
 // y queda editable en el campo de nombre antes de guardar.
 var GENERIC_TASKS = [
-  'Escribir una página de tema libre',
-  'Caminar 20 minutos sin rumbo',
-  'Tomar agua 3 veces',
-  'Leer 3 páginas de un libro',
-  'Estirar el cuerpo 5 minutos',
-  'Ordenar un cajón o rincón',
-  'Escuchar una canción nueva',
-  'Escribir 3 cosas por las que estás agradecido',
-  'Enviar un mensaje a alguien que quieres',
+  'Escribir una página en escritura libre',
+  'Caminar 20 minutos',
+  'Escribir un microcuento',
+  'Leer 5 páginas de un libro',
+  'Hacer ejercicios de elongación',
+  'Ordenar una habitación',
+  'Aprender idiomas',
+  'Investigar algo de interés',
+  'Enviar mensajes que tienes pendientes',
   'Hacer 10 respiraciones profundas',
-  'Tender la cama',
+  'Salir a trotar',
   'Regar las plantas',
-  'Anotar una idea que tengas en mente',
-  'Salir a tomar sol 5 minutos',
-  'Escuchar un podcast breve',
+  'Anotar una idea que se te haya ocurrido durante el día',
+  'Andar en bici',
+  'Escuchar un podcast',
   'Ordenar el escritorio o mesa de trabajo',
-  'Dibujar algo simple, sin presión',
-  'Tomar una foto de algo que te guste hoy',
-  'Escribir un recuerdo lindo',
-  'Doblar y guardar ropa limpia',
+  'Dibujar',
+  'Salir a tomar fotos',
+  'Lavar la ropa',
   'Meditar 5 minutos',
   'Lavar los platos pendientes',
-  'Revisar y responder un correo pendiente',
-  'Escribir 3 metas pequeñas para hoy',
+  'Revisar y responder correos pendientes',
   'Llamar a un familiar o amigo',
-  'Preparar una comida simple y saludable',
+  'Preparar una comida',
   'Hacer 10 sentadillas o saltos',
   'Escribir en un diario personal',
-  'Buscar información sobre algo que te interese',
+  'Aprender un instrumento',
   'Ordenar tus notas o apuntes',
 ];
 
@@ -1280,12 +1278,12 @@ var S = {
     daysLimit:14,cooldownMonths:3,
     lowThresh:0.4,maxTasks:2,onlyCrucial:false,
     color:'#e8c5a8',icon:'🌿',
-    tips:['Empieza con una sola tarea pequeña.','Hidratación y descanso primero.','No te exijas más de lo que puedes hoy.'],
+    tips:['Empieza con una sola tarea pequeña.','Hidratación y descanso primero.','No es necesario exigirse tanto hoy.'],
     // Tareas elementales sugeridas (5 por defecto, editables)
     elementalTasks:['Ducharse','Hacer la cama','Tomar agua','Comer algo','Salir al sol'],
     // Información de emergencia (rellenar con los datos reales)
-    emergencyPhone:'',
-    emergencyMessage:'Si estás pasando un mal momento, puedes comunicarte de emergencia o agendar una sesión.',
+    emergencyPhone:'*4141',
+    emergencyMessage:'Si estás pasando un mal momento, puedes comunicarte de emergencia al *4141 [Chile]. Si lo deseas, también puedes agendar una primera sesión psicológica.',
     showEmergency:true,
     activeSince:null,
   },
@@ -1351,8 +1349,8 @@ var S = {
     daysPlanned:7,
     lowThresh:0.3,    // Umbral más bajo
     maxTasks:3,        // Más permisivo que baja energía
-    suggestions:['Pasear sin rumbo','Leer algo lindo','Comer despacio','Ver el cielo','No hacer nada'],
-    supportMessage:'Las vacaciones también son productivas. Date permiso de descansar.',
+    suggestions:['Pasear sin rumbo','Leer algo entretenido','Comer algo dulce','Ver el cielo','No hacer nada'],
+    supportMessage:'Las vacaciones también puede ser productivas a su modo. Date permiso de descansar.',
   },
   // Logros desbloqueados: [{id, dateUnlocked, days}]
   achievements:[],
@@ -1380,6 +1378,9 @@ var S = {
   notifTiming: { type: 'exact', value: 15 },
   // Última fecha en que se preguntó por permiso
   notifAskedDate:null,
+  // Versión del esquema de datos — se incrementa cuando cambia la estructura
+  // para aplicar migraciones seguras y evitar que datos viejos rompan la app.
+  dataVersion:1,
 };
 
 function uid(){return Math.random().toString(36).substr(2,9);}
@@ -1437,14 +1438,6 @@ function tRatio(t){
 
 // ── Storage ────────────────────────────────────────────────────────────────
 function loadState(){
-  // ── RESET DE FÁBRICA PARA PRUEBAS: borra todo al cargar ────────────────
-  // Quitá estas líneas cuando quieras conservar el estado entre sesiones
-  (function(){
-    var keys=[];
-    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.startsWith('og6-'))keys.push(k);}
-    keys.forEach(function(k){localStorage.removeItem(k);});
-  })();
-  // ────────────────────────────────────────────────────────────────────────
   try{
     var t=localStorage.getItem('og6-tasks');if(t)S.tasks=JSON.parse(t);
     var m=localStorage.getItem('og6-modes');if(m)S.modes=JSON.parse(m);
@@ -1487,6 +1480,14 @@ function loadState(){
     var up=localStorage.getItem('og6-userphrase');if(up)S.userPhrase=up;
     var np=localStorage.getItem('og6-notifperm');if(np)S.notifPermission=np;
     var na=localStorage.getItem('og6-notifasked');if(na)S.notifAskedDate=na;
+    // ── dataVersion: migración segura ──────────────────────────────────
+    var dv=localStorage.getItem('og6-dataversion');
+    var savedVersion=dv?Number(dv):0;
+    // Si la versión guardada es menor a la actual, aplicar migraciones aquí.
+    // Ejemplo: if(savedVersion < 2){ /* migrar campo X */ }
+    // Por ahora solo marcamos la versión actual.
+    S.dataVersion=1;
+    // ───────────────────────────────────────────────────────────────────
     if(!S.xp||S.xp<0)S.xp=0;
     S.prevLvl=getLevel(S.xp);
     document.body.className='theme-'+S.theme+' task-size-medium';applyVisualCustomizations();
@@ -1539,6 +1540,7 @@ function saveState(){
     if(S.notifAskedDate)localStorage.setItem('og6-notifasked',S.notifAskedDate);
     if(S.resetNotifShown)localStorage.setItem('og6-resetnotif',S.resetNotifShown);
     if(S.lastAutoReset)localStorage.setItem('og6-lastauto',S.lastAutoReset);
+    localStorage.setItem('og6-dataversion',String(S.dataVersion||1));
     // Auto-push a la nube si hay sesión
     if(typeof currentUser !== 'undefined' && currentUser){
       if(typeof pushToCloud === 'function'){
@@ -2064,7 +2066,7 @@ function renderHoy(){
     }
   } else {
     html += '<div class="ctx-strip" style="color:var(--muted);" onclick="openWeeklyMessageEditor()">'+
-      '<span style="font-size:14px;flex-shrink:0;">💬</span><span style="font-size:12px;">Agregar intención de la semana</span>'+
+      '<span style="font-size:14px;flex-shrink:0;">💬</span><span style="font-size:12px;">Agregar recordatorio o intención de la semana</span>'+
     '</div>';
   }
 
@@ -2382,7 +2384,7 @@ function renderEnergySimple(){
   var modeName = 'Normal', modeDesc = 'Sin modo activo. Rindo a mi ritmo habitual.', modeIcon = '☀️', modeColor = 'var(--accent)';
   if(hiperfoco){ modeName='Hiperfoco'; modeDesc='Enfoque máximo activado. Tareas ilimitadas visibles.'; modeIcon='🎯'; }
   else if(vacaciones){ modeName='Vacaciones'; modeDesc='Modo descanso activo. Solo tareas cruciales.'; modeIcon='🌴'; }
-  else if(am && am.type==='baja'){ modeName='Baja Energía'; modeDesc='Modo suave. Solo '+S.bajaEnergia.maxTasks+' tareas/día'+(S.bajaEnergia.onlyCrucial?', solo cruciales':'')+'.'; modeIcon=S.bajaEnergia.icon||'🌙'; modeColor=S.bajaEnergia.color||'var(--accent)'; }
+  else if(am && am.type==='baja'){ modeName='Baja Energía'; modeDesc='Ritmo bajo, pero a buen ritmo. Solo '+S.bajaEnergia.maxTasks+' tareas/día'+(S.bajaEnergia.onlyCrucial?', solo cruciales':'')+'.'; modeIcon=S.bajaEnergia.icon||'🌙'; modeColor=S.bajaEnergia.color||'var(--accent)'; }
   else if(am && am.type==='custom'){
     var cm = (S.modes||[]).find(function(m){return m.id===am.id;});
     if(cm){ modeName=cm.name; modeDesc='Modo personalizado activo.'; modeIcon=cm.icon||'⚡'; modeColor=cm.color||'var(--accent)'; }
@@ -2426,7 +2428,7 @@ function renderEnergySimple(){
 
   if(userModes.length === 0){
     html += '<div style="background:var(--bg);border:1px solid var(--line-soft);border-radius:12px;padding:16px;text-align:center;margin-bottom:10px;">'+
-      '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Diseñá un modo propio: elige cuántas tareas ves, si solo quieres cruciales, y el umbral de racha.</div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Diseña un modo propio: elige cuántas tareas ves, si solo quieres cruciales, y el umbral de racha.</div>'+
     '</div>';
   } else {
     userModes.forEach(function(m){
@@ -2772,7 +2774,7 @@ function renderYo(){
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
         '<div style="flex:1;">'+
           '<div style="font-weight:700;font-size:14px;color:var(--ink);">Consejos y tareas sugeridas</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Muestra los consejos y tareas rápidas de Baja Energía, Hiperfoco y Vacaciones. Son fijos, no editables.</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Muestra los consejos y tareas rápidas de Baja Energía, Hiperfoco y Vacaciones.</div>'+
         '</div>'+
         '<button class="tog" onclick="toggleShowModeTips()" style="background:'+(S.showModeTips!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
           '<span class="tok" style="left:'+(S.showModeTips!==false?22:2)+'px;"></span>'+
@@ -2784,7 +2786,7 @@ function renderYo(){
     html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Herramientas</div>';
     [
       {icon:'💡', label:'Tutorial', sub:'Recorrido por la app', action:"startTutorial()"},
-      {icon:'💬', label:'Sugerencias y feedback', sub:'Contanos qué mejorarías o qué te gustaría ver', action:"openFeedbackModal()"},
+      {icon:'💬', label:'Sugerencias y feedback', sub:'Cuéntanos qué mejorarías o qué te gustaría ver', action:"openFeedbackModal()"},
     ].forEach(function(l){
       html += '<button onclick="'+l.action+'" style="width:100%;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:left;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;gap:12px;margin-bottom:8px;">'+
         '<span style="font-size:22px;flex-shrink:0;">'+l.icon+'</span>'+
@@ -2813,7 +2815,7 @@ function renderYo(){
     html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Datos y backup</div>';
     html += '<div class="card" style="margin-bottom:10px;">'+
       '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:4px;">Exportar / Importar</div>'+
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Guarda todos tus datos en un archivo .json o restaurá desde un backup anterior.</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Guarda todos tus datos en un archivo .json o restaura desde un backup anterior.</div>'+
       '<div style="display:flex;gap:8px;">'+
         '<button onclick="exportData()" style="flex:1;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">📤 Exportar</button>'+
         '<label style="flex:1;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;text-align:center;display:block;">📥 Importar<input type="file" accept=".json" onchange="importData(event)" style="display:none;"/></label>'+
@@ -2843,7 +2845,7 @@ function renderYo(){
       '<span style="color:var(--accent);font-family:Cormorant Garamond,serif;font-weight:300;font-style:italic;font-size:18px;line-height:1;">]</span>'+
     '</div>'+
     '<div style="font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;margin-bottom:3px;">desarrollado por</div>'+
-    '<a href="https://psi.setmore.com/" target="_blank" style="font-size:11px;color:var(--accent);font-weight:600;text-decoration:none;letter-spacing:.05em;">psi.setmore.com</a>'+
+    '<a href="https://psi.setmore.com/" target="_blank" style="font-size:11px;color:var(--accent);font-weight:600;text-decoration:none;letter-spacing:.05em;">Espacio [G]rafema</a>'+
   '</div>';
 
   html += '</div>';
@@ -2897,12 +2899,12 @@ function renderAccount(){
       // Opciones de pago/donación via Google Play
       '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
         '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">Desbloquear acceso completo</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Una compra única de <b>$8.000</b> desbloquea 25 tareas/día, proyectos ilimitados y toda la personalización.</div>'+
-        '<button onclick="triggerGooglePlayPurchase(\'access_8k\')" style="width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:8px;">🔓 Comprar acceso — $8.000</button>'+
-        '<div style="font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 4px;">Donaciones (opcional y repetibles)</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Si quieres apoyar el desarrollo de la app, puedes donar $10.000 o $15.000 cuantas veces quieras.</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Una compra única de <b>$8.000</b> desbloquea 25 tareas/día, proyectos ilimitados y toda la personalización de interfaz.</div>'+
+        '<button onclick="triggerGooglePlayPurchase(\'access_5k\')" style="width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:8px;">🔓 Comprar acceso total (y para siempre) — $5.000</button>'+
+        '<div style="font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 4px;">Donar</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Si ya tienes el acceso total pero quieres seguir apoyando el desarrollo de la app, puedes volver a donar. ¡Te lo agradecemos un montón!</div>'+
         '<div style="display:flex;gap:8px;">'+
-          '<button onclick="triggerGooglePlayPurchase(\'donation_10k\')" style="flex:1;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent);border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">💛 $10.000</button>'+
+          '<button onclick="triggerGooglePlayPurchase(\'donation_5k\')" style="flex:1;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent);border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">💛 $5.000</button>'+
 
         '</div>'+
       '</div>'
@@ -2938,9 +2940,9 @@ function editUserProfile(){
     '</div>'+
     '<label class="flbl">Tu nombre</label>'+
     '<input id="prof-name" class="finp" value="'+esc(S.userName||'')+'" placeholder="¿Cómo quieres que te llame la app?"/>'+
-    '<label class="flbl" style="margin-top:10px;">Frase personal (aparece en tu perfil)</label>'+
+    '<label class="flbl" style="margin-top:10px;">Frase personal</label>'+
     '<input id="prof-phrase" class="finp" value="'+esc(S.userPhrase||'')+'" placeholder="Ej: Un paso a la vez"/>'+
-    '<div style="font-size:11px;color:var(--muted);margin-top:6px;margin-bottom:16px;">Aparece en tu perfil. Puede ser una frase motivadora, un propósito o lo que quieras.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px;margin-bottom:16px;">Aparece en tu perfil. Puede ser una frase que te identifique, un propósito o lo que quieras.</div>'+
     '<div style="display:flex;gap:8px;">'+
       '<button class="sbtn" onclick="saveUserProfile()">Guardar</button>'+
       '<button class="cbtn" onclick="removeOverlay(\'profile-modal\')">Cancelar</button>'+
@@ -3361,11 +3363,6 @@ function openProjectMenu(pid, event){
   var rect = event.target.closest('button').getBoundingClientRect();
   menu.style.top = (rect.bottom + 6) + 'px';
   menu.innerHTML =
-    '<button onclick="closeProjectMenu();exportGanttXLSX(\''+pid+'\')" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
-      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 10h8M6 2v6M3 6l3 3 3-3"/></svg></span>'+
-      '<span>Exportar a Excel</span>'+
-    '</button>'+
-    '<div style="height:1px;background:var(--line);margin:0;"></div>'+
     '<button onclick="closeProjectMenu();toggleGanttWeekends();" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg></span>'+
       '<span style="flex:1;">Ocultar fin de semana</span>'+
@@ -5231,7 +5228,7 @@ function openWeeklyMessageEditor(){
       }).join('')+
     '</div>'+
     '<label class="flbl">Mensaje</label>'+
-    '<textarea id="wm-text" placeholder="Ej: Esta semana, enfocate en descansar bien..." style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);resize:vertical;min-height:80px;outline:none;margin-bottom:14px;">'+esc(current.text||'')+'</textarea>'+
+    '<textarea id="wm-text" placeholder="Ej: Esta semana enfocarse en aprender idiomas" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);resize:vertical;min-height:80px;outline:none;margin-bottom:14px;">'+esc(current.text||'')+'</textarea>'+
     '<div style="display:flex;gap:8px;">'+
       '<button class="sbtn" onclick="saveWeeklyMessage()">Guardar</button>'+
       (current.text?'<button onclick="clearWeeklyMessage()" style="background:none;border:1.5px solid var(--bad);color:var(--bad);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Quitar</button>':'')+
@@ -5831,8 +5828,8 @@ function showMedalDetail(medalId, unlocked){
 
 function getAchievementName(days){
   if(days===30)return{emoji:'🌱',title:'Mes constante'};
-  if(days===120)return{emoji:'🌳',title:'4 meses ardiendo'};
-  if(days===365)return{emoji:'☀️',title:'Un año entero'};
+  if(days===120)return{emoji:'🌳',title:'4 meses de tenacidad'};
+  if(days===365)return{emoji:'☀️',title:'¡Un año entero!'};
   if(days>365 && days%365===0)return{emoji:'⭐',title:(days/365)+' años seguidos'};
   return{emoji:'🔥',title:days+' días'};
 }
@@ -5896,7 +5893,7 @@ function renderEnergy(){
 
   // Encabezado y descripción
   html += '<div class="serif" style="font-size:26px;font-weight:800;color:var(--ink);margin-bottom:4px;letter-spacing:-.02em;">Modos</div>'+
-    '<p style="font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.5;">Adaptá el ritmo a cómo te sentís. Las tareas ★ cruciales siguen visibles aunque actives un modo más suave.</p>';
+    '<p style="font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.5;">Adapta el ritmo a cómo te sientes. Las tareas ★ cruciales siguen visibles aunque actives un modo más suave.</p>';
 
   // ── Modos especiales (sistema) ──────────────────────────────────────────
   html += '<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Modos del sistema</div>';
@@ -5971,7 +5968,7 @@ function renderEnergy(){
     active: hfActive,
     remTxt: hfActive?hfRem+' días restantes':null,
     errTxt: (!hfActive && !hfInfo.ok && hfInfo.reason==='cooldown')?'Disponible en '+hfInfo.daysLeft+' días':null,
-    tips: ['Empuja más fuerte cuando necesites avanzar.'],
+    tips: ['Aprovechar ese exceso de energía nunca está demás.'],
     mainBtn: hfMainBtn,
   });
 
@@ -6064,13 +6061,13 @@ function showBajaWarning(){
     // Invitación a agendar sesión
     '<div style="background:var(--accent-bg);border:1px solid var(--accent-soft);border-radius:10px;padding:12px;margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:4px;">¿Te gustaría hablar con alguien?</div>'+
-      '<div style="font-size:11px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">Si estás pasando por un momento difícil, una sesión puede ayudarte a organizarte emocionalmente y retomar el ritmo.</div>'+
+      '<div style="font-size:11px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">Si estás pasando por un momento difícil, puede comunicarte de emergencia al *4141 [Chile]. También puedes agendar una primera sesión de atención psicológica</div>'+
       '<a href="https://psi.setmore.com/" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);color:white;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;text-decoration:none;">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>'+
         'Agendar una sesión'+
       '</a>'+
     '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">No es para evitar el trabajo: es para cuidarte. Si solo quieres bajar el ritmo unos días, considerá usar un modo personalizado.</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">No es para evitar el trabajo: es para cuidarte. Si solo quieres bajar el ritmo unos días, considera usar un modo personalizado o diseñar una plantilla con menos tareas.</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();_continueBajaActivation();">Sí, activar Baja Energía</button>'+
       '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
@@ -6251,7 +6248,7 @@ function openEditVacaciones(){
       '<div style="margin-bottom:8px;"><span style="font-size:13px;font-weight:600;color:var(--ink);">💛 Mensaje de apoyo</span></div>'+
       '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(vc.supportMessage||'')+'</div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin:12px 0 16px;line-height:1.5;">Las sugerencias de actividades y el mensaje de apoyo de este modo son fijos y no se pueden editar. Puedes ocultarlos desde Yo → Preferencias.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin:12px 0 16px;line-height:1.5;">Si quieres ocultar las sugerencias de actividades y los mensajes de apoyo de la aplicación lo puedes hacer en desde Yo → Preferencias.</div>'+
     '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="saveVacaciones()">Guardar</button><button class="cbtn" onclick="removeOverlay(\'mode-modal\')">Cancelar</button></div>'+
   '</div>';
   document.body.appendChild(overlay);
@@ -6329,7 +6326,7 @@ var TPL = {templateId:null, name:'', tasks:[], currentDay:0};
 function newTemplate(){
   // Verificar límite de plantillas (free)
   if(!isPremium() && (S.templates||[]).length >= FREE_LIMITS.templates){
-    showInfoModal('Límite alcanzado','En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas. Dona cualquier monto para tener plantillas ilimitadas.','Entendido');
+    showInfoModal('Límite alcanzado','En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas.','Entendido');
     return;
   }
   TPL = {
@@ -7135,26 +7132,38 @@ function showTaskModal(){
     // Hora (solo tareas diarias) — para poder verlas ordenadas en Plan → Horario
     (isDay?'<div class="fsec">'+
       '<div class="frow" style="margin-bottom:'+(M.hora?10:0)+'px;">'+
-        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Tiene hora</span>'+
+        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Definir horario específico</span>'+
         '<button class="tog" id="m-hora-tog" onclick="mToggleHora()" style="background:'+(M.hora?'var(--accent)':'var(--muted-soft)')+';">'+
           '<span class="tok" style="left:'+(M.hora?22:2)+'px;"></span>'+
         '</button>'+
       '</div>'+
       '<div id="m-hora-area" style="display:'+(M.hora?'block':'none')+';">'+
-        '<input type="time" id="m-hora-input" value="'+(M.hora||'')+'" onchange="M.hora=this.value;" style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;font-size:14px;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);margin-bottom:10px;">'+
-        // Duración — selector rápido + opción manual
-        '<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;">Duración</div>'+
-        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">'+
-          [[30,'30 min'],[60,'1 h'],[90,'1:30'],[120,'2 h'],[150,'2:30'],[180,'3 h'],[240,'4 h']].map(function(opt){
-            var on = M.duracion===opt[0];
-            return '<button type="button" onclick="mSetDuracion('+opt[0]+')" style="padding:5px 10px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+opt[1]+'</button>';
-          }).join('')+
+        '<div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:4px;">'+
+          // DESDE
+          '<div style="flex:1;position:relative;" id="m-picker-desde-wrap">'+
+            '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Desde</div>'+
+            '<button type="button" id="m-desde-btn" onclick="mTogglePicker(\'desde\')" style="width:100%;border:1.5px solid var(--accent);border-radius:10px;padding:9px 10px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">'+
+              '<span id="m-desde-label">'+(M.hora ? mHoraTo12(M.hora) : mHoraTo12('09:00'))+'</span>'+
+              '<span style="font-size:10px;color:var(--muted);">▾</span>'+
+            '</button>'+
+            '<div id="m-desde-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:160px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:610;max-height:220px;overflow-y:auto;">'+
+              mBuildPickerOptions(M.hora||'09:00', null, 'desde')+
+            '</div>'+
+          '</div>'+
+          '<span style="font-size:18px;color:var(--muted-soft);flex-shrink:0;padding-bottom:10px;">–</span>'+
+          // HASTA
+          '<div style="flex:1;position:relative;" id="m-picker-hasta-wrap">'+
+            '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Hasta</div>'+
+            '<button type="button" id="m-hasta-btn" onclick="mTogglePicker(\'hasta\')" style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 10px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">'+
+              '<span id="m-hasta-label">'+mHoraTo12(mAddMins(M.hora||'09:00', M.duracion||60))+'</span>'+
+              '<span style="font-size:10px;color:var(--muted);">▾</span>'+
+            '</button>'+
+            '<div id="m-hasta-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;left:0;min-width:160px;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:610;max-height:220px;overflow-y:auto;">'+
+              mBuildPickerOptions(mAddMins(M.hora||'09:00', M.duracion||60), M.hora||'09:00', 'hasta')+
+            '</div>'+
+          '</div>'+
         '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">'+
-          '<span style="font-size:11px;color:var(--muted);flex-shrink:0;">O en minutos:</span>'+
-          '<input type="number" id="m-dur-input" min="5" max="1440" value="'+(M.duracion||60)+'" onchange="mSetDuracion(+this.value)" style="width:70px;border:1.5px solid var(--line);border-radius:8px;padding:7px 8px;font-size:13px;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);">'+
-          '<span style="font-size:11px;color:var(--muted);">min</span>'+
-        '</div>'+
+        '<div id="m-dur-badge" style="font-size:11px;color:var(--muted);text-align:right;margin-bottom:6px;">'+mDurLabel(M.duracion||60)+'</div>'+
       '</div>'+
     '</div>':'')+
     // Checklist only for "dia" period
@@ -7186,34 +7195,152 @@ function mToggleMore(){
   if(area) area.style.display = M.moreOpen ? 'block' : 'none';
   if(chev) chev.style.transform = M.moreOpen ? 'rotate(180deg)' : 'none';
 }
+// ── Time picker helpers (desde / hasta) ──────────────────────────────────────────────────────────────
+function mHoraTo12(hora24){
+  if(!hora24) return '';
+  var parts = hora24.split(':');
+  var h = parseInt(parts[0],10), m = parseInt(parts[1]||'0',10);
+  var ampm = h < 12 ? 'AM' : 'PM';
+  var h12 = h % 12 || 12;
+  return h12 + ':' + (m<10?'0':'')+m + ' ' + ampm;
+}
+function mHoraToMins(hora24){
+  if(!hora24) return 0;
+  var p = hora24.split(':');
+  return parseInt(p[0],10)*60 + parseInt(p[1]||'0',10);
+}
+function mMinsToHora(mins){
+  mins = ((mins % 1440) + 1440) % 1440;
+  var h = Math.floor(mins/60), m = mins%60;
+  return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+}
+function mAddMins(hora24, mins){
+  return mMinsToHora(mHoraToMins(hora24) + mins);
+}
+function mDurLabel(mins){
+  if(!mins) return '';
+  var h = Math.floor(mins/60), m = mins%60;
+  if(h && m) return h+'h '+m+' min';
+  if(h) return h === 1 ? '1 hora' : h+' horas';
+  return m+' min';
+}
+function mBuildPickerOptions(selected, anchor, which){
+  var html = '';
+  for(var h=0;h<24;h++){
+    for(var m=0;m<60;m+=15){
+      var val = (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+      if(which === 'hasta' && anchor && mHoraToMins(val) <= mHoraToMins(anchor)) continue;
+      var label = mHoraTo12(val);
+      var durLabel = '';
+      if(anchor){
+        var diff = mHoraToMins(val) - mHoraToMins(anchor);
+        if(diff > 0) durLabel = mDurLabel(diff);
+      }
+      var isActive = val === selected;
+      html += '<button type="button" onclick="mPickTime(\''+which+'\',\''+val+'\')" style="'+
+        'display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;'+
+        'padding:11px 16px;border:none;background:'+(isActive?'var(--accent-bg)':'transparent')+';'+
+        'font-family:Inter,sans-serif;font-size:14px;font-weight:'+(isActive?'700':'500')+';'+
+        'color:'+(isActive?'var(--accent)':'var(--ink)')+';cursor:pointer;'+
+        'border-radius:0;border-bottom:1px solid var(--line-soft);">'+
+        '<span>'+label+'</span>'+
+        (durLabel?'<span style="font-size:12px;color:var(--muted);font-weight:400;">'+durLabel+'</span>':'')+
+      '</button>';
+    }
+  }
+  return html;
+}
+function mPickTime(which, val){
+  if(which === 'desde'){
+    M.hora = val;
+    var hastaVal = mAddMins(val, M.duracion||60);
+    var lbl = document.getElementById('m-desde-label');
+    if(lbl) lbl.textContent = mHoraTo12(val);
+    var hastaLbl = document.getElementById('m-hasta-label');
+    if(hastaLbl) hastaLbl.textContent = mHoraTo12(hastaVal);
+    var hastaDD = document.getElementById('m-hasta-dropdown');
+    if(hastaDD) hastaDD.innerHTML = mBuildPickerOptions(hastaVal, val, 'hasta');
+    var desdeDD = document.getElementById('m-desde-dropdown');
+    if(desdeDD) desdeDD.innerHTML = mBuildPickerOptions(val, null, 'desde');
+  } else {
+    var durMins = mHoraToMins(val) - mHoraToMins(M.hora||'09:00');
+    if(durMins <= 0) return;
+    M.duracion = durMins;
+    var lbl = document.getElementById('m-hasta-label');
+    if(lbl) lbl.textContent = mHoraTo12(val);
+    var hastaDD = document.getElementById('m-hasta-dropdown');
+    if(hastaDD) hastaDD.innerHTML = mBuildPickerOptions(val, M.hora||'09:00', 'hasta');
+  }
+  var badge = document.getElementById('m-dur-badge');
+  if(badge) badge.textContent = mDurLabel(M.duracion||60);
+  var dd = document.getElementById('m-'+which+'-dropdown');
+  if(dd) dd.style.display = 'none';
+  _pickerOpen = null;
+  document.removeEventListener('click', mPickerOutsideClose);
+}
+var _pickerOpen = null;
+function mTogglePicker(which){
+  var dd = document.getElementById('m-'+which+'-dropdown');
+  if(!dd) return;
+  var other = which === 'desde' ? 'hasta' : 'desde';
+  var otherDD = document.getElementById('m-'+other+'-dropdown');
+  if(otherDD) otherDD.style.display = 'none';
+  if(_pickerOpen === which){
+    dd.style.display = 'none';
+    _pickerOpen = null;
+    document.removeEventListener('click', mPickerOutsideClose);
+    return;
+  }
+  _pickerOpen = which;
+  dd.style.display = 'block';
+  setTimeout(function(){
+    var active = dd.querySelector('[style*="var(--accent-bg)"]');
+    if(active) active.scrollIntoView({block:'center'});
+    else {
+      var btns = dd.querySelectorAll('button');
+      if(btns.length) btns[Math.min(4,btns.length-1)].scrollIntoView({block:'start'});
+    }
+    document.addEventListener('click', mPickerOutsideClose);
+  }, 30);
+}
+function mPickerOutsideClose(e){
+  if(!_pickerOpen) return;
+  var wrap = document.getElementById('m-picker-'+_pickerOpen+'-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    var dd = document.getElementById('m-'+_pickerOpen+'-dropdown');
+    if(dd) dd.style.display = 'none';
+    _pickerOpen = null;
+    document.removeEventListener('click', mPickerOutsideClose);
+  }
+}
+
 function mToggleHora(){
   M.hora = M.hora ? null : '09:00';
   M.duracion = M.duracion || 60;
+  _pickerOpen = null;
   var tog = document.getElementById('m-hora-tog');
   var area = document.getElementById('m-hora-area');
   if(tog) tog.style.background = M.hora ? 'var(--accent)' : 'var(--muted-soft)';
   if(tog) tog.querySelector('.tok').style.left = M.hora ? '22px' : '2px';
   if(area){
     area.style.display = M.hora ? 'block' : 'none';
-    var inp = document.getElementById('m-hora-input');
-    if(inp && M.hora) inp.value = M.hora;
+    if(M.hora){
+      var hastaVal = mAddMins(M.hora, M.duracion);
+      var desdeDD = document.getElementById('m-desde-dropdown');
+      if(desdeDD) desdeDD.innerHTML = mBuildPickerOptions(M.hora, null, 'desde');
+      var hastaDD = document.getElementById('m-hasta-dropdown');
+      if(hastaDD) hastaDD.innerHTML = mBuildPickerOptions(hastaVal, M.hora, 'hasta');
+      var lbl = document.getElementById('m-desde-label');
+      if(lbl) lbl.textContent = mHoraTo12(M.hora);
+      var hlbl = document.getElementById('m-hasta-label');
+      if(hlbl) hlbl.textContent = mHoraTo12(hastaVal);
+      var badge = document.getElementById('m-dur-badge');
+      if(badge) badge.textContent = mDurLabel(M.duracion);
+    }
   }
 }
 function mSetDuracion(min){
   M.duracion = Math.max(5, Math.min(1440, min||60));
-  // Actualizar el campo manual sin re-renderizar todo
-  var inp = document.getElementById('m-dur-input');
-  if(inp) inp.value = M.duracion;
-  // Refrescar los chips de duración sin recargar el modal completo
-  var chips = document.querySelectorAll('#m-dur-chips button');
-  // Usar data-min para comparar si existen
-  document.querySelectorAll('[data-dur]').forEach(function(b){
-    var v = +b.getAttribute('data-dur');
-    var on = v === M.duracion;
-    b.style.borderColor = on ? 'var(--accent)' : 'var(--line)';
-    b.style.background  = on ? 'var(--accent-bg)' : 'transparent';
-    b.style.color       = on ? 'var(--accent)' : 'var(--ink-soft)';
-  });
 }
 function mToggleCrucial(){
   M.crucial=!M.crucial;
@@ -7493,13 +7620,13 @@ var MEDALS_CATALOG = [
     check:function(){return (S.modes||[]).length >= 3;}
   },
   {
-    id:'use-baja', emoji:'🌿', title:'Autocuidado',
+    id:'use-baja', emoji:'🌿', title:'Introspección',
     desc:'Usa modo Baja Energía al menos una vez.',
     reward:{type:'xp', value:10, label:'+10 XP'},
     check:function(){return !!S.bajaEnergia.activeSince || (S.bajaUsedCount||0) > 0;}
   },
   {
-    id:'use-vacaciones', emoji:'🌴', title:'Sabe descansar',
+    id:'use-vacaciones', emoji:'🌴', title:'Descansar es poder',
     desc:'Activa modo Vacaciones al menos una vez.',
     reward:{type:'xp', value:10, label:'+10 XP'},
     check:function(){return (S.vacacionesUsedCount||0) > 0;}
@@ -7787,10 +7914,10 @@ function drawShareImage(days, totalCompleted, daysLogged){
   ctx.fillStyle = inkSoftColor;
   ctx.font = 'italic 22px Georgia, serif';
   var frase;
-  if(days === 30) frase = '"Un mes entero cuidando mis metas"';
-  else if(days === 120) frase = '"4 meses de constancia"';
-  else if(days === 365) frase = '"Un año entero. La constancia es mi forma."';
-  else frase = '"' + days + ' días eligiéndome"';
+  if(days === 30) frase = '"Un mes de constancia"';
+  else if(days === 120) frase = '"4 meses es ya un hábito"';
+  else if(days === 365) frase = '"Un año entero... A pura perseverancia"';
+  else frase = '"' + days + ' días de sudor y organización"';
   ctx.fillText(frase, W/2, 1000);
 }
 
@@ -7978,12 +8105,12 @@ var MAIN_TOUR = [
   {
     target: null,
     title: '¡Bienvenido a Organiz[app]!',
-    body: 'Te hago un tour rápido de la app. Puedes saltarlo en cualquier momento.',
+    body: 'Te hago un tour rápido de la app. Puedes saltarlo si lo deseas o volver a verlo en cualquier momento.',
   },
   {
     target: '#bottom-nav',
     title: 'Navegación principal',
-    body: 'Aquí están las 5 secciones de la app: Hoy, Plan, Proyectos, Energía y Yo. Durante este tour navegamos nosotros — al terminar puedes explorar cada una libremente.',
+    body: 'Aquí están las 5 secciones de la app: Hoy, Plan, Proyectos, Energía y Yo.',
   },
   {
     target: '#fab-wrap .fab',
@@ -8069,7 +8196,7 @@ function showFirstLevelUpTip(){
     _tourSteps = [{
       target: null,
       title: '¡Subiste de nivel!',
-      body: 'Cada nivel que ganas desbloquea una tarea diaria más (hasta 24 en el plan gratuito). Sigue completando tu umbral cada día para avanzar.'
+      body: 'Cada nivel que ganas desbloquea una tarea diaria más (hasta 24). Sigue completando tu umbral cada día para avanzar.'
     }];
     _tourIdx=0; _tourActive=true; _tourOnDone=null;
     _slRender();
