@@ -1480,6 +1480,15 @@ function loadState(){
     var up=localStorage.getItem('og6-userphrase');if(up)S.userPhrase=up;
     var np=localStorage.getItem('og6-notifperm');if(np)S.notifPermission=np;
     var na=localStorage.getItem('og6-notifasked');if(na)S.notifAskedDate=na;
+    var sm=localStorage.getItem('og6-simplemode');if(sm!==null)S.simpleMode=sm==='1';
+    var smfr=localStorage.getItem('og6-simplemodefabreset');if(smfr!==null)S.simpleModeFabReset=smfr==='1';
+    var hr=localStorage.getItem('og6-horariorange');if(hr)S.horarioRange=hr;
+    var ghw=localStorage.getItem('og6-ganttweekends');if(ghw!==null)S.ganttHideWeekends=ghw==='1';
+    var ua=localStorage.getItem('og6-useravatar');if(ua)S.userAvatar=ua;
+    var nt=localStorage.getItem('og6-notiftiming');if(nt)S.notifTiming=JSON.parse(nt);
+    var pts=localStorage.getItem('og6-projecttourseen');if(pts)S.projectTourSeen=pts==='1';
+    var lts=localStorage.getItem('og6-leveltipseen');if(lts)S.levelTipSeen=lts==='1';
+    var mts=localStorage.getItem('og6-medaltipseen');if(mts)S.medalTipSeen=mts==='1';
     // ── dataVersion: migración segura ──────────────────────────────────
     var dv=localStorage.getItem('og6-dataversion');
     var savedVersion=dv?Number(dv):0;
@@ -1540,6 +1549,15 @@ function saveState(){
     if(S.notifAskedDate)localStorage.setItem('og6-notifasked',S.notifAskedDate);
     if(S.resetNotifShown)localStorage.setItem('og6-resetnotif',S.resetNotifShown);
     if(S.lastAutoReset)localStorage.setItem('og6-lastauto',S.lastAutoReset);
+    localStorage.setItem('og6-simplemode',S.simpleMode?'1':'0');
+    localStorage.setItem('og6-simplemodefabreset',S.simpleModeFabReset===false?'0':'1');
+    localStorage.setItem('og6-horariorange',S.horarioRange||'completa');
+    localStorage.setItem('og6-ganttweekends',S.ganttHideWeekends?'1':'0');
+    if(S.userAvatar)localStorage.setItem('og6-useravatar',S.userAvatar);
+    localStorage.setItem('og6-notiftiming',JSON.stringify(S.notifTiming||{type:'exact',value:15}));
+    localStorage.setItem('og6-projecttourseen',S.projectTourSeen?'1':'0');
+    localStorage.setItem('og6-leveltipseen',S.levelTipSeen?'1':'0');
+    localStorage.setItem('og6-medaltipseen',S.medalTipSeen?'1':'0');
     localStorage.setItem('og6-dataversion',String(S.dataVersion||1));
     // Auto-push a la nube si hay sesión
     if(typeof currentUser !== 'undefined' && currentUser){
@@ -3084,7 +3102,6 @@ function openNewProjectModal(){
   '</div>';
   document.body.appendChild(overlay);
   window._newProjectColor = PROJECT_COLORS[0];
-  setTimeout(function(){var el=document.getElementById('np-name');if(el)el.focus();},80);
 }
 
 function selectProjectColor(c,idx){
@@ -3191,7 +3208,6 @@ function openEditSectionModal(pid, sid){
     '</div>'+
   '</div>';
   pRoot().appendChild(box);
-  setTimeout(function(){var el=document.getElementById('edit-sec-name');if(el){el.focus();el.select();}},80);
 }
 function saveEditSection(pid,sid){
   var p=(S.projects||[]).find(function(x){return x.id===pid;});
@@ -3397,7 +3413,6 @@ function openFeedbackModal(){
     '</div>'+
   '</div>';
   document.body.appendChild(box);
-  setTimeout(function(){ var t=document.getElementById('feedback-txt'); if(t)t.focus(); },80);
 }
 function sendFeedback(){
   var txt = document.getElementById('feedback-txt');
@@ -3743,7 +3758,7 @@ function buildGanttView(p){
     var barPxWidth = tStart&&tEnd ? Math.max(6, pxSpan(barLeft,barWidth)-2) : 0;
 
     rowsHTML+='<div style="display:flex;border-bottom:1px solid var(--line-soft);min-height:'+rowH+'px;background:'+(depth%2===1?'var(--bg)50%':'transparent')+';">'+
-      '<div style="width:'+LABEL+'px;flex-shrink:0;border-right:1px solid var(--line);padding:4px 6px 4px '+(6+indent)+'px;display:flex;align-items:center;gap:3px;overflow:hidden;">'+
+      '<div onclick="openEditProjectTask(\''+p.id+'\',null,\''+t.id+'\')" style="width:'+LABEL+'px;flex-shrink:0;border-right:1px solid var(--line);padding:4px 6px 4px '+(6+indent)+'px;display:flex;align-items:center;gap:3px;overflow:hidden;cursor:pointer;">'+
         (depth>0?'<span style="color:var(--muted-soft);font-size:8px;flex-shrink:0;">'+('└').slice(0,1)+'</span>':'')+
         '<span style="font-size:'+(depth===0?11:depth===1?10:9)+'px;font-weight:'+(hasChildren?700:depth===0?500:400)+';color:'+(depth===0?'var(--ink)':'var(--ink-soft)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">'+esc(t.name)+'</span>'+
         '<span style="font-size:8px;font-weight:700;color:white;background:'+(effectivePct>=100?'#27ae60':effectivePct>0?barColor+'CC':'var(--muted)')+';border-radius:3px;padding:1px 3px;flex-shrink:0;">'+effectivePct+'%</span>'+
@@ -3777,7 +3792,7 @@ function buildGanttView(p){
           'style="position:absolute;left:'+barPxLeft+'px;top:'+barTop+'px;height:'+barH+'px;width:'+barPxWidth+'px;border-radius:4px;background:'+barBg+';border:1px solid '+barBorder+';cursor:pointer;overflow:hidden;min-width:6px;box-sizing:border-box;">'+
             '<div style="height:100%;width:'+effectivePct+'%;background:'+barBgFull+';border-radius:4px;transition:width .3s;"></div>'+
           '</div>'
-        :'<div style="position:absolute;left:6px;top:'+(rowH/2-5)+'px;font-size:8px;color:var(--muted-soft);font-style:italic;">sin fecha</div>')+
+        :'<div onclick="openEditProjectTask(\''+p.id+'\',null,\''+t.id+'\')" style="position:absolute;inset:0;cursor:pointer;"><div style="position:absolute;left:6px;top:'+(rowH/2-5)+'px;font-size:8px;color:var(--muted-soft);font-style:italic;">sin fecha</div></div>')+
       '</div>'+
     '</div>';
     if(hasChildren){
@@ -3843,7 +3858,6 @@ function openAddTaskModal(pid, sid, parentTaskId){
     '</div>'+
   '</div>';
   pRoot().appendChild(box);
-  setTimeout(function(){var el=document.getElementById('nat-name');if(el)el.focus();},80);
 }
 
 function saveAddTask(pid,sid,parentTaskId){
@@ -3916,7 +3930,6 @@ function openEditProjectTask(pid,sidHint,tid){
     '</div>'+
   '</div>';
   pRoot().appendChild(box);
-  setTimeout(function(){var el=document.getElementById('pet-name');if(el)el.focus();},80);
 }
 
 function savePET(pid,sid,tid,isNew){
@@ -3992,7 +4005,6 @@ function openAddSectionModal(pid){
       '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
     '</div></div>';
   pRoot().appendChild(box);
-  setTimeout(function(){var el=document.getElementById('ns-name');if(el)el.focus();},80);
 }
 function saveNewSection(pid){
   var nameEl=document.getElementById('ns-name');
@@ -4498,7 +4510,6 @@ function fillGenericTask(){
     pick = GENERIC_TASKS[Math.floor(Math.random()*GENERIC_TASKS.length)];
   }
   input.value = pick;
-  input.focus();
 }
 
 function setTheme(t){
@@ -4570,7 +4581,6 @@ function confirmFactoryReset2(){
       '</div>'+
     '</div>';
   document.body.appendChild(box);
-  setTimeout(function(){ var i=document.getElementById('factory-confirm-input'); if(i)i.focus(); }, 80);
 }
 
 function doFactoryReset(){
@@ -4645,7 +4655,6 @@ function newCategory(){
     '</div>'+
   '</div>';
   document.body.appendChild(box);
-  setTimeout(function(){var i=document.getElementById('new-cat-name');if(i)i.focus();},80);
 }
 function saveNewCategory(){
   var inp = document.getElementById('new-cat-name');
@@ -4675,7 +4684,6 @@ function editCategory(id){
     '</div>'+
   '</div>';
   document.body.appendChild(box);
-  setTimeout(function(){var i=document.getElementById('edit-cat-name');if(i)i.focus();},80);
 }
 function saveEditCategory(id){
   var c = (S.categories||[]).find(function(x){return x.id===id;});
@@ -7186,7 +7194,6 @@ function showTaskModal(){
     '</div>'+
   '</div>';
   document.body.appendChild(overlay);
-  setTimeout(function(){var inp=document.getElementById('m-name');if(inp)inp.focus();},100);
 }
 function mToggleMore(){
   M.moreOpen = !M.moreOpen;
@@ -7368,7 +7375,6 @@ function openNewCategoryFromModal(){
     '</div>'+
   '</div>';
   document.body.appendChild(box);
-  setTimeout(function(){var el=document.getElementById('ncc-name');if(el)el.focus();},80);
 }
 
 function saveQuickCategory(){
@@ -8507,6 +8513,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     c.style.opacity = '1';
   }, {passive:true});
 })();
+loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
 checkMedals();         // Revisar medallas al iniciar
 checkStreakOnLoad();
 checkAutoReset();      // Auto reset on Monday 4 AM
