@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<title>Organiz[app]</title>
+<title>Gramifica</title>
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png"/>
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
@@ -327,6 +327,14 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 .lvl-up-sym{margin:18px auto;animation:spinIn .8s ease;}
 .lvl-up-msg{font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:24px;}
 .lvl-up-btn{width:100%;background:var(--accent);color:white;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;}
+/* Medalla animada al desbloquear un logro */
+.medal-badge{position:relative;width:120px;height:150px;margin:0 auto 4px;}
+.medal-badge-ribbon-l{position:absolute;left:30px;top:70px;width:24px;height:64px;background:linear-gradient(180deg,#c94f4f,#8a2f2f);clip-path:polygon(0 0,100% 0,100% 100%,50% 80%,0 100%);transform:rotate(-16deg);animation:ribbonDrop .5s .15s cubic-bezier(.34,1.56,.64,1) backwards;}
+.medal-badge-ribbon-r{position:absolute;right:30px;top:70px;width:24px;height:64px;background:linear-gradient(180deg,#c94f4f,#8a2f2f);clip-path:polygon(0 0,100% 0,100% 100%,50% 80%,0 100%);transform:rotate(16deg);animation:ribbonDrop .5s .15s cubic-bezier(.34,1.56,.64,1) backwards;}
+.medal-badge-circle{position:absolute;left:50%;top:50px;transform:translateX(-50%);width:100px;height:100px;border-radius:50%;background:linear-gradient(145deg,#f5d585,#d9a634);box-shadow:0 8px 18px rgba(0,0,0,.28),inset 0 2px 5px rgba(255,255,255,.6),inset 0 -4px 8px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;border:3px solid #e8b94a;animation:medalPop .6s cubic-bezier(.34,1.56,.64,1);}
+.medal-badge-emoji{font-size:46px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25));}
+@keyframes medalPop{0%{transform:translateX(-50%) scale(0) rotate(-35deg);opacity:0;}55%{transform:translateX(-50%) scale(1.18) rotate(10deg);opacity:1;}100%{transform:translateX(-50%) scale(1) rotate(0deg);}}
+@keyframes ribbonDrop{0%{transform:translateY(-30px) rotate(0deg);opacity:0;}100%{opacity:1;}}
 
 /* Level up animation: confetti + radial flash */
 #lvl-anim{position:fixed;inset:0;pointer-events:none;z-index:550;overflow:hidden;}
@@ -371,13 +379,13 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
     <!-- Logo principal -->
     <div style="display:flex;align-items:center;justify-content:center;margin-bottom:20px;line-height:1;">
       <span class="splash-bracket-l logo-bracket" style="font-size:100px;color:#c97842;">[</span>
-      <span class="splash-letters logo-letters" style="font-size:72px;letter-spacing:-.05em;padding:0 4px;color:#1a1a1a;">OG</span>
+      <span class="splash-letters logo-letters" style="font-size:72px;letter-spacing:-.05em;padding:0 4px;color:#1a1a1a;">Gr.</span>
       <span class="splash-bracket-r logo-bracket" style="font-size:100px;color:#c97842;">]</span>
     </div>
 
     <!-- Tagline -->
     <div class="splash-tagline" style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;color:#a89a88;letter-spacing:.35em;text-transform:uppercase;margin-bottom:16px;">
-      Organiz<span style="color:#c97842;">[</span>app<span style="color:#c97842;">]</span>
+      Gramific<span style="color:#c97842;">[</span>app<span style="color:#c97842;">]</span>
     </div>
 
     <!-- Línea decorativa -->
@@ -617,7 +625,10 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 </div>
 <script>
 // ════════════════════════════════════════════════════════════════════════════
-// 🔐 FIREBASE CONFIG — proyecto: organizapp-e2afa
+// 🔐 FIREBASE CONFIG — proyecto de backend: organizapp-e2afa (ID interno de
+// Firebase, no visible al usuario; la app se llama "Gramifica" de cara al
+// público. Este ID interno se puede dejar así — renombrarlo es opcional y
+// requiere pasos aparte en la consola de Firebase, ver notas más abajo).
 // ════════════════════════════════════════════════════════════════════════════
 const firebaseConfig = {
   apiKey: "AIzaSyBgjK88IjGHptNK4tLgmvLjrCosXBQgAaQ",
@@ -640,16 +651,24 @@ try {
     firebaseAvailable = true;
     
     auth.onAuthStateChanged(function(user){
-      if(user){
-        currentUser = user;
-        var modal = document.getElementById('authModal');
-        if(modal) modal.style.display='none';
-        if(typeof syncWithCloud === 'function') syncWithCloud();
-      } else {
-        currentUser = null;
+      try {
+        if(user){
+          currentUser = user;
+          var modal = document.getElementById('authModal');
+          if(modal) modal.style.display='none';
+          if(typeof syncWithCloud === 'function') syncWithCloud();
+        } else {
+          currentUser = null;
+        }
+        if(typeof render === 'function') render();
+      } catch(e){
+        // Si algo falla acá (p.ej. S todavía no está listo), no queremos que
+        // la excepción quede sin capturar y deje la app sin responder.
+        console.error('onAuthStateChanged error:', e);
       }
-      if(typeof render === 'function') render();
     });
+    // Completar el login si venimos de vuelta de signInWithRedirect (Google en móvil)
+    handleGoogleRedirectResult();
   }
 } catch(e) {
   console.warn('Firebase no disponible:', e.message);
@@ -698,6 +717,20 @@ function handleGoogleSignIn(){
   // Firebase Auth lo pide junto con el login — el usuario lo aprueba en el popup.
   // El access_token resultante se guarda en currentUser para usarlo en Calendar API.
   provider.addScope('https://www.googleapis.com/auth/calendar.events');
+  // En navegadores móviles (y sobre todo dentro de Custom Tabs / WebViews, que
+  // es como suele abrirse esta app desde el celular) signInWithPopup casi
+  // siempre falla: la ventana emergente no puede comunicarse de vuelta con la
+  // página original. signInWithRedirect es el flujo recomendado por Firebase
+  // para móvil — navega a Google, el usuario inicia sesión, y vuelve a la app.
+  var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isMobile){
+    auth.signInWithRedirect(provider).catch(function(e){
+      toast(e.code==='auth/unauthorized-domain'
+        ? 'Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)'
+        : e.message);
+    });
+    return;
+  }
   auth.signInWithPopup(provider).then(function(result){
     // Guardar el access_token de Google para llamadas a Calendar API
     if(result.credential && result.credential.accessToken){
@@ -706,8 +739,33 @@ function handleGoogleSignIn(){
     toast('Sesión iniciada con Google');
     // Registrar token FCM para notificaciones push serverless (si está disponible)
     _registerFCMToken();
-  }).catch(function(e){ 
-    if(e.code !== 'auth/popup-closed-by-user') toast(e.message); 
+  }).catch(function(e){
+    if(e.code==='auth/unauthorized-domain'){
+      toast('Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)');
+    } else if(e.code!=='auth/popup-closed-by-user'){
+      toast(e.message);
+    }
+  });
+}
+
+// Al volver de signInWithRedirect, Firebase completa el login acá.
+// Debe llamarse en cuanto carga la página (antes de que el usuario haga nada).
+function handleGoogleRedirectResult(){
+  if(!firebaseAvailable || !auth) return;
+  auth.getRedirectResult().then(function(result){
+    if(result && result.user){
+      if(result.credential && result.credential.accessToken){
+        window._googleAccessToken = result.credential.accessToken;
+      }
+      toast('Sesión iniciada con Google');
+      _registerFCMToken();
+    }
+  }).catch(function(e){
+    if(e.code==='auth/unauthorized-domain'){
+      toast('Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)');
+    } else if(e.code && e.code!=='auth/no-auth-event'){
+      toast('Error al iniciar sesión con Google: '+e.message);
+    }
   });
 }
 
@@ -720,7 +778,11 @@ function _registerFCMToken(){
     var messaging = firebase.messaging();
     messaging.getToken({vapidKey: 'BEe1Pp0ir_6WBmgqmNCV0-mGxoL9R5NJzYXWLbldCaDo_Hjf-glsawgPTmF5_cHHYA0IUA2udUydlIWLD-I2W8E'}).then(function(token){
       if(token){
-        db.collection('users').doc(currentUser.uid).update({fcmToken: token});
+        // set con merge en vez de update: evita el error "No document to
+        // update" si esto corre antes de que syncWithCloud cree el documento
+        // del usuario (típico justo después de un primer login).
+        db.collection('users').doc(currentUser.uid).set({fcmToken: token}, {merge:true})
+          .catch(function(e){ console.log('FCM token save:', e.message); });
       }
     }).catch(function(e){ console.log('FCM token:', e.message); });
   } catch(e){ /* messaging no disponible en este contexto */ }
@@ -773,7 +835,7 @@ async function syncTaskToCalendar(task){
       headers: {'Authorization':'Bearer '+token,'Content-Type':'application/json'},
       body: JSON.stringify({
         summary: task.text,
-        description: 'Creado desde Organiz[app]',
+        description: 'Creado desde Gramific[app]',
         start: {dateTime: startISO, timeZone: 'America/Santiago'},
         end:   {dateTime: endISO,   timeZone: 'America/Santiago'}
       })
@@ -852,11 +914,13 @@ async function syncWithCloud(){
   try {
     var userRef = db.collection('users').doc(currentUser.uid);
     var doc = await userRef.get();
-    
+
     if(!doc.exists){
-      await userRef.set({
+      // Primer login con esta cuenta de Google: subir los datos de este
+      // dispositivo tal cual, sin comparar nada (no hay con qué comparar).
+      await userRef.set(sanitizeForFirestore({
         email: currentUser.email,
-        created: new Date(),
+        created: new Date().toISOString(),
         xp: S.xp,
         streak: S.streak,
         theme: S.theme,
@@ -868,70 +932,139 @@ async function syncWithCloud(){
         streakCfg: S.streakCfg,
         taskBlocks: S.taskBlocks,
         lastSync: new Date().toISOString()
-      });
+      }));
+      localStorage.setItem('og6-lastSync', new Date().toISOString());
+      saveState();
       toast('✓ Datos sincronizados');
+      render();
     } else {
       var cloud = doc.data();
-      var localTime = localStorage.getItem('og6-lastSync') || '0';
-      var cloudTime = cloud.lastSync || '0';
-      
-      if(cloudTime > localTime){
-        if(cloud.xp !== undefined) S.xp = Math.max(S.xp || 0, cloud.xp || 0);
-        if(cloud.streak) S.streak = cloud.streak;
-        if(cloud.theme) S.theme = cloud.theme;
-        if(cloud.tasks) S.tasks = cloud.tasks;
-        if(cloud.rewardedTaskIds) S.rewardedTaskIds = cloud.rewardedTaskIds;
-        if(cloud.bajaEnergia) S.bajaEnergia = cloud.bajaEnergia;
-        if(cloud.modes) S.modes = cloud.modes;
-        if(cloud.activeMode !== undefined) S.activeMode = cloud.activeMode;
-        if(cloud.streakCfg) S.streakCfg = cloud.streakCfg;
-        if(cloud.taskBlocks) S.taskBlocks = cloud.taskBlocks;
-        document.body.className = 'theme-' + S.theme + ' task-size-medium';
-        toast('✓ Datos descargados de la nube');
-      } else if(localTime > cloudTime){
-        await userRef.update({
-          xp: S.xp,
-          streak: S.streak,
-          theme: S.theme,
-          tasks: S.tasks,
-          rewardedTaskIds: S.rewardedTaskIds,
-          bajaEnergia: S.bajaEnergia,
-          modes: S.modes,
-          activeMode: S.activeMode,
-          streakCfg: S.streakCfg,
-          taskBlocks: S.taskBlocks,
-          lastSync: new Date().toISOString()
-        });
-        toast('✓ Datos subidos a la nube');
-      } else {
-        toast('✓ Ya sincronizado');
+      var cloudHasTasks = Array.isArray(cloud.tasks) && cloud.tasks.length>0;
+      var localHasTasks = Array.isArray(S.tasks) && S.tasks.length>0;
+
+      // Si AMBOS lados (este dispositivo y la nube) tienen tareas reales y
+      // son distintas, no adivinamos con timestamps — la marca de tiempo
+      // local casi nunca se actualizaba de forma confiable en versiones
+      // anteriores, así que comparar contra ella podía pisar datos nuevos
+      // de este dispositivo con una copia vieja de la nube sin avisar.
+      // En vez de eso, preguntamos directamente qué copia mantener.
+      var sameData = JSON.stringify(cloud.tasks||[]) === JSON.stringify(S.tasks||[]);
+      if(cloudHasTasks && localHasTasks && !sameData){
+        window._pendingCloudData = cloud;
+        showSyncConflictModal(cloud);
+        return; // se continúa en resolveSyncConflict()
       }
-      saveState();
+
+      applySyncResult(cloud, cloudHasTasks && !localHasTasks);
     }
-    render();
   } catch(e){
     console.error('Sync error:', e);
-    toast('Error al sincronizar');
+    toast('No se pudo sincronizar. Tus datos locales siguen intactos.');
   }
+}
+
+// Aplica los datos de la nube (si corresponde) o mantiene los locales,
+// y siempre re-renderiza de forma segura para no dejar la app a medio
+// camino si algo en los datos de la nube resulta inesperado.
+function applySyncResult(cloud, useCloud){
+  try {
+    if(useCloud){
+      if(cloud.xp !== undefined) S.xp = Math.max(S.xp || 0, cloud.xp || 0);
+      if(cloud.streak) S.streak = cloud.streak;
+      if(cloud.theme) S.theme = cloud.theme;
+      if(Array.isArray(cloud.tasks)) S.tasks = cloud.tasks;
+      if(cloud.rewardedTaskIds) S.rewardedTaskIds = cloud.rewardedTaskIds;
+      if(cloud.bajaEnergia) S.bajaEnergia = cloud.bajaEnergia;
+      if(Array.isArray(cloud.modes)) S.modes = cloud.modes;
+      if(cloud.activeMode !== undefined) S.activeMode = cloud.activeMode;
+      if(cloud.streakCfg) S.streakCfg = cloud.streakCfg;
+      if(cloud.taskBlocks) S.taskBlocks = cloud.taskBlocks;
+      document.body.className = 'theme-' + S.theme + ' task-size-medium';
+      toast('✓ Datos descargados de la nube');
+    } else {
+      toast('✓ Ya sincronizado');
+    }
+    saveState();
+  } catch(e){
+    console.error('Error aplicando datos de sincronización:', e);
+    toast('Hubo un problema al aplicar los datos de la nube. Se mantuvo lo local.');
+  } finally {
+    // El render va en un finally propio: si algo de arriba falla, igual
+    // queremos que la interfaz vuelva a responder en vez de quedar colgada.
+    try { render(); } catch(e2){ console.error('Render error tras sync:', e2); }
+  }
+}
+
+function showSyncConflictModal(cloud){
+  var cloudCount = (cloud.tasks||[]).length;
+  var localCount = (S.tasks||[]).length;
+  var box=document.createElement('div');box.className='conf-box';box.id='sync-conflict-box';
+  box.innerHTML='<div class="conf-inner">'+
+    '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:8px;text-align:center;">Encontramos datos en dos lugares</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px;text-align:center;">Este dispositivo tiene '+localCount+' tarea(s) guardada(s), y tu cuenta de Google ya tenía '+cloudCount+' tarea(s) de otra sesión. ¿Cuáles quieres mantener?</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+      '<button class="sbtn" onclick="resolveSyncConflict(\'cloud\')">Usar los datos de la nube ('+cloudCount+')</button>'+
+      '<button class="cbtn" onclick="resolveSyncConflict(\'local\')">Mantener los de este dispositivo ('+localCount+')</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function resolveSyncConflict(choice){
+  var box=document.getElementById('sync-conflict-box'); if(box) box.remove();
+  var cloud = window._pendingCloudData || {};
+  window._pendingCloudData = null;
+  if(choice==='cloud'){
+    applySyncResult(cloud, true);
+  } else {
+    // Mantener lo local: subimos nuestra versión a la nube para que quede
+    // como la vigente (evita que la próxima vez vuelva a preguntar).
+    pushToCloud();
+    applySyncResult(cloud, false);
+  }
+}
+
+// Firestore no acepta valores `undefined` en sus escrituras: si algún campo
+// llega undefined, .set()/.update() lanzan una excepción SÍNCRONA en el
+// momento de llamarlos (antes de tocar la red), lo que puede dejar a medias
+// cualquier función que no la esperaba. Esta función limpia el objeto antes
+// de cada escritura para evitar ese crash.
+function sanitizeForFirestore(obj){
+  var clean = {};
+  Object.keys(obj).forEach(function(k){
+    clean[k] = obj[k] === undefined ? null : obj[k];
+  });
+  return clean;
 }
 
 function pushToCloud(){
   if(!currentUser || !db) return;
-  var sync = new Date().toISOString();
-  localStorage.setItem('og6-lastSync', sync);
-  db.collection('users').doc(currentUser.uid).update({
-    xp: S.xp,
-    streak: S.streak,
-    theme: S.theme,
-    tasks: S.tasks,
-    rewardedTaskIds: S.rewardedTaskIds,
-    bajaEnergia: S.bajaEnergia,
-    modes: S.modes,
-    activeMode: S.activeMode,
-    streakCfg: S.streakCfg,
-    taskBlocks: S.taskBlocks,
-    lastSync: sync
-  }).catch(function(e){ console.error('Push error:', e); });
+  try {
+    var sync = new Date().toISOString();
+    var payload = sanitizeForFirestore({
+      xp: S.xp,
+      streak: S.streak,
+      theme: S.theme,
+      tasks: S.tasks,
+      rewardedTaskIds: S.rewardedTaskIds,
+      bajaEnergia: S.bajaEnergia,
+      modes: S.modes,
+      activeMode: S.activeMode,
+      streakCfg: S.streakCfg,
+      taskBlocks: S.taskBlocks,
+      lastSync: sync
+    });
+    // set(..., {merge:true}) en vez de update(): si el documento del usuario
+    // todavía no existe (puede pasar justo después de un login nuevo, antes
+    // de que syncWithCloud termine de crearlo), update() falla con
+    // "No document to update" y la sincronización se pierde en silencio.
+    // set con merge crea el documento si falta, o lo actualiza si ya existe.
+    db.collection('users').doc(currentUser.uid).set(payload, {merge:true}).then(function(){
+      // Solo marcamos como sincronizado a nivel local si la escritura
+      // realmente llegó a la nube — antes se escribía esto de forma
+      // optimista ANTES de confirmar el éxito, lo que dejaba al dispositivo
+      // creyendo que estaba sincronizado aunque la nube nunca se actualizara.
+      localStorage.setItem('og6-lastSync', sync);
+    }).catch(function(e){ console.error('Push error:', e); });
+  } catch(e){ console.error('Push error (sync):', e); }
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -1037,12 +1170,12 @@ var TEXTS = {
 // ════════════════════════════════════════════════════════════════════════════
 
 // PLAN GRATUITO: límites según el nivel del usuario (escalan con el progreso)
-// Empieza en 15 tareas/período en nivel 1, sube 1 por nivel hasta 24 en nivel 10
+// Empieza en 10 tareas/período en nivel 1, sube 1 por nivel hasta 20 en nivel 11+
 // (tope justo debajo del plan Donante, que es fijo en 25).
-// Niveles:  1   2   3   4   5   6   7   8   9   10+
-var FREE_LIMITS_BY_LEVEL = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+// Niveles:  1   2   3   4   5   6   7   8   9   10  11+
+var FREE_LIMITS_BY_LEVEL = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 function getFreeLimit(){
-  // En modo simplificado no hay niveles: el gratuito queda fijo en la base (15).
+  // En modo simplificado no hay niveles: el gratuito queda fijo en la base (10).
   if(S.simpleMode) return FREE_LIMITS_BY_LEVEL[0];
   var lvl = getLevel(S.xp);
   return FREE_LIMITS_BY_LEVEL[Math.min(lvl-1, FREE_LIMITS_BY_LEVEL.length-1)] || FREE_LIMITS_BY_LEVEL[0];
@@ -1375,7 +1508,7 @@ var S = {
   // Configuración de timing de notificaciones:
   // type: 'exact' | 'before_min' | 'before_hr'
   // value: número (1-59 para min, 1-24 para horas)
-  notifTiming: { type: 'exact', value: 15 },
+  notifTiming: { hh: 0, mm: 15 },
   // Última fecha en que se preguntó por permiso
   notifAskedDate:null,
   // Versión del esquema de datos — se incrementa cuando cambia la estructura
@@ -1485,7 +1618,17 @@ function loadState(){
     var hr=localStorage.getItem('og6-horariorange');if(hr)S.horarioRange=hr;
     var ghw=localStorage.getItem('og6-ganttweekends');if(ghw!==null)S.ganttHideWeekends=ghw==='1';
     var ua=localStorage.getItem('og6-useravatar');if(ua)S.userAvatar=ua;
-    var nt=localStorage.getItem('og6-notiftiming');if(nt)S.notifTiming=JSON.parse(nt);
+    var nt=localStorage.getItem('og6-notiftiming');if(nt){
+      var ntParsed=JSON.parse(nt);
+      // Migración del formato viejo {type,value} al nuevo {hh,mm} unificado
+      if(ntParsed && ntParsed.type){
+        if(ntParsed.type==='exact') S.notifTiming={hh:0,mm:0};
+        else if(ntParsed.type==='before_min') S.notifTiming={hh:0,mm:ntParsed.value||15};
+        else if(ntParsed.type==='before_hr') S.notifTiming={hh:ntParsed.value||1,mm:0};
+      } else if(ntParsed){
+        S.notifTiming=ntParsed;
+      }
+    }
     var pts=localStorage.getItem('og6-projecttourseen');if(pts)S.projectTourSeen=pts==='1';
     var lts=localStorage.getItem('og6-leveltipseen');if(lts)S.levelTipSeen=lts==='1';
     var mts=localStorage.getItem('og6-medaltipseen');if(mts)S.medalTipSeen=mts==='1';
@@ -1554,7 +1697,7 @@ function saveState(){
     localStorage.setItem('og6-horariorange',S.horarioRange||'completa');
     localStorage.setItem('og6-ganttweekends',S.ganttHideWeekends?'1':'0');
     if(S.userAvatar)localStorage.setItem('og6-useravatar',S.userAvatar);
-    localStorage.setItem('og6-notiftiming',JSON.stringify(S.notifTiming||{type:'exact',value:15}));
+    localStorage.setItem('og6-notiftiming',JSON.stringify(S.notifTiming||{hh:0,mm:15}));
     localStorage.setItem('og6-projecttourseen',S.projectTourSeen?'1':'0');
     localStorage.setItem('og6-leveltipseen',S.levelTipSeen?'1':'0');
     localStorage.setItem('og6-medaltipseen',S.medalTipSeen?'1':'0');
@@ -1702,9 +1845,15 @@ function renderHeader(){ renderV2Header(); }
 
 function getActiveMode(){
   if(!S.activeMode)return null;
-  if(S.activeMode.type==='baja')return Object.assign({id:'baja'},S.bajaEnergia,{name:'Baja Energía'});
-  if(S.activeMode.type==='vacaciones')return Object.assign({id:'vacaciones'},S.vacaciones,{name:'Vacaciones',icon:'🌴',color:'#a8c499'});
-  return S.modes.find(function(m){return m.id===S.activeMode.id;})||null;
+  // BUGFIX: antes este merge perdía el campo `type` (ni S.bajaEnergia ni
+  // S.vacaciones ni los modos personalizados en S.modes tienen un campo
+  // `type` propio), así que cualquier código que revisara `am.type==='baja'`
+  // o `am.type==='custom'` fallaba siempre y mostraba "Normal" aunque
+  // Baja Energía (o un modo personalizado) estuviera realmente activo.
+  if(S.activeMode.type==='baja')return Object.assign({id:'baja'},S.bajaEnergia,{name:'Baja Energía',type:'baja'});
+  if(S.activeMode.type==='vacaciones')return Object.assign({id:'vacaciones'},S.vacaciones,{name:'Vacaciones',icon:'🌴',color:'#a8c499',type:'vacaciones'});
+  var found = S.modes.find(function(m){return m.id===S.activeMode.id;});
+  return found ? Object.assign({},found,{type:'custom'}) : null;
 }
 
 // Cooldown "una vez por semestre" aplicado a modos predeterminados en plan gratuito
@@ -1814,7 +1963,7 @@ function currentTaskLimits(){
     var n = 25 + bonus;
     return {dia:n, semana:n, mes:n, semestre:n, "año":n};
   }
-  // Gratuito: 15 en nivel 1, +1 por nivel hasta 24 (fijo en 15 si el modo
+  // Gratuito: 10 en nivel 1, +1 por nivel hasta 20 (fijo en 10 si el modo
   // simplificado está activo, ya que ahí no hay niveles), + bonus de medallas
   var n2 = getFreeLimit() + bonus;
   return {dia:n2, semana:n2, mes:n2, semestre:n2, "año":n2};
@@ -1886,7 +2035,7 @@ function renderV2Header(){
   var col = getLevelColor(info.lvl);
   var R = 13, C = 2*Math.PI*R;
   var offset = C*(1-info.ratio);
-  var dayTasks = S.tasks.filter(function(t){return t.period==='dia'&&t.day===todayIdx();});
+  var dayTasks = S.tasks.filter(function(t){return isTaskToday(t);});
   var doneToday = dayTasks.filter(isDone).length;
   var totalToday = dayTasks.length;
   var dayPct = totalToday > 0 ? Math.round(doneToday/totalToday*100) : 0;
@@ -1897,7 +2046,7 @@ function renderV2Header(){
       '<div style="display:flex;flex-direction:column;gap:2px;">'+
         '<div style="display:flex;align-items:baseline;gap:1px;line-height:1;">'+
           '<span class="logo-bracket" style="font-size:26px;color:var(--accent);font-family:\'Cormorant Garamond\',serif;font-weight:300;font-style:italic;line-height:.85;">[</span>'+
-          '<span class="logo-letters" style="font-size:18px;font-weight:800;letter-spacing:-.04em;color:var(--ink);font-family:\'Cormorant Garamond\',serif;">OG</span>'+
+          '<span class="logo-letters" style="font-size:18px;font-weight:800;letter-spacing:-.04em;color:var(--ink);font-family:\'Cormorant Garamond\',serif;">Gr.</span>'+
           '<span class="logo-bracket" style="font-size:26px;color:var(--accent);font-family:\'Cormorant Garamond\',serif;font-weight:300;font-style:italic;line-height:.85;">]</span>'+
         '</div>'+
         '<div style="font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.04em;text-transform:lowercase;">'+
@@ -1953,29 +2102,36 @@ function renderAgendaLayout(tab){
   var html = '<div style="display:flex;padding:0;background:var(--paper);border-bottom:1px solid var(--line-soft);position:sticky;top:0;z-index:10;">';
   navItems.forEach(function(item){
     var on = activeSection === item.id;
-    html += '<button onclick="S._agendaSection=\''+item.id+'\';render();" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px 8px;border:none;border-bottom:2.5px solid '+(on?'var(--accent)':'transparent')+';background:transparent;cursor:pointer;font-family:Inter,sans-serif;font-size:9px;font-weight:700;color:'+(on?'var(--accent)':'var(--muted)')+';">'+
-      '<span style="font-size:18px;line-height:1;">'+item.icon+'</span>'+item.label+'</button>';
+    html += '<button onclick="S._agendaSection=\''+item.id+'\';render();" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:12px 4px 9px;border:none;border-bottom:2.5px solid '+(on?'var(--accent)':'transparent')+';background:transparent;cursor:pointer;font-family:Inter,sans-serif;font-size:9px;font-weight:700;color:'+(on?'var(--accent)':'var(--muted)')+';">'+
+      '<span style="font-size:24px;line-height:1;">'+item.icon+'</span>'+item.label+'</button>';
   });
   html += '</div>';
 
   if(activeSection === 'semana'){
-    // Vista de semana — 7 columnas deslizables
+    // Vista de semana — 7 columnas deslizables.
+    // Las columnas usan casi toda la altura disponible de la pantalla (en vez
+    // de una franja fija de 120px) para que se aprovechen las tareas del día
+    // y no quede un espacio en blanco grande debajo sin utilidad. Si además
+    // no hay objetivos por período que mostrar debajo, le damos aún más alto
+    // a las columnas para no dejar un vacío al fondo de la pantalla.
+    var hasPeriodTasks = S.tasks.some(function(t){return ['semana','mes','semestre','año'].indexOf(t.period)>=0;});
+    var colH = hasPeriodTasks ? 'calc(100vh - 300px)' : 'calc(100vh - 210px)';
     html += '<div style="overflow-x:auto;scrollbar-width:none;">';
     html += '<div style="display:flex;min-width:'+(7*140)+'px;">';
 
     for(var d=0; d<7; d++){
-      var dayTasks = S.tasks.filter(function(t){return t.period==='dia'&&t.day===d;});
+      var dayTasks = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===d;});
       var done = dayTasks.filter(isDone).length;
       var isToday = d === today;
       var isSelected = d === S.day;
 
-      html += '<div style="flex:0 0 140px;border-right:1px solid var(--line-soft);'+(isToday?'background:var(--accent-bg)':'')+';">';
-      html += '<div onclick="S.day='+d+';render();" style="padding:10px 8px;text-align:center;cursor:pointer;border-bottom:2px solid '+(isSelected?'var(--accent)':'var(--line-soft)')+';">'+
+      html += '<div style="flex:0 0 140px;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;'+(isToday?'background:var(--accent-bg)':'')+';">';
+      html += '<div onclick="S.day='+d+';render();" style="padding:10px 8px;text-align:center;cursor:pointer;border-bottom:2px solid '+(isSelected?'var(--accent)':'var(--line-soft)')+';flex-shrink:0;">'+
         '<div style="font-size:11px;font-weight:700;color:'+(isToday?'var(--accent)':'var(--muted)')+';">'+DAYS[d].slice(0,3).toUpperCase()+'</div>'+
         '<div style="font-size:12px;color:var(--muted);margin-top:1px;">'+done+'/'+dayTasks.length+'</div>'+
       '</div>';
 
-      html += '<div style="padding:6px;min-height:120px;">';
+      html += '<div style="padding:6px;min-height:'+colH+';max-height:'+colH+';overflow-y:auto;-webkit-overflow-scrolling:touch;">';
       if(!dayTasks.length){
         html += '<div style="font-size:10px;color:var(--muted-soft);text-align:center;padding-top:8px;">—</div>';
       } else {
@@ -2003,30 +2159,33 @@ function renderAgendaLayout(tab){
       '</div>'+
     '</div>';
 
-    // Objetivos rápidos por período
-    html += '<div style="padding:16px;border-top:1px solid var(--line-soft);">';
-    ['semana','mes','semestre','año'].forEach(function(per){
-      var perTasks = S.tasks.filter(function(t){return t.period===per;});
-      if(!perTasks.length) return;
-      var perDone = perTasks.filter(isDone).length;
-      html += '<div style="margin-bottom:14px;">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
-          '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+PL[per]+'</span>'+
-          '<span style="font-size:11px;color:var(--muted);">'+perDone+'/'+perTasks.length+'</span>'+
-          '<button onclick="openNew(\''+per+'\')" style="background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+</button>'+
-        '</div>';
-      perTasks.forEach(function(t){
-        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)50%;">'+
-          '<div onclick="tapTask(\''+t.id+'\')" style="width:15px;height:15px;border-radius:50%;border:1.5px solid '+(isDone(t)?'var(--accent)':'var(--muted)')+';background:'+(isDone(t)?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;">'+
-            (isDone(t)?'<svg width="8" height="6" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>':'')+
-          '</div>'+
-          '<span style="font-size:13px;color:'+(isDone(t)?'var(--muted)':'var(--ink)')+';text-decoration:'+(isDone(t)?'line-through':'none')+';flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+
-          '<button onclick="openEdit(\''+t.id+'\')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:0 3px;">✎</button>'+
-        '</div>';
+    // Objetivos rápidos por período — solo si hay algo que mostrar, para no
+    // dejar un bloque vacío con borde y padding sin utilidad.
+    if(hasPeriodTasks){
+      html += '<div style="padding:16px;border-top:1px solid var(--line-soft);">';
+      ['semana','mes','semestre','año'].forEach(function(per){
+        var perTasks = S.tasks.filter(function(t){return t.period===per;});
+        if(!perTasks.length) return;
+        var perDone = perTasks.filter(isDone).length;
+        html += '<div style="margin-bottom:14px;">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+            '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+PL[per]+'</span>'+
+            '<span style="font-size:11px;color:var(--muted);">'+perDone+'/'+perTasks.length+'</span>'+
+            '<button onclick="openNew(\''+per+'\')" style="background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+</button>'+
+          '</div>';
+        perTasks.forEach(function(t){
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line-soft)50%;">'+
+            '<div onclick="tapTask(\''+t.id+'\')" style="width:15px;height:15px;border-radius:50%;border:1.5px solid '+(isDone(t)?'var(--accent)':'var(--muted)')+';background:'+(isDone(t)?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;">'+
+              (isDone(t)?'<svg width="8" height="6" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>':'')+
+            '</div>'+
+            '<span style="font-size:13px;color:'+(isDone(t)?'var(--muted)':'var(--ink)')+';text-decoration:'+(isDone(t)?'line-through':'none')+';flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+
+            '<button onclick="openEdit(\''+t.id+'\')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:0 3px;">✎</button>'+
+          '</div>';
+        });
+        html += '</div>';
       });
       html += '</div>';
-    });
-    html += '</div>';
+    }
 
   } else if(activeSection === 'proyectos'){
     html += renderProyectosTab();
@@ -2117,7 +2276,7 @@ function renderHoy(){
 
   // Tareas
   if(!S.collapsedCats) S.collapsedCats = {};
-  var all = S.tasks.filter(function(t){return t.period==='dia'&&t.day===day;});
+  var all = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===day;});
   var filtered = (S.activeCatFilter && S.activeCatFilter !== 'all')
     ? all.filter(function(t){return t.categoryId === S.activeCatFilter;})
     : all;
@@ -2246,7 +2405,7 @@ function renderHorario(){
     }).join('')+
   '</div>';
 
-  var items = S.tasks.filter(function(t){return t.period==='dia' && t.hora && activeDays.indexOf(t.day)!==-1;});
+  var items = S.tasks.filter(function(t){return t.period==='dia' && t.hora && activeDays.indexOf(taskWeekdayThisWeek(t))!==-1;});
 
   if(!items.length){
     return rangeToggle+
@@ -2279,7 +2438,7 @@ function renderHorario(){
     var dur = t.duracion||60;
     var startMin = h*60+m;
     var endMin = startMin+dur;
-    var key = String(t.day);
+    var key = String(taskWeekdayThisWeek(t));
     (byCellDay[key]=byCellDay[key]||[]).push({t:t, startMin:startMin, endMin:endMin, col:0, cols:1});
   });
 
@@ -2499,6 +2658,8 @@ function openEnergySheet(){
   var userModes = S.modes||[];
   var hiperfoco = isHiperfocoActive();
   var canCreateMode = isPremium() || userModes.length < FREE_LIMITS.customModes;
+  var isNormalAct = !S.activeMode && !hiperfoco;
+  var isBajaAct = !!(S.activeMode && S.activeMode.type==='baja');
 
   sheet.innerHTML = '<div onclick="document.getElementById(\'energy-sheet\').remove()" style="flex:1;"></div>'+
     '<div style="background:var(--paper);border-radius:20px 20px 0 0;padding:20px 16px 32px;max-height:80vh;overflow-y:auto;">'+
@@ -2506,16 +2667,16 @@ function openEnergySheet(){
       '<div class="serif" style="font-size:20px;font-weight:700;color:var(--ink);margin-bottom:16px;">Cambiar modo</div>'+
 
       // Normal
-      '<button onclick="deactivateAllModes();document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
+      '<button onclick="deactivateAllModes();document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:'+(isNormalAct?'var(--accent-bg)':'var(--bg)')+';border:1.5px solid '+(isNormalAct?'var(--accent)':'var(--line)')+';border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
         '<span style="font-size:22px;">☀️</span>'+
-        '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Normal</div><div style="font-size:11px;color:var(--muted);">Sin modo activo — ritmo habitual</div></div>'+
+        '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:'+(isNormalAct?'var(--accent)':'var(--ink)')+';">Normal</div><div style="font-size:11px;color:var(--muted);">'+(isNormalAct?'Activo · ritmo habitual':'Sin modo activo — ritmo habitual')+'</div></div>'+
       '</button>'+
 
       // Baja Energía
-      '<button onclick="'+(canBaja.ok?"activateBaja();document.getElementById('energy-sheet').remove();render()":"null")+'" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;opacity:'+(canBaja.ok?1:0.5)+';" '+(canBaja.ok?'':'disabled')+'>'+
+      '<button onclick="'+(canBaja.ok?"activateBaja();document.getElementById('energy-sheet').remove();render()":"null")+'" style="width:100%;display:flex;align-items:center;gap:12px;background:'+(isBajaAct?'var(--accent-bg)':'var(--bg)')+';border:1.5px solid '+(isBajaAct?'var(--accent)':'var(--line)')+';border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;opacity:'+(canBaja.ok?1:0.5)+';" '+(canBaja.ok?'':'disabled')+'>'+
         '<span style="font-size:22px;">'+(S.bajaEnergia.icon||'🌙')+'</span>'+
         '<div style="flex:1;">'+
-          '<div style="font-weight:700;font-size:14px;color:var(--ink);">Baja Energía</div>'+
+          '<div style="font-weight:700;font-size:14px;color:'+(isBajaAct?'var(--accent)':'var(--ink)')+';">Baja Energía'+(isBajaAct?' — Activo':'')+'</div>'+
           '<div style="font-size:11px;color:var(--muted);">'+(canBaja.ok?S.bajaEnergia.maxTasks+' tareas/día · hasta '+S.bajaEnergia.daysLimit+'d':'No disponible — en '+canBaja.daysLeft+' días')+'</div>'+
         '</div>'+
       '</button>'+
@@ -2710,35 +2871,26 @@ function renderYo(){
         )+
       '</div>'+
       (notifOn ? (
-        // Selector de timing
+        // Selector de timing — un solo control tipo reloj "HH:MM" en vez de
+        // tres opciones separadas (puntual / minutos / horas). 00:00 = aviso
+        // justo a la hora de la tarea; 00:15 = 15 min antes; 01:05 = 1h 5min antes.
         '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
-          '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:10px;">¿Cuándo avisar?</div>'+
-          '<div style="display:flex;flex-direction:column;gap:8px;">'+
-            // Opción 1: puntual
-            '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;">'+
-              '<input type="radio" name="notif-type" value="exact" '+(nt.type==='exact'?'checked':'')+' onchange="setNotifTiming(\'exact\',0)" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;">'+
-              '<span style="font-size:13px;color:var(--ink);">En el momento exacto de la tarea</span>'+
-            '</label>'+
-            // Opción 2: minutos antes
-            '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;">'+
-              '<input type="radio" name="notif-type" value="before_min" '+(nt.type==='before_min'?'checked':'')+' onchange="setNotifTiming(\'before_min\','+nt.value+')" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;">'+
-              '<span style="font-size:13px;color:var(--ink);flex:1;">Antes (minutos)</span>'+
-              '<div style="display:flex;align-items:center;gap:6px;">'+
-                '<button onclick="nudgeNotifVal(-1,\'before_min\',1,59)" style="width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);">−</button>'+
-                '<span id="notif-min-val" style="font-size:14px;font-weight:700;min-width:24px;text-align:center;color:var(--ink);">'+(nt.type==='before_min'?nt.value:15)+'</span>'+
-                '<button onclick="nudgeNotifVal(1,\'before_min\',1,59)" style="width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);">+</button>'+
-              '</div>'+
-            '</label>'+
-            // Opción 3: horas antes
-            '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;">'+
-              '<input type="radio" name="notif-type" value="before_hr" '+(nt.type==='before_hr'?'checked':'')+' onchange="setNotifTiming(\'before_hr\','+nt.value+')" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;">'+
-              '<span style="font-size:13px;color:var(--ink);flex:1;">Antes (horas)</span>'+
-              '<div style="display:flex;align-items:center;gap:6px;">'+
-                '<button onclick="nudgeNotifVal(-1,\'before_hr\',1,24)" style="width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);">−</button>'+
-                '<span id="notif-hr-val" style="font-size:14px;font-weight:700;min-width:24px;text-align:center;color:var(--ink);">'+(nt.type==='before_hr'?nt.value:1)+'</span>'+
-                '<button onclick="nudgeNotifVal(1,\'before_hr\',1,24)" style="width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink);">+</button>'+
-              '</div>'+
-            '</label>'+
+          '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">¿Cuánto antes avisar?</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">00:00 avisa justo a la hora de la tarea.</div>'+
+          '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;">'+
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+              '<button onclick="nudgeNotifHH(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
+              '<span id="notif-hh-val" style="font-size:22px;font-weight:800;color:var(--ink);min-width:40px;text-align:center;font-variant-numeric:tabular-nums;">'+String(nt.hh||0).padStart(2,'0')+'</span>'+
+              '<button onclick="nudgeNotifHH(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
+              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">horas</span>'+
+            '</div>'+
+            '<span style="font-size:22px;font-weight:800;color:var(--muted-soft);">:</span>'+
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+              '<button onclick="nudgeNotifMM(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
+              '<span id="notif-mm-val" style="font-size:22px;font-weight:800;color:var(--ink);min-width:40px;text-align:center;font-variant-numeric:tabular-nums;">'+String(nt.mm||0).padStart(2,'0')+'</span>'+
+              '<button onclick="nudgeNotifMM(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
+              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
+            '</div>'+
           '</div>'+
         '</div>'
       ) : '')+
@@ -2911,7 +3063,7 @@ function renderAccount(){
     '</div>'+
     '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:'+(isDonante?0:14)+'px;">'+
       (isDonante?'25 tareas/período · proyectos ilimitados · toda la personalización desbloqueada. ¡Gracias por apoyar la app! 💛':
-       (S.simpleMode?'15 tareas/período (modo simplificado)':'Nivel '+getLevel(S.xp)+' · '+getFreeLimit()+' tareas/período · sube con cada nivel hasta 24')+' · 1 proyecto.')+
+       (S.simpleMode?'10 tareas/período (modo simplificado)':'Nivel '+getLevel(S.xp)+' · '+getFreeLimit()+' tareas/período · sube con cada nivel hasta 20')+' · 1 proyecto.')+
     '</div>'+
     (isDonante?'':
       // Opciones de pago/donación via Google Play
@@ -3090,8 +3242,8 @@ function openNewProjectModal(){
     '<label class="flbl" style="margin-top:10px;">Descripción (opcional)</label>'+
     '<input id="np-desc" class="finp" placeholder="¿De qué se trata?"/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Fecha de inicio</label><input id="np-start" class="finp" type="date" value="'+new Date().toISOString().slice(0,10)+'"/></div>'+
-      '<div style="flex:1;"><label class="flbl">Fecha de fin</label><input id="np-end" class="finp" type="date"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Fecha de inicio</label><input id="np-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-start\')" style="cursor:pointer;" value="'+new Date().toISOString().slice(0,10)+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Fecha de fin</label><input id="np-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-end\')" style="cursor:pointer;"/></div>'+
     '</div>'+
     '<label class="flbl" style="margin-top:10px;">Color</label>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">'+colorBtns+'</div>'+
@@ -3674,6 +3826,15 @@ function buildGanttView(p){
     colW[dci]=w; xOf[dci]=cum; cum+=w;
   }
   var totalW=cum;
+  // Paridad de semana calendario (Lunes a Domingo real, no bloques de 7 días
+  // desde el inicio del proyecto) — se usa para sombrear semana por medio
+  // cuando el fin de semana está oculto, así se distingue una semana de otra.
+  var weekParity=[]; var wpCounter=0;
+  for(var wpi=0;wpi<days;wpi++){
+    var wpd=new Date(rangeStart.getTime()+wpi*86400000);
+    if(wpi>0 && wpd.getUTCDay()===1) wpCounter++;
+    weekParity[wpi]=wpCounter%2;
+  }
   // Ancho en px de un tramo [startIdx, startIdx+span) sumando columnas reales
   // (una tarea que cruza un fin de semana oculto no debe "pagar" ese ancho).
   function pxSpan(startIdx,span){
@@ -3696,12 +3857,14 @@ function buildGanttView(p){
     var d=new Date(rangeStart.getTime()+di*86400000);
     var isT=d.toDateString()===today.toDateString();
     var isWE=d.getUTCDay()===0||d.getUTCDay()===6;
-    var isSat=d.getUTCDay()===6;
-    // Fin de semana: sombreado gris neutro (≠ color del proyecto que usa "hoy").
-    // Días laborables: sin relleno, borde fino para separar columnas.
-    // Sábado tiene borde izquierdo más grueso para marcar el inicio del bloque.
-    var dayBg = isT ? p.color+'38' : isWE ? 'rgba(0,0,0,.07)' : 'transparent';
-    var borderL = isSat ? 'border-left:2px solid rgba(0,0,0,.18);' : '';
+    var isMon=d.getUTCDay()===1;
+    // Separador de semana: con el fin de semana oculto, las columnas quedan
+    // "pegadas" entre viernes y lunes, así que marcamos el inicio de cada
+    // semana con una línea gris en el lunes. Con el fin de semana visible,
+    // ese salto ya se nota por el sombreado del sábado/domingo — no hace
+    // falta la línea extra ahí.
+    var dayBg = isT ? p.color+'38' : hideWE ? (weekParity[di]===1?'rgba(0,0,0,.07)':'transparent') : isWE ? 'rgba(0,0,0,.07)' : 'transparent';
+    var borderL = (hideWE && isMon) ? 'border-left:2px solid rgba(0,0,0,.18);' : '';
     hDays+='<div style="width:'+colW[di]+'px;flex-shrink:0;text-align:center;font-size:8px;'+
       'color:'+(isT?p.color:'var(--muted-soft)')+';background:'+dayBg+';'+
       'border-right:1px solid var(--line);'+borderL+
@@ -3709,7 +3872,6 @@ function buildGanttView(p){
   }
   // Línea de hoy
   var todayOff=Math.round((today-rangeStart)/86400000);
-  var todayLine=(todayOff>=0&&todayOff<days&&colW[todayOff]>0)?'<div style="position:absolute;left:'+(LABEL+xOf[todayOff])+'px;top:0;bottom:0;width:2px;background:'+p.color+';opacity:.5;pointer-events:none;z-index:3;"></div>':'';
 
   // Filas recursivas
   var rowsHTML='';
@@ -3770,11 +3932,15 @@ function buildGanttView(p){
             if(colW[di2]<=0)continue;
             var d2=new Date(rangeStart.getTime()+di2*86400000);
             var isWE2=d2.getUTCDay()===0||d2.getUTCDay()===6;
-            var isSat2=d2.getUTCDay()===6;
-            // Sombreado solo en fin de semana; todos los días tienen borde derecho.
-            // El borde izquierdo extra en sábado marca visualmente el inicio del bloque.
-            var colBg = isWE2 ? 'rgba(0,0,0,.06)' : 'transparent';
-            var borderL = isSat2 ? 'border-left:2px solid rgba(0,0,0,.15);' : '';
+            var isMon2=d2.getUTCDay()===1;
+            var isToday2=di2===todayOff;
+            // Mismo criterio que en el header: línea de separación de semana
+            // solo cuando el fin de semana está oculto (en el lunes).
+            // El día de hoy se resalta con el color del proyecto en toda la
+            // columna (header + cada fila) en vez de una línea vertical, que
+            // se veía tapada detrás de las barras de tareas.
+            var colBg = isToday2 ? (p.color+'22') : hideWE ? (weekParity[di2]===1?'rgba(0,0,0,.06)':'transparent') : isWE2 ? 'rgba(0,0,0,.06)' : 'transparent';
+            var borderL = (hideWE && isMon2) ? 'border-left:2px solid rgba(0,0,0,.15);' : '';
             // Capa de fondo + borde (usamos divs absolutos para el sombreado y
             // un borde simulado en el margen derecho de cada columna)
             bg+='<div style="position:absolute;left:'+xOf[di2]+'px;top:0;bottom:0;width:'+colW[di2]+'px;'+
@@ -3825,7 +3991,6 @@ function buildGanttView(p){
   });
 
   return '<div style="position:relative;min-width:'+(LABEL+totalW)+'px;">'+
-    todayLine+
     '<div style="display:flex;position:sticky;top:0;z-index:5;background:var(--paper);">'+
       '<div style="width:'+LABEL+'px;flex-shrink:0;border-right:1px solid var(--line);padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);background:var(--paper);">TAREA</div>'+
       '<div style="display:flex;">'+hWeeks+'</div>'+
@@ -3849,8 +4014,8 @@ function openAddTaskModal(pid, sid, parentTaskId){
     '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:12px;">'+parentLabel+'</div>'+
     '<label class="flbl">Nombre</label><input id="nat-name" class="finp" placeholder="Describe esta tarea..."/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="nat-start" class="finp" type="date" value="'+(p&&p.start?p.start:new Date().toISOString().slice(0,10))+'"/></div>'+
-      '<div style="flex:1;"><label class="flbl">Fin</label><input id="nat-end" class="finp" type="date"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="nat-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'nat-start\')" style="cursor:pointer;" value="'+(p&&p.start?p.start:new Date().toISOString().slice(0,10))+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Fin</label><input id="nat-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'nat-end\')" style="cursor:pointer;"/></div>'+
     '</div>'+
     '<div style="display:flex;gap:8px;margin-top:14px;">'+
       '<button class="sbtn" onclick="saveAddTask(\''+pid+'\',\''+sid+'\','+(parentTaskId?'\''+parentTaskId+'\'':'null')+')">Crear</button>'+
@@ -3915,8 +4080,8 @@ function openEditProjectTask(pid,sidHint,tid){
     '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:12px;">'+(isNew?'Nueva tarea':'Editar tarea')+'</div>'+
     '<label class="flbl">Nombre</label><input id="pet-name" class="finp" value="'+esc(t.name)+'" placeholder="Nombre de la tarea..."/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="pet-start" class="finp" type="date" value="'+(t.start||'')+'"/></div>'+
-      '<div style="flex:1;"><label class="flbl">Entrega</label><input id="pet-end" class="finp" type="date" value="'+(t.end||'')+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="pet-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'pet-start\')" style="cursor:pointer;" value="'+(t.start||'')+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Entrega</label><input id="pet-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'pet-end\')" style="cursor:pointer;" value="'+(t.end||'')+'"/></div>'+
     '</div>'+
     ((!t.children||!t.children.length)?
       '<label class="flbl" style="margin-top:10px;">% Completado</label>'+
@@ -3992,6 +4157,116 @@ function formatDateShort(d){
   if(!d)return '';
   var dt=new Date(d+'T12:00:00'); // noon to avoid TZ issues
   return dt.toLocaleDateString('es-CL',{day:'numeric',month:'short'});
+}
+
+// ── Selector de fecha personalizado (semana empieza en Lunes) ───────────────
+// El <input type="date"> nativo usa el calendario del sistema operativo, que
+// en Android/Chrome siempre empieza la semana en Domingo (según el locale del
+// dispositivo) y no se puede forzar a Lunes desde HTML/CSS/JS. Por eso los
+// campos de fecha usan este widget propio en vez del picker nativo.
+var CDP = null;
+var CDP_DOW = ['L','M','M','J','V','S','D']; // Lunes a Domingo
+function openCustomDatePicker(inputId){
+  var input = document.getElementById(inputId);
+  if(!input) return;
+  var base = input.value ? new Date(input.value+'T12:00:00') : new Date();
+  CDP = {inputId:inputId, viewYear:base.getFullYear(), viewMonth:base.getMonth(), selected: input.value || null};
+  cdpRender();
+}
+function cdpClose(){
+  var ov=document.getElementById('cdp-overlay');
+  if(ov) ov.remove();
+  CDP=null;
+}
+function cdpChangeMonth(delta){
+  CDP.viewMonth += delta;
+  if(CDP.viewMonth<0){CDP.viewMonth=11;CDP.viewYear--;}
+  if(CDP.viewMonth>11){CDP.viewMonth=0;CDP.viewYear++;}
+  cdpUpdateContent();
+}
+function cdpPick(dateStr){
+  CDP.selected = dateStr;
+  cdpUpdateContent();
+}
+function cdpConfirm(){
+  var input = document.getElementById(CDP.inputId);
+  if(input && CDP.selected){
+    input.value = CDP.selected;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  cdpClose();
+}
+function cdpClear(){
+  var input = document.getElementById(CDP.inputId);
+  if(input){
+    input.value = '';
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  cdpClose();
+}
+// Construye solo el HTML de la grilla de días + el label del mes — se llama
+// al cambiar de mes o elegir un día. NO recrea el overlay entero (eso es lo
+// que causaba el efecto de "se cierra y abre" al tocar un día).
+function cdpGridHTML(){
+  var y=CDP.viewYear, m=CDP.viewMonth;
+  var firstOfMonth = new Date(y, m, 1);
+  // Lunes=0 ... Domingo=6 (getDay() nativo es Domingo=0, lo rotamos)
+  var firstDow = (firstOfMonth.getDay()+6)%7;
+  var daysInMonth = new Date(y, m+1, 0).getDate();
+  var todayStr2 = todayStr();
+
+  var grid='';
+  CDP_DOW.forEach(function(dn){
+    grid += '<div style="text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:6px 0;">'+dn+'</div>';
+  });
+  for(var i=0;i<firstDow;i++) grid += '<div></div>';
+  for(var day=1; day<=daysInMonth; day++){
+    var dStr = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    var isSel = CDP.selected === dStr;
+    var isToday = dStr === todayStr2;
+    grid += '<button onclick="cdpPick(\''+dStr+'\')" style="aspect-ratio:1;border:none;border-radius:50%;background:'+(isSel?'var(--accent)':'transparent')+';color:'+(isSel?'white':isToday?'var(--accent)':'var(--ink)')+';font-weight:'+(isSel||isToday?800:500)+';font-size:13px;cursor:pointer;font-family:Inter,sans-serif;'+(isToday&&!isSel?'box-shadow:inset 0 0 0 1.5px var(--accent);':'')+'">'+day+'</button>';
+  }
+  return grid;
+}
+var CDP_MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+// Actualiza solo las partes que cambian (label del mes, grilla, botón "Borrar")
+// dentro del overlay ya existente, en vez de recrearlo desde cero.
+function cdpUpdateContent(){
+  var label = document.getElementById('cdp-month-label');
+  if(label) label.textContent = CDP_MESES[CDP.viewMonth]+' '+CDP.viewYear;
+  var grid = document.getElementById('cdp-grid');
+  if(grid) grid.innerHTML = cdpGridHTML();
+  var clearWrap = document.getElementById('cdp-clear-wrap');
+  if(clearWrap) clearWrap.innerHTML = CDP.selected
+    ? '<button onclick="cdpClear()" style="width:100%;background:none;border:none;color:var(--bad);font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;padding:12px 0 0;">Borrar fecha</button>'
+    : '';
+}
+function cdpRender(){
+  if(!CDP) return;
+  var existing = document.getElementById('cdp-overlay');
+  if(existing) existing.remove();
+
+  var overlay=document.createElement('div');
+  overlay.id='cdp-overlay';
+  overlay.className='overlay';
+  overlay.style.zIndex='3000';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)cdpClose();});
+  overlay.innerHTML = '<div class="sheet" style="max-width:340px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'+
+      '<button onclick="cdpChangeMonth(-1)" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:0 8px;">‹</button>'+
+      '<span id="cdp-month-label" class="serif" style="font-weight:700;font-size:16px;color:var(--ink);">'+CDP_MESES[CDP.viewMonth]+' '+CDP.viewYear+'</span>'+
+      '<button onclick="cdpChangeMonth(1)" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:0 8px;">›</button>'+
+    '</div>'+
+    '<div id="cdp-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:14px;">'+cdpGridHTML()+'</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" onclick="cdpConfirm()">Establecer</button>'+
+      '<button class="cbtn" onclick="cdpClose()">Cancelar</button>'+
+    '</div>'+
+    '<div id="cdp-clear-wrap">'+(CDP.selected?'<button onclick="cdpClear()" style="width:100%;background:none;border:none;color:var(--bad);font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;padding:12px 0 0;">Borrar fecha</button>':'')+'</div>'+
+  '</div>';
+  document.body.appendChild(overlay);
 }
 
 // ── Agregar / eliminar sección ────────────────────────────────────────────
@@ -4271,8 +4546,8 @@ function openEditProjectModal(pid){
     '<label class="flbl">Nombre</label><input id="ep-name" class="finp" value="'+esc(p.name)+'"/>'+
     '<label class="flbl" style="margin-top:10px;">Descripción</label><input id="ep-desc" class="finp" value="'+esc(p.desc||'')+'"/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="ep-start" class="finp" type="date" value="'+(p.start||'')+'"/></div>'+
-      '<div style="flex:1;"><label class="flbl">Fin</label><input id="ep-end" class="finp" type="date" value="'+(p.end||'')+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="ep-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'ep-start\')" style="cursor:pointer;" value="'+(p.start||'')+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Fin</label><input id="ep-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'ep-end\')" style="cursor:pointer;" value="'+(p.end||'')+'"/></div>'+
     '</div>'+
     '<label class="flbl" style="margin-top:10px;">Color</label>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">'+colorBtns+'</div>'+
@@ -4468,8 +4743,50 @@ function toggleSimpleModeFab(){
   S.simpleModeFabReset = !S.simpleModeFabReset;
   saveState();render();
 }
+
+// ── Elección de modo tras el tutorial (primera vez) ──────────────────────
+// Al terminar o saltar el tutorial por primera vez, preguntamos si quiere
+// mantener el sistema de niveles/racha activo o prefiere el modo simplificado
+// para revisar la app sin esa capa de gamificación. Con un interruptor, no
+// con un texto de confirmación aparte.
+function showModeChoiceModal(){
+  var wantsSimple = false; // valor de partida del interruptor: niveles activos
+  var box = document.createElement('div');box.className='conf-box';
+  box.id='mode-choice-box';
+  var ICON_LEVELS = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18M6 20V10M12 20V4M18 20v13"/></svg>';
+  box.innerHTML = '<div class="conf-inner">'+
+    iconBadgeHTML(ICON_LEVELS, 60)+
+    '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:8px;text-align:center;">¿Cómo quieres usar la app?</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px;text-align:center;">Por defecto subes de nivel, ganas racha y XP al completar tareas. Si prefieres revisar la app sin esa capa por ahora, actívalo acá — puedes cambiarlo cuando quieras desde Yo.</div>'+
+    '<div style="display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:18px;">'+
+      '<div style="flex:1;"><div style="font-weight:700;font-size:13px;color:var(--ink);">Modo simplificado</div><div style="font-size:11px;color:var(--muted);">Sin niveles, racha ni XP</div></div>'+
+      '<button id="mc-toggle" class="tog" onclick="mcToggle()" style="background:var(--muted-soft);">'+
+        '<span id="mc-tok" class="tok" style="left:2px;"></span>'+
+      '</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" onclick="confirmModeChoice()">Continuar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+  window._mcWantsSimple = false;
+}
+function mcToggle(){
+  window._mcWantsSimple = !window._mcWantsSimple;
+  var tog = document.getElementById('mc-toggle');
+  var tok = document.getElementById('mc-tok');
+  if(tog) tog.style.background = window._mcWantsSimple ? 'var(--accent)' : 'var(--muted-soft)';
+  if(tok) tok.style.left = window._mcWantsSimple ? '22px' : '2px';
+}
+function confirmModeChoice(){
+  S.simpleMode = !!window._mcWantsSimple;
+  saveState();
+  var box = document.getElementById('mode-choice-box');
+  if(box) box.remove();
+  render();
+  toast(S.simpleMode ? 'Modo simplificado activado' : 'Niveles y racha activos');
+}
 function askResetToday(){
-  var dayTasks = S.tasks.filter(function(t){return t.period==='dia'&&t.day===todayIdx();});
+  var dayTasks = S.tasks.filter(function(t){return isTaskToday(t);});
   var doneCount = dayTasks.filter(isDone).length;
   if(!doneCount){toast('No hay nada marcado hoy');return;}
   var ICON_RESET='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20 4 20 9 15 9"/></svg>';
@@ -4487,7 +4804,7 @@ function askResetToday(){
 function doResetToday(){
   var today = todayIdx();
   S.tasks.forEach(function(t){
-    if(t.period!=='dia' || t.day!==today) return;
+    if(!isTaskToday(t)) return;
     t.done = false;
     t.prog = 0;
     if(t.checklist && t.checklist.length){
@@ -4613,7 +4930,7 @@ function exportData(){
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'organizapp-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.download = 'gramifica-backup-'+new Date().toISOString().slice(0,10)+'.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
@@ -5053,6 +5370,14 @@ function toggleCrucial(id){
 function moveTaskToNextDay(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
+  if(t.date){
+    var nd=new Date(t.date+'T12:00:00'); nd.setDate(nd.getDate()+1);
+    t.date=nd.toISOString().slice(0,10); t.day=dayIdxFromDate(nd);
+    t.done=false; t.prog=0;
+    saveState();render();
+    toast('→ Tarea movida a '+formatDateShort(t.date));
+    return;
+  }
   var nextDay = (t.day + 1) % 7;
   t.day = nextDay;
   t.done = false; t.prog = 0;
@@ -5066,6 +5391,7 @@ function moveTaskToDay(id){
   showDayPickerModal('¿A qué día quieres mover esta tarea?', false, function(days){
     if(days.length){
       t.day = days[0];
+      t.date = null; // pasa a ser recurrente en ese día de la semana
       t.done = false; t.prog = 0;
       saveState();render();
       toast('→ Tarea movida a '+DAYS[days[0]]);
@@ -5076,6 +5402,15 @@ function moveTaskToDay(id){
 function duplicateTaskToNextDay(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
+  if(t.date){
+    var nd=new Date(t.date+'T12:00:00'); nd.setDate(nd.getDate()+1);
+    var copy1 = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), date:nd.toISOString().slice(0,10), day:dayIdxFromDate(nd), done:false, prog:0});
+    copy1.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
+    S.tasks.push(copy1);
+    saveState();render();
+    toast('⊕ Duplicada para '+formatDateShort(copy1.date));
+    return;
+  }
   var nextDay = (t.day + 1) % 7;
   var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), day:nextDay, done:false, prog:0});
   copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
@@ -5089,8 +5424,8 @@ function duplicateTaskToDays(id){
   if(!t) return;
   showDayPickerModal('¿En qué días quieres duplicar la tarea?', true, function(days){
     days.forEach(function(d){
-      if(d === t.day) return; // no duplicar en el mismo día
-      var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), day:d, done:false, prog:0});
+      if(d === t.day && !t.date) return; // no duplicar en el mismo día
+      var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), day:d, date:null, done:false, prog:0});
       copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
       S.tasks.push(copy);
     });
@@ -5481,7 +5816,7 @@ function renderGoals(){
       feederHTML='<div class="feeder">'+feeders.map(function(ft){
         return '<div style="font-size:12px;color:'+(isDone(ft)?'var(--accent)':'var(--muted)')+';padding:3px 0;display:flex;align-items:center;gap:6px;">'+
           '<span style="width:8px;height:8px;border-radius:4px;background:'+(isDone(ft)?'var(--accent)':'var(--line)')+';display:inline-block;flex-shrink:0;"></span>'+
-          esc(ft.text)+' ('+DAYS[ft.day||0]+')'+(isDone(ft)?' ✓':'')+'</div>';
+          esc(ft.text)+' ('+(ft.date?formatDateShort(ft.date):DAYS[ft.day||0])+')'+(isDone(ft)?' ✓':'')+'</div>';
       }).join('')+'</div>';
     }
     return taskHTML(t)+feederHTML;
@@ -5596,8 +5931,10 @@ function renderStreakCalendar(){
   
   var dayLabels = ['Su','Mo','Tu','We','Th','Fr','Sa'];
   
-  // Header con flechas
-  var canGoForward = offset < 0; // no permitir ir más allá del actual
+  // Header con flechas — se puede navegar tanto a meses pasados como futuros,
+  // para poder revisar el detalle de un día o prepararse para semanas futuras
+  // (tope de 6 meses adelante, ver calNav).
+  var canGoForward = offset < 6;
   var html = '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'+
       '<div style="font-weight:700;font-size:15px;color:var(--ink);">Racha</div>'+
@@ -5664,7 +6001,7 @@ function renderStreakCalendar(){
     
     var todayMark = isToday ? 'box-shadow:0 0 0 2px var(--ink);' : '';
     
-    html += '<div style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;'+bgStyle+todayMark+';position:relative;">'+
+    html += '<div onclick="openDayDetail(\''+key+'\')" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;'+bgStyle+todayMark+';position:relative;">'+
       (bonusIcon?'<span style="position:absolute;top:-4px;right:-4px;font-size:10px;line-height:1;" title="¡Bono de racha!">'+bonusIcon+'</span>':'')+
       '<span style="font-size:14px;color:'+textColor+';font-weight:'+fontWeight+';">'+day+'</span>'+
     '</div>';
@@ -5676,11 +6013,97 @@ function renderStreakCalendar(){
   return html;
 }
 
+// ── Detalle de un día del calendario de racha (clickeable) ──────────────
+// Las tareas diarias pueden ser recurrentes (t.day = día de la semana, se
+// repiten cada semana) o puntuales (t.date = fecha exacta ISO, existen una
+// sola vez). El detalle de cada día combina ambos tipos: si el día cae en la
+// semana actual se ven también las recurrentes (con su estado real); para
+// cualquier otro día — pasado o futuro — se ven las tareas puntuales de esa
+// fecha exacta, y ahora sí se pueden agregar tareas a cualquier día futuro.
+function dayIdxFromDate(d){ var g=d.getDay(); return g===0?6:g-1; }
+function isSameWeekAsToday(d){
+  var today=new Date(); today.setHours(0,0,0,0);
+  var monday=new Date(today); monday.setDate(today.getDate()-todayIdx());
+  var sunday=new Date(monday); sunday.setDate(monday.getDate()+6);
+  return d>=monday && d<=sunday;
+}
+// ¿Es esta tarea diaria "de hoy"? (recurrente de hoy, o puntual con fecha de hoy)
+function isTaskToday(t){
+  if(t.period!=='dia') return false;
+  if(t.date) return t.date===todayStr();
+  return !t.date && t.day===todayIdx();
+}
+// Día de semana (0-6) que ocupa esta tarea DENTRO DE LA SEMANA ACTUAL —
+// para tareas recurrentes es simplemente t.day; para puntuales, solo aplica
+// si su fecha cae en la semana en curso (si no, devuelve null).
+function taskWeekdayThisWeek(t){
+  if(t.period!=='dia') return null;
+  if(t.date){
+    var dc = new Date(t.date+'T00:00:00');
+    if(!isSameWeekAsToday(dc)) return null;
+    return dayIdxFromDate(dc);
+  }
+  return t.day;
+}
+function openDayDetail(dateKey){
+  var d = new Date(dateKey+'T00:00:00');
+  var isToday = dateKey === todayStr();
+  var inCurrentWeek = isSameWeekAsToday(d);
+  var dLabel = new Date(dateKey+'T12:00:00');
+  var dayName = DAYS[dayIdxFromDate(d)];
+  var dateLabel = dLabel.toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'});
+
+  var wIdx = dayIdxFromDate(d);
+  var recurring = inCurrentWeek ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx;}) : [];
+  var dated = S.tasks.filter(function(t){return t.period==='dia'&&t.date===dateKey;});
+  var combined = recurring.concat(dated);
+
+  var body='';
+  var hist = (S.dailyHistory||{})[dateKey];
+  if(!inCurrentWeek && hist){
+    var pct = hist.total ? Math.round((hist.completed/hist.total)*100) : 0;
+    body += '<div style="text-align:center;padding:6px 0 16px;border-bottom:1px solid var(--line-soft);margin-bottom:14px;">'+
+      '<div style="font-size:26px;font-weight:800;color:'+(hist.streakReached?'var(--accent)':'var(--muted)')+';">'+hist.completed+'/'+hist.total+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;">tareas recurrentes completadas ese día ('+pct+'%)</div>'+
+    '</div>';
+  }
+
+  if(combined.length){
+    body += combined.map(function(t){
+      var dn=isDone(t);
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);">'+
+        '<div onclick="tapTask(\''+t.id+'\');reopenDayDetail(\''+dateKey+'\')" style="width:19px;height:19px;border-radius:5px;border:1.5px solid '+(dn?'var(--accent)':'var(--muted)')+';background:'+(dn?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;">'+
+          (dn?'<svg width="10" height="8" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
+        '</div>'+
+        '<span onclick="closeDayDetail();openEdit(\''+t.id+'\')" style="flex:1;font-size:13px;color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';cursor:pointer;">'+esc(t.text)+(t.date?'':' <span style="font-size:9px;color:var(--muted-soft);">· recurrente</span>')+'</span>'+
+      '</div>';
+    }).join('');
+  } else if(!hist || inCurrentWeek){
+    body += '<div style="font-size:12px;color:var(--muted-soft);text-align:center;padding:18px 0;">Sin tareas para este día.</div>';
+  }
+  body += '<button onclick="closeDayDetail();openNewDatedTask(\''+dateKey+'\')" style="width:100%;margin-top:12px;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:transparent;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+ Agregar tarea a este día</button>';
+
+  var box=document.createElement('div');box.className='conf-box';box.id='day-detail-box';
+  box.innerHTML = '<div class="conf-inner" style="max-height:78vh;overflow-y:auto;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'+
+      '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);">'+dayName+(isToday?' · <span style="color:var(--accent)">Hoy</span>':'')+'</div>'+
+      '<button onclick="closeDayDetail()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;text-transform:capitalize;">'+dateLabel+'</div>'+
+    body+
+  '</div>';
+  document.body.appendChild(box);
+}
+function closeDayDetail(){ var b=document.getElementById('day-detail-box'); if(b) b.remove(); }
+function reopenDayDetail(dateKey){ render(); var old=document.getElementById('day-detail-box'); if(old) old.remove(); openDayDetail(dateKey); }
+
 function calNav(delta){
   var current = S.calendarOffset || 0;
   var next = current + delta;
-  // No permitir ir al futuro
-  if(next > 0) next = 0;
+  // Permite navegar hacia el futuro (para revisar/preparar semanas próximas),
+  // con un tope razonable de 6 meses para no perderse en el calendario.
+  if(next > 6) next = 6;
+  if(next < -24) next = -24;
   S.calendarOffset = next;
   render();
 }
@@ -6164,11 +6587,12 @@ function toggleCustomMode(id){
       if(tpl){
         // Backup tareas actuales
         S.modeTaskBackup = JSON.parse(JSON.stringify(S.tasks));
-        // Reemplazar tareas del día con las de la plantilla
-        var nonDay = S.tasks.filter(function(t){return t.period!=='dia';});
+        // Reemplazar tareas recurrentes del día con las de la plantilla —
+        // conservamos las tareas puntuales (con fecha específica) tal cual.
+        var nonDay = S.tasks.filter(function(t){return t.period!=='dia' || t.date;});
         var newDayTasks = (tpl.tasks||[]).map(function(t){
           return Object.assign({},t,{
-            id:uid(),done:false,prog:0,
+            id:uid(),done:false,prog:0,date:null,
             day: t.day===undefined?0:t.day,
             checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false,id:uid()});})
           });
@@ -6641,12 +7065,13 @@ function _applyTemplate(tplId){
   if(!tpl) return;
   // Backup tareas actuales
   S.taskBackup = {timestamp:new Date().toISOString(), tasks:JSON.parse(JSON.stringify(S.tasks))};
-  // Reemplazar tareas del día
-  var nonDay = S.tasks.filter(function(t){return t.period!=='dia';});
+  // Reemplazar tareas recurrentes del día — las tareas puntuales (con fecha
+  // específica) no forman parte de ninguna plantilla y se conservan.
+  var nonDay = S.tasks.filter(function(t){return t.period!=='dia' || t.date;});
   var newDayTasks = (tpl.tasks||[]).map(function(t){
     return Object.assign({},t,{
       id:uid(),
-      done:false,prog:0,
+      done:false,prog:0,date:null,
       day: t.day===undefined?0:t.day,
       checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false,id:uid()});})
     });
@@ -6690,7 +7115,7 @@ function openEditMode(id){
 function showModeModal(){
   removeOverlay('mode-modal');
   var m=MM.mode;
-  var COLORS=['#e8c5a8','#d4b896','#c5a07e','#e0c5b0','#d6b89c','#f0d8c0','#dcc4a4','#c8a884'];
+  var COLORS=['#c94f4f','#4f8dc9','#4fae6b','#c98f2c','#8a5fc9','#c94f96','#2fa39a','#7a8a4f'];
   var overlay=document.createElement('div');overlay.className='overlay';overlay.id='mode-modal';
   overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('mode-modal');});
   
@@ -6735,14 +7160,6 @@ function showModeModal(){
       '</div></div>'+
     '</div>'+
     tplSelector+
-    '<label class="flbl">Consejos</label>'+
-    '<div id="mm-tips">'+m.tips.map(function(tip,i){
-      return '<div style="display:flex;gap:6px;margin-bottom:6px;">'+
-        '<input value="'+esc(tip)+'" oninput="mmUpdateTip('+i+',this.value)" style="flex:1;border:none;border-bottom:1.5px solid var(--line);outline:none;font-size:14px;background:transparent;padding:4px 0;font-family:Inter,sans-serif;color:var(--ink);" placeholder="Consejo..."/>'+
-        '<button onclick="mmRemoveTip('+i+')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:16px;">×</button>'+
-      '</div>';
-    }).join('')+'</div>'+
-    '<button onclick="mmAddTip()" style="background:none;border:1.5px dashed var(--line);border-radius:8px;width:100%;padding:6px;color:var(--muted);font-size:12px;margin-bottom:16px;">+ Agregar consejo</button>'+
     '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="mmSave()">Guardar</button><button class="cbtn" onclick="removeOverlay(\'mode-modal\')">Cancelar</button></div>'+
   '</div>';
   document.body.appendChild(overlay);
@@ -6767,18 +7184,6 @@ function mmColor(c){
   document.querySelectorAll('[id^="mmc-"]').forEach(function(b){b.style.border='2.5px solid transparent';});
   var btn=document.getElementById('mmc-'+c.replace('#',''));if(btn)btn.style.border='2.5px solid var(--ink)';
 }
-function mmUpdateTip(i,v){MM.mode.tips[i]=v;}
-function mmAddTip(){MM.mode.tips.push('');mmRerenderTips();}
-function mmRemoveTip(i){MM.mode.tips.splice(i,1);mmRerenderTips();}
-function mmRerenderTips(){
-  var area=document.getElementById('mm-tips');if(!area)return;
-  area.innerHTML=MM.mode.tips.map(function(tip,i){
-    return '<div style="display:flex;gap:6px;margin-bottom:6px;">'+
-      '<input value="'+esc(tip)+'" oninput="mmUpdateTip('+i+',this.value)" style="flex:1;border:none;border-bottom:1.5px solid var(--line);outline:none;font-size:14px;background:transparent;padding:4px 0;font-family:Inter,sans-serif;color:var(--ink);" placeholder="Consejo..."/>'+
-      '<button onclick="mmRemoveTip('+i+')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:16px;">×</button>'+
-    '</div>';
-  }).join('');
-}
 function mmSave(){
   var name=document.getElementById('mm-name');if(!name||!name.value.trim())return;
   var icon=document.getElementById('mm-icon').value||'🌙';
@@ -6787,7 +7192,7 @@ function mmSave(){
   var saved=Object.assign({},MM.mode,{
     name:name.value.trim(),
     icon:icon,
-    tips:MM.mode.tips.filter(function(t){return t.trim();}),
+    tips:MM.mode.tips||[],
     templateId:templateId,
     lowThresh: MM.mode.lowThresh||0.7
   });
@@ -6980,8 +7385,13 @@ function checkAutoReset(){
   var hour=now.getHours();
   var todayKey=now.toISOString().slice(0,10);
   if(dow===1&&hour>=4&&S.lastAutoReset!==todayKey){
-    // Auto reset
-    S.tasks=S.tasks.map(function(t){return Object.assign({},t,{done:false,prog:0,checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false});})});});
+    // Auto reset — solo tareas recurrentes (sin fecha específica). Las tareas
+    // puntuales (t.date) son de un solo día y no se desmarcan ni se tocan
+    // en el reinicio semanal.
+    S.tasks=S.tasks.map(function(t){
+      if(t.period==='dia' && t.date) return t;
+      return Object.assign({},t,{done:false,prog:0,checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false});})});
+    });
     S.rewardedTaskIds={};
     S.taskBlocks={};
     S.lastAutoReset=todayKey;
@@ -6992,11 +7402,12 @@ function checkAutoReset(){
     if(scheduledTplId){
       var tpl = (S.templates||[]).find(function(t){return t.id===scheduledTplId;});
       if(tpl){
-        // Reemplazar tareas del día con las de la plantilla
-        var nonDay = S.tasks.filter(function(t){return t.period!=='dia';});
+        // Reemplazar tareas recurrentes del día con las de la plantilla —
+        // las tareas puntuales (con fecha) se conservan intactas.
+        var nonDay = S.tasks.filter(function(t){return t.period!=='dia' || t.date;});
         var newDayTasks = (tpl.tasks||[]).map(function(t){
           return Object.assign({},t,{
-            id:uid(),done:false,prog:0,
+            id:uid(),done:false,prog:0,date:null,
             day: t.day===undefined?0:t.day,
             checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false,id:uid()});})
           });
@@ -7042,13 +7453,36 @@ function openNew(period){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60};
+  showTaskModal();
+}
+// Crear una tarea puntual (con fecha específica) para un día cualquiera —
+// pasado, hoy o futuro — sin importar si es la semana actual. Se usa desde
+// el detalle de día del calendario de racha.
+function openNewDatedTask(dateKey){
+  var blockUntil=S.taskBlocks['dia'];
+  if(blockUntil&&new Date(blockUntil)>new Date()){
+    showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
+    return;
+  }
+  var count=S.tasks.filter(function(t){return t.period==='dia';}).length;
+  var limit=currentTaskLimits()['dia']||999;
+  if(count>=limit){
+    var until=new Date();
+    until.setDate(until.getDate()+TASK_BLOCK_DAYS);
+    S.taskBlocks['dia']=until.toISOString();
+    saveState();
+    showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
+    return;
+  }
+  var wIdx = dayIdxFromDate(new Date(dateKey+'T00:00:00'));
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:true,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:null,duracion:60};
   showTaskModal();
 }
 function openEdit(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
-  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:(t.checklist||[]).length>0,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null};
-  M.duracion = t.duracion||60; M.moreOpen = M.hasQty || M.hasCL || !!M.hora;
+  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:(t.checklist||[]).length>0,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date};
+  M.duracion = t.duracion||60; M.moreOpen = M.hasQty || M.hasCL || !!M.hora || M.hasDate;
   showTaskModal();
 }
 function showTaskModal(){
@@ -7106,9 +7540,9 @@ function showTaskModal(){
     // Se usan con menos frecuencia que nombre/categoría — ocultarlas por
     // defecto hace que agregar una tarea simple sea más rápido y menos denso.
     // Se auto-expanden si la tarea ya las tenía activas al editar.
-    '<button type="button" onclick="mToggleMore()" style="width:100%;display:flex;align-items:center;gap:6px;background:none;border:none;padding:10px 0;cursor:pointer;font-family:Inter,sans-serif;">'+
-      '<span style="font-size:12px;font-weight:600;color:var(--muted);flex:1;text-align:left;">Más opciones'+((M.hasQty||M.hasCL||M.hora)&&!M.moreOpen?' · en uso':'')+'</span>'+
-      '<span id="m-more-chev" style="font-size:11px;color:var(--muted);transition:transform .2s;transform:'+(M.moreOpen?'rotate(180deg)':'none')+';">▾</span>'+
+    '<button type="button" onclick="mToggleMore()" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:4px 0 10px;">'+
+      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Más opciones'+((M.hasQty||M.hasCL||M.hora)&&!M.moreOpen?' · en uso':'')+'</span>'+
+      '<span id="m-more-chev" style="font-size:13px;color:var(--accent);font-weight:700;transition:transform .2s;transform:'+(M.moreOpen?'rotate(180deg)':'none')+';">▾</span>'+
     '</button>'+
     '<div id="m-more-area" style="display:'+(M.moreOpen?'block':'none')+';">'+
     '<div class="fsec">'+
@@ -7174,6 +7608,20 @@ function showTaskModal(){
         '<div id="m-dur-badge" style="font-size:11px;color:var(--muted);text-align:right;margin-bottom:6px;">'+mDurLabel(M.duracion||60)+'</div>'+
       '</div>'+
     '</div>':'')+
+    // Fecha específica (solo tareas diarias) — tarea puntual para un solo día
+    // en vez de recurrente cada semana.
+    (isDay?'<div class="fsec">'+
+      '<div class="frow" style="margin-bottom:'+(M.hasDate?10:0)+'px;">'+
+        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Fecha específica (no recurrente)</span>'+
+        '<button class="tog" id="m-date-tog" onclick="mToggleDate()" style="background:'+(M.hasDate?'var(--accent)':'var(--muted-soft)')+';">'+
+          '<span class="tok" style="left:'+(M.hasDate?22:2)+'px;"></span>'+
+        '</button>'+
+      '</div>'+
+      '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';">'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Esta tarea aparecerá solo ese día — no se repite todas las semanas.</div>'+
+        '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\')" style="cursor:pointer;" value="'+(M.task.date||'')+'"/>'+
+      '</div>'+
+    '</div>':'')+
     // Checklist only for "dia" period
     (isDay?'<div class="fsec">'+
       '<div class="frow" style="margin-bottom:'+(M.hasCL?12:0)+'px;">'+
@@ -7201,6 +7649,17 @@ function mToggleMore(){
   var chev = document.getElementById('m-more-chev');
   if(area) area.style.display = M.moreOpen ? 'block' : 'none';
   if(chev) chev.style.transform = M.moreOpen ? 'rotate(180deg)' : 'none';
+}
+function mToggleDate(){
+  M.hasDate = !M.hasDate;
+  if(M.hasDate && !M.task.date){ M.task.date = todayStr(); }
+  var area = document.getElementById('m-date-area');
+  var tog = document.getElementById('m-date-tog');
+  var tok = tog ? tog.querySelector('.tok') : null;
+  if(area) area.style.display = M.hasDate?'block':'none';
+  if(tog) tog.style.background = M.hasDate?'var(--accent)':'var(--muted-soft)';
+  if(tok) tok.style.left = M.hasDate?'22px':'2px';
+  var inp=document.getElementById('m-date-input'); if(inp) inp.value = M.task.date||'';
 }
 // ── Time picker helpers (desde / hasta) ──────────────────────────────────────────────────────────────
 function mHoraTo12(hora24){
@@ -7507,7 +7966,12 @@ function mSave(){
   var qty=M.hasQty?Math.max(2,M.qty):1;
   var prog=M.hasQty?Math.min(M.task.prog||0,qty):0;
   var done_=cl.length?cl.every(function(i){return i.done;}):(qty>1?prog>=qty:!!M.task.done);
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,links:M.links,crucial:isDay?!!M.crucial:false,linkMode:M.linkMode||'unit',categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60});
+  // Fecha específica (tarea puntual, no recurrente) — si está activa, además
+  // recalculamos el día de semana correspondiente por si se desactiva luego.
+  var dateInp = isDay ? document.getElementById('m-date-input') : null;
+  var specificDate = (isDay && M.hasDate && dateInp && dateInp.value) ? dateInp.value : null;
+  var effectiveDay = specificDate ? dayIdxFromDate(new Date(specificDate+'T00:00:00')) : M.task.day;
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,links:M.links,crucial:isDay?!!M.crucial:false,linkMode:M.linkMode||'unit',categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day});
   if(M.isNew){S.tasks.push(saved);}else{S.tasks=S.tasks.map(function(t){return t.id===saved.id?saved:t;});}
   removeOverlay('task-modal');saveState();checkMedals();render();
 }
@@ -7523,7 +7987,7 @@ function checkStreakNow(){
   if(S.simpleMode)return; // Modo simplificado: sin racha
   var today=todayStr();
   if(S.streak.lastDate===today)return;
-  var dayTasks=S.tasks.filter(function(t){return t.period==='dia'&&t.day===todayIdx();});
+  var dayTasks=S.tasks.filter(function(t){return isTaskToday(t);});
   if(!dayTasks.length)return;
   var am=getActiveMode();
   var thr=am&&am.lowThresh?am.lowThresh:S.streakCfg.threshold;
@@ -7734,22 +8198,20 @@ function checkMedals(){
       changed = true;
       // Primera medalla: mostrar mini-tutorial
       if(S.medals.length === 1){ showFirstMedalTip(); }
-      // Entregar recompensa
+      // Entregar recompensa (si tiene) y mostrar el modal de medalla desbloqueada
+      // con la medallita animada + confeti, en vez de un simple toast de texto.
       if(m.reward){
         if(m.reward.type === 'xp'){
           addXP(m.reward.value);
-          setTimeout(function(title, label){
-            return function(){showRewardToast('🎖️ '+title, label);}
-          }(m.title, m.reward.label), 800);
         } else if(m.reward.type === 'limit+1'){
           // Aumentar límite de tareas de la cuenta en 1 en todos los períodos
           if(!S.bonusTaskLimit) S.bonusTaskLimit = 0;
           S.bonusTaskLimit += m.reward.value;
-          setTimeout(function(title, label){
-            return function(){showRewardToast('🎖️ '+title, label);}
-          }(m.title, m.reward.label), 800);
         }
       }
+      setTimeout(function(medal){
+        return function(){ queueMedalUnlocked(medal); };
+      }(m), 800);
     }
   });
   if(changed) saveState();
@@ -7809,6 +8271,44 @@ function showAchievementUnlocked(ach){
   document.body.appendChild(box);
 }
 function closeAchModal(){var b=document.getElementById('ach-modal');if(b)b.remove();}
+
+// ── Medalla desbloqueada: modal con medallita animada + confeti ──────────
+// (antes solo aparecía un toast de texto — ahora es una ventana emergente
+// con la medalla, su cinta, y la misma animación de confeti del level-up.)
+var _medalQueue = [];
+var _medalModalShowing = false;
+function queueMedalUnlocked(m){
+  _medalQueue.push(m);
+  if(!_medalModalShowing) showNextMedalModal();
+}
+function showNextMedalModal(){
+  if(!_medalQueue.length){ _medalModalShowing=false; return; }
+  _medalModalShowing = true;
+  var m = _medalQueue.shift();
+  showMedalUnlocked(m);
+}
+function showMedalUnlocked(m){
+  var box=document.createElement('div');
+  box.className='lvl-up';box.id='medal-modal';
+  box.innerHTML='<div class="lvl-up-box">'+
+    '<div class="medal-badge">'+
+      '<div class="medal-badge-ribbon-l"></div><div class="medal-badge-ribbon-r"></div>'+
+      '<div class="medal-badge-circle"><span class="medal-badge-emoji">'+m.emoji+'</span></div>'+
+    '</div>'+
+    '<div class="lvl-up-title" style="margin-top:6px;">¡Medalla desbloqueada!</div>'+
+    '<div style="font-size:16px;color:var(--accent);font-weight:800;margin-top:4px;">'+esc(m.title)+'</div>'+
+    '<div class="lvl-up-msg" style="margin-top:10px;">'+esc(m.desc)+'</div>'+
+    (m.reward?'<div style="display:inline-block;font-size:12px;font-weight:700;color:white;background:var(--accent);padding:5px 14px;border-radius:20px;margin-bottom:22px;">'+esc(m.reward.label)+'</div>':'<div style="margin-bottom:8px;"></div>')+
+    '<button class="lvl-up-btn" onclick="closeMedalModal()">¡Genial!</button>'+
+  '</div>';
+  document.body.appendChild(box);
+  playLevelUpAnimation();
+}
+function closeMedalModal(){
+  var b=document.getElementById('medal-modal');
+  if(b)b.remove();
+  showNextMedalModal();
+}
 
 // ── Imagen shareable (canvas) ─────────────────────────────────────────────
 function showAchievementShare(days){
@@ -7876,7 +8376,7 @@ function drawShareImage(days, totalCompleted, daysLogged){
   ctx.lineWidth = 4;
   ctx.strokeRect(80, 80, W-160, H-160);
   
-  // Logo OG arriba
+  // Logo Gr. arriba
   ctx.fillStyle = accentColor;
   ctx.font = 'bold 60px Georgia, serif';
   ctx.textAlign = 'center';
@@ -7884,12 +8384,12 @@ function drawShareImage(days, totalCompleted, daysLogged){
   ctx.fillText(']', W/2 + 80, 200);
   ctx.fillStyle = inkColor;
   ctx.font = 'bold 70px Georgia, serif';
-  ctx.fillText('OG', W/2, 210);
+  ctx.fillText('Gr.', W/2, 210);
   
-  // Subtítulo Organiz[app]
+  // Subtítulo Gramific[app]
   ctx.fillStyle = inkSoftColor;
   ctx.font = '600 22px Arial, sans-serif';
-  ctx.fillText('ORGANIZ[APP]', W/2, 260);
+  ctx.fillText('GRAMIFIC[APP]', W/2, 260);
   
   // Emoji grande del logro
   ctx.font = '180px Arial';
@@ -7934,7 +8434,7 @@ function downloadShareImage(days){
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'organizapp-racha-'+days+'dias.png';
+    a.download = 'gramifica-racha-'+days+'dias.png';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -7947,12 +8447,12 @@ function shareImage(days){
   var canvas = document.getElementById('shareCanvas');
   if(!canvas)return;
   canvas.toBlob(function(blob){
-    var file = new File([blob], 'organizapp-racha-'+days+'dias.png', {type:'image/png'});
+    var file = new File([blob], 'gramifica-racha-'+days+'dias.png', {type:'image/png'});
     if(navigator.canShare && navigator.canShare({files:[file]})){
       navigator.share({
         files:[file],
-        title:'Mi racha en Organiz[app]',
-        text:days+' días de racha en Organiz[app] 🔥'
+        title:'Mi racha en Gramific[app]',
+        text:days+' días de racha en Gramific[app] 🔥'
       }).catch(function(e){console.log('Share cancelled',e);});
     } else {
       toast('Tu dispositivo no soporta compartir directo. Descargá la imagen.');
@@ -8110,7 +8610,7 @@ function tourDone(){
 var MAIN_TOUR = [
   {
     target: null,
-    title: '¡Bienvenido a Organiz[app]!',
+    title: '¡Bienvenido a Gramifica!',
     body: 'Te hago un tour rápido de la app. Puedes saltarlo si lo deseas o volver a verlo en cualquier momento.',
   },
   {
@@ -8161,7 +8661,13 @@ function startTutorial(){
   _tourSteps = MAIN_TOUR;
   _tourIdx = 0;
   _tourActive = true;
-  _tourOnDone = function(){ S.tutorialSeen=true; saveState(); };
+  var wasFirstTime = !S.tutorialSeen;
+  _tourOnDone = function(){
+    S.tutorialSeen=true; saveState();
+    // Solo la primera vez (nunca en re-visualizaciones desde Yo → Tutorial)
+    // preguntamos por el modo de uso, ya sea que lo haya terminado o saltado.
+    if(wasFirstTime) setTimeout(showModeChoiceModal, 300);
+  };
   _slRender();
 }
 
@@ -8202,7 +8708,7 @@ function showFirstLevelUpTip(){
     _tourSteps = [{
       target: null,
       title: '¡Subiste de nivel!',
-      body: 'Cada nivel que ganas desbloquea una tarea diaria más (hasta 24). Sigue completando tu umbral cada día para avanzar.'
+      body: 'Cada nivel que ganas desbloquea una tarea diaria más (hasta 20). Sigue completando tu umbral cada día para avanzar.'
     }];
     _tourIdx=0; _tourActive=true; _tourOnDone=null;
     _slRender();
@@ -8298,22 +8804,20 @@ function denyNotif(){
   saveState();
   toast('Sin recordatorios. Puedes activarlos después desde Yo → Más ajustes.');
 }
-function setNotifTiming(type, val){
-  if(!S.notifTiming) S.notifTiming = {type:'exact', value:15};
-  S.notifTiming.type = type;
-  if(val) S.notifTiming.value = val;
+function nudgeNotifHH(delta){
+  if(!S.notifTiming) S.notifTiming = {hh:0, mm:15};
+  S.notifTiming.hh = Math.min(23, Math.max(0, (S.notifTiming.hh||0) + delta));
   saveState();
+  var el = document.getElementById('notif-hh-val');
+  if(el) el.textContent = String(S.notifTiming.hh).padStart(2,'0');
   scheduleNotifications();
 }
-function nudgeNotifVal(delta, type, min, max){
-  if(!S.notifTiming) S.notifTiming = {type:'exact', value:15};
-  // Activar el radio correspondiente si no estaba activo
-  S.notifTiming.type = type;
-  S.notifTiming.value = Math.min(max, Math.max(min, (S.notifTiming.value||min) + delta));
+function nudgeNotifMM(delta){
+  if(!S.notifTiming) S.notifTiming = {hh:0, mm:15};
+  S.notifTiming.mm = Math.min(59, Math.max(0, (S.notifTiming.mm||0) + delta));
   saveState();
-  // Actualizar solo el número en pantalla sin re-renderizar todo (evita perder foco)
-  var el = document.getElementById('notif-'+(type==='before_min'?'min':'hr')+'-val');
-  if(el) el.textContent = S.notifTiming.value;
+  var el = document.getElementById('notif-mm-val');
+  if(el) el.textContent = String(S.notifTiming.mm).padStart(2,'0');
   scheduleNotifications();
 }
 
@@ -8329,10 +8833,10 @@ function scheduleNotifications(){
   _notifTimers = [];
   if(S.notifPermission !== 'granted') return;
   if(typeof Notification === 'undefined') return;
-  var nt = S.notifTiming || {type:'exact', value:15};
+  var nt = S.notifTiming || {hh:0, mm:15};
   var today = todayIdx();
   var todayTasks = (S.tasks||[]).filter(function(t){
-    return t.period==='dia' && t.day===today && t.hora && !isDone(t);
+    return isTaskToday(t) && t.hora && !isDone(t);
   });
   var now = new Date();
   todayTasks.forEach(function(t){
@@ -8340,20 +8844,18 @@ function scheduleNotifications(){
     var h = parseInt(parts[0],10), m = parseInt(parts[1]||'0',10);
     var taskTime = new Date();
     taskTime.setHours(h, m, 0, 0);
-    // Restar el aviso anticipado según configuración
-    var alertTime = new Date(taskTime);
-    if(nt.type === 'before_min') alertTime.setMinutes(alertTime.getMinutes() - nt.value);
-    if(nt.type === 'before_hr')  alertTime.setHours(alertTime.getHours() - nt.value);
+    // Restar el aviso anticipado según configuración (hh horas + mm minutos)
+    var alertTime = new Date(taskTime.getTime() - ((nt.hh||0)*60 + (nt.mm||0))*60000);
     var msUntil = alertTime - now;
     if(msUntil < 0) return; // ya pasó hoy
     var taskName = t.text;
-    var body = nt.type==='exact'
+    var isExact = !nt.hh && !nt.mm;
+    var pre = isExact ? '' : (nt.hh?nt.hh+'h ':'') + (nt.mm?nt.mm+'min ':'');
+    var body = isExact
       ? 'Es la hora: '+esc(taskName)
-      : nt.type==='before_min'
-        ? 'En '+nt.value+' min: '+esc(taskName)
-        : 'En '+nt.value+' hora'+(nt.value>1?'s':'')+': '+esc(taskName);
+      : 'En '+pre.trim()+': '+esc(taskName);
     var timer = setTimeout(function(){
-      new Notification('Organiz[app]', {body: body, icon: '/icon-192.png'});
+      new Notification('Gramifica', {body: body, icon: '/icon-192.png'});
     }, msUntil);
     _notifTimers.push(timer);
   });
