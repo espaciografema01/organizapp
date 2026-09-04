@@ -1,6 +1,6 @@
 {
-  "name": "Organiz[app]",
-  "short_name": "Organizapp",
+  "name": "Gramifica",
+  "short_name": "Gramifica",
   "start_url": "/organizapp/",
   "display": "standalone",
   "background_color": "#1a1f2e",
