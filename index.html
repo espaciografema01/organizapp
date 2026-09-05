@@ -795,11 +795,22 @@ function toggleAuthMode(){
 }
 
 function handleLogout(){
-  if(!auth) return;
+  if(!auth){ toast('No hay sesión activa'); return; }
   auth.signOut().then(function(){
     toast('Sesión cerrada');
-    document.getElementById('authEmail').value='';
-    document.getElementById('authPass').value='';
+    // BUGFIX: estos campos solo existen si el usuario entró con el
+    // formulario de email/contraseña. Si entró con Google, no existen en el
+    // DOM en este momento, y el .value de un elemento null tiraba una
+    // excepción que interrumpía todo lo que venía después en la promesa
+    // (aunque signOut() ya se hubiera completado del lado de Firebase).
+    var emailEl = document.getElementById('authEmail');
+    var passEl = document.getElementById('authPass');
+    if(emailEl) emailEl.value='';
+    if(passEl) passEl.value='';
+    render();
+  }).catch(function(e){
+    console.error('Logout error:', e);
+    toast('No se pudo cerrar sesión: '+e.message);
   });
 }
 
@@ -1852,8 +1863,20 @@ function getActiveMode(){
   // Baja Energía (o un modo personalizado) estuviera realmente activo.
   if(S.activeMode.type==='baja')return Object.assign({id:'baja'},S.bajaEnergia,{name:'Baja Energía',type:'baja'});
   if(S.activeMode.type==='vacaciones')return Object.assign({id:'vacaciones'},S.vacaciones,{name:'Vacaciones',icon:'🌴',color:'#a8c499',type:'vacaciones'});
+  // BUGFIX CRÍTICO: si S.modes se corrompe (null/undefined) o si el modo
+  // personalizado activo fue borrado pero S.activeMode todavía lo apunta,
+  // esto lanzaba una excepción. Como getActiveMode() se llama en CADA
+  // render() (vía renderV2Header, que corre para toda pestaña), un solo dato
+  // corrupto acá dejaba TODA la app sin responder a ningún botón. Ahora, si
+  // el modo activo ya no existe, simplemente se desactiva solo en vez de
+  // romper el render.
+  if(!Array.isArray(S.modes)){ S.modes = []; }
   var found = S.modes.find(function(m){return m.id===S.activeMode.id;});
-  return found ? Object.assign({},found,{type:'custom'}) : null;
+  if(!found){
+    S.activeMode = null; // el modo personalizado activo ya no existe: limpiar
+    return null;
+  }
+  return Object.assign({},found,{type:'custom'});
 }
 
 // Cooldown "una vez por semestre" aplicado a modos predeterminados en plan gratuito
@@ -1989,7 +2012,12 @@ function setTab(t){
 
 
 function render(){
-  renderV2Header();
+  // BUGFIX CRÍTICO: renderV2Header() corre en TODO render(), sin importar la
+  // pestaña — si algo ahí lanza una excepción (encabezado con datos
+  // corruptos), el resto de render() ni siquiera empieza a ejecutarse y la
+  // app entera queda sin responder a ningún botón. Se aísla en su propio
+  // try/catch para que un problema en el encabezado nunca bloquee el resto.
+  try { renderV2Header(); } catch(hdrErr){ console.error('Error en encabezado:', hdrErr); }
   var c = document.getElementById('content');
   var prevScroll = c ? c.scrollTop : 0;
   var layout = S.interfaceLayout || 'default';
@@ -2007,15 +2035,28 @@ function render(){
   var fabReset = document.getElementById('fab-reset');
   if(fabReset) fabReset.style.display = (fabVisible && S.simpleMode && S.simpleModeFabReset) ? 'flex' : 'none';
 
-  if(layout === 'agenda'){
-    c.innerHTML = renderAgendaLayout(tab);
-  } else {
-    if(tab==='hoy'||tab==='dia') c.innerHTML = renderHoy();
-    else if(tab==='plan'||tab==='objetivos'||tab==='progreso'||tab==='horario') c.innerHTML = renderPlan();
-    else if(tab==='proyectos') c.innerHTML = renderProyectosTab();
-    else if(tab==='energia'||tab==='modos'||tab==='plantillas') c.innerHTML = renderEnergiaV2();
-    else if(tab==='yo'||tab==='cuenta'||tab==='mas') c.innerHTML = renderYo();
-    else c.innerHTML = renderHoy();
+  // BUGFIX CRÍTICO: antes, si renderProyectosTab()/renderEnergiaV2()/renderYo()
+  // lanzaban una excepción a mitad de camino (por ejemplo por datos guardados
+  // con una forma inesperada), c.innerHTML nunca se llegaba a reasignar —
+  // la pantalla se quedaba "pegada" mostrando la pestaña anterior, sin ningún
+  // aviso, mientras S.tab ya había cambiado. Al tocar otra pestaña parecía que
+  // "no hacía nada". Ahora cada pestaña se intenta renderizar de forma aislada:
+  // si una falla, se muestra una pantalla de recuperación en vez de quedar
+  // trabada, y el resto de la app sigue funcionando con normalidad.
+  try {
+    if(layout === 'agenda'){
+      c.innerHTML = renderAgendaLayout(tab);
+    } else {
+      if(tab==='hoy'||tab==='dia') c.innerHTML = renderHoy();
+      else if(tab==='plan'||tab==='objetivos'||tab==='progreso'||tab==='horario') c.innerHTML = renderPlan();
+      else if(tab==='proyectos') c.innerHTML = renderProyectosTab();
+      else if(tab==='energia'||tab==='modos'||tab==='plantillas') c.innerHTML = renderEnergiaV2();
+      else if(tab==='yo'||tab==='cuenta'||tab==='mas') c.innerHTML = renderYo();
+      else c.innerHTML = renderHoy();
+    }
+  } catch(renderErr){
+    console.error('Render error en tab "'+tab+'":', renderErr);
+    c.innerHTML = renderRecoveryScreen(tab, renderErr);
   }
   if(c) c.scrollTop = prevScroll;
   // Fluidez: pequeño fade al cambiar de contenido (forzamos reflow para que
@@ -2025,6 +2066,27 @@ function render(){
     void c.offsetWidth;
     c.classList.add('fade-in');
   }
+}
+
+// Pantalla de recuperación: se muestra si una pestaña falla al renderizar en
+// vez de dejar la app pegada sin explicación. Da salidas seguras que no
+// dependen de que el resto del render funcione: recargar, cerrar sesión, o
+// borrar datos locales y empezar de nuevo (con opción de respaldo primero).
+function renderRecoveryScreen(tab, err){
+  var msg = (err && err.message) ? err.message : 'Error desconocido';
+  return '<div style="padding:32px 20px;text-align:center;">'+
+    '<div style="font-size:40px;margin-bottom:12px;">⚠️</div>'+
+    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:10px;">Esta pantalla tuvo un problema</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px;">No se pudo mostrar "'+esc(tab)+'" por un error interno. El resto de la app debería seguir funcionando — probá con otra pestaña.</div>'+
+    '<div style="font-size:10px;color:var(--muted-soft);font-family:monospace;background:var(--bg);border-radius:8px;padding:8px;margin:14px 0;word-break:break-word;">'+esc(msg)+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;max-width:280px;margin:20px auto 0;">'+
+      '<button class="sbtn" onclick="location.reload()">Recargar la app</button>'+
+      (typeof currentUser!=='undefined' && currentUser
+        ? '<button class="cbtn" onclick="handleLogout()">Cerrar sesión</button>'
+        : '')+
+      '<button class="cbtn" style="color:var(--bad);" onclick="openFactoryResetModal()">Borrar datos y empezar de nuevo</button>'+
+    '</div>'+
+  '</div>';
 }
 
 // ── V2 Header compacto siempre visible ────────────────────────────────────
@@ -2107,8 +2169,24 @@ function renderAgendaLayout(tab){
   });
   html += '</div>';
 
+  // BUGFIX: el contenido de cada sección se arma en su propio try/catch —
+  // así, si "Semana", "Proyectos", "Energía" o "Yo" fallan por datos
+  // inesperados, la barra de navegación de arriba SIGUE funcionando y se
+  // puede tocar otra pestaña para salir del problema, en vez de quedar todo
+  // pegado sin ninguna forma de navegar (que es lo que pasaba antes).
+  try {
+    html += renderAgendaSectionContent(activeSection, tab, today);
+  } catch(sectionErr){
+    console.error('Error en sección de agenda "'+activeSection+'":', sectionErr);
+    html += renderRecoveryScreen(activeSection, sectionErr);
+  }
+
+  return html;
+}
+
+function renderAgendaSectionContent(activeSection, tab, today){
+  var html = '';
   if(activeSection === 'semana'){
-    // Vista de semana — 7 columnas deslizables.
     // Las columnas usan casi toda la altura disponible de la pantalla (en vez
     // de una franja fija de 120px) para que se aprovechen las tareas del día
     // y no quede un espacio en blanco grande debajo sin utilidad. Si además
@@ -3182,7 +3260,8 @@ function renderProyectosTab(){
       (p.sections||[]).forEach(function(s){ countLeafs(s.tasks||[]); });
       var pct = total ? Math.round(done/total*100) : 0;
       var secCount = (p.sections||[]).length;
-      html += '<div onclick="openProjectView(\''+p.id+'\')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:14px;margin-bottom:8px;cursor:pointer;border-left:4px solid '+p.color+';transition:opacity .12s;" ontouchstart="this.style.opacity=.7" ontouchend="this.style.opacity=1">'+
+      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
+        '<div onclick="openProjectView(\''+p.id+'\')" style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:14px;cursor:pointer;border-left:4px solid '+p.color+';transition:opacity .12s;" ontouchstart="this.style.opacity=.7" ontouchend="this.style.opacity=1">'+
         // Anillo de progreso compacto (30px)
         '<div style="flex-shrink:0;position:relative;width:36px;height:36px;">'+
           '<svg viewBox="0 0 36 36" width="36" height="36">'+
@@ -3202,6 +3281,10 @@ function renderProyectosTab(){
           '</div>'+
         '</div>'+
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>'+
+        '</div>'+
+        '<button onclick="event.stopPropagation();openProjectListMenu(\''+p.id+'\',event)" style="flex-shrink:0;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--paper);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Más opciones">'+
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>'+
+        '</button>'+
       '</div>';
     });
   }
@@ -3398,7 +3481,7 @@ function deleteProject(id){
   box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:8px;">Eliminar proyecto</div>'+
     '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">¿Eliminar este proyecto? No se puede deshacer.</div>'+
     '<div style="display:flex;gap:8px;">'+
-      '<button class="sbtn" style="background:var(--bad);" onclick="(function(){S.projects=(S.projects||[]).filter(function(p){return p.id!==\''+id+'\';});if(S.activeProjectId===\''+id+'\')S.activeProjectId=null;saveState();renderProjectBtn();var _cb=pRoot().querySelector(\'.conf-box\');if(_cb)_cb.remove();render();})()">Eliminar</button>'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="(function(btn){S.projects=(S.projects||[]).filter(function(p){return p.id!==\''+id+'\';});if(S.activeProjectId===\''+id+'\')S.activeProjectId=null;saveState();renderProjectBtn();var _cb=btn.closest(\'.conf-box\');if(_cb)_cb.remove();closeProjectView();toast(\'Proyecto eliminado\');})(this)">Eliminar</button>'+
       '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
     '</div></div>';
   document.body.appendChild(box);
@@ -3537,6 +3620,45 @@ function openProjectMenu(pid, event){
       '<span class="tog" style="background:'+(S.ganttHideWeekends?'var(--accent)':'var(--muted-soft)')+';transform:scale(.8);flex-shrink:0;">'+
         '<span class="tok" style="left:'+(S.ganttHideWeekends?22:2)+'px;"></span>'+
       '</span>'+
+    '</button>'+
+    '<div style="height:1px;background:var(--line-soft);margin:0 8px;"></div>'+
+    '<button onclick="closeProjectMenu();openEditProjectModal(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
+      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'+
+      '<span style="flex:1;">Editar proyecto</span>'+
+    '</button>'+
+    '<button onclick="closeProjectMenu();closeProjectView();deleteProject(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--bad);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
+      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></span>'+
+      '<span style="flex:1;">Eliminar proyecto</span>'+
+    '</button>';
+  document.body.appendChild(menu);
+  setTimeout(function(){
+    document.addEventListener('click', function handler(e){
+      if(!menu.contains(e.target)){
+        menu.remove();
+        document.removeEventListener('click', handler);
+      }
+    });
+  }, 50);
+}
+// Menú de "más opciones" desde la lista de Proyectos (Editar / Eliminar),
+// separado del que se usa dentro de la Carta Gantt (openProjectMenu) porque
+// ahí no aplica la opción de ocultar fin de semana.
+function openProjectListMenu(pid, event){
+  var prev = document.getElementById('pv-menu-popup');
+  if(prev){prev.remove();}
+  var menu = document.createElement('div');
+  menu.id = 'pv-menu-popup';
+  menu.style.cssText = 'position:fixed;right:16px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:900;min-width:200px;overflow:hidden;';
+  var rect = event.target.closest('button').getBoundingClientRect();
+  menu.style.top = (rect.bottom + 6) + 'px';
+  menu.innerHTML =
+    '<button onclick="closeProjectMenu();openEditProjectModal(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
+      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'+
+      '<span style="flex:1;">Editar proyecto</span>'+
+    '</button>'+
+    '<button onclick="closeProjectMenu();deleteProject(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--bad);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
+      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></span>'+
+      '<span style="flex:1;">Eliminar proyecto</span>'+
     '</button>';
   document.body.appendChild(menu);
   setTimeout(function(){
