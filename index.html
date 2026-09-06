@@ -723,15 +723,32 @@ function handleGoogleSignIn(){
   // página original. signInWithRedirect es el flujo recomendado por Firebase
   // para móvil — navega a Google, el usuario inicia sesión, y vuelve a la app.
   var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // Persistencia explícita: si no se fija, algunos contextos (sobre todo TWA
+  // / app instalada desde Play Store, con partición de almacenamiento propia
+  // separada de Chrome) pueden no conservar bien la sesión entre la ida a
+  // Google y la vuelta a la app. Fijarlo a mano antes del redirect reduce
+  // (aunque no garantiza del todo, ver nota en handleGoogleRedirectResult)
+  // ese tipo de pérdida de sesión.
+  var setPersistencePromise = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
   if(isMobile){
-    auth.signInWithRedirect(provider).catch(function(e){
+    setPersistencePromise.then(function(){
+      // Marca que dejamos un login en curso — se usa al volver para poder
+      // avisar con un mensaje claro si el redirect "se pierde" (no da error,
+      // pero tampoco vuelve con una sesión), en vez de solo mostrar de nuevo
+      // el botón de "Iniciar sesión" sin ninguna explicación.
+      localStorage.setItem('og6-google-redirect-pending', '1');
+      return auth.signInWithRedirect(provider);
+    }).catch(function(e){
+      localStorage.removeItem('og6-google-redirect-pending');
       toast(e.code==='auth/unauthorized-domain'
         ? 'Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)'
         : e.message);
     });
     return;
   }
-  auth.signInWithPopup(provider).then(function(result){
+  setPersistencePromise.then(function(){
+    return auth.signInWithPopup(provider);
+  }).then(function(result){
     // Guardar el access_token de Google para llamadas a Calendar API
     if(result.credential && result.credential.accessToken){
       window._googleAccessToken = result.credential.accessToken;
@@ -752,15 +769,29 @@ function handleGoogleSignIn(){
 // Debe llamarse en cuanto carga la página (antes de que el usuario haga nada).
 function handleGoogleRedirectResult(){
   if(!firebaseAvailable || !auth) return;
+  var wasPending = localStorage.getItem('og6-google-redirect-pending')==='1';
   auth.getRedirectResult().then(function(result){
     if(result && result.user){
+      localStorage.removeItem('og6-google-redirect-pending');
       if(result.credential && result.credential.accessToken){
         window._googleAccessToken = result.credential.accessToken;
       }
       toast('Sesión iniciada con Google');
       _registerFCMToken();
+    } else if(wasPending){
+      // BUGFIX / DIAGNÓSTICO: si habíamos dejado marcado un login en curso y
+      // volvemos sin usuario y SIN error, es casi siempre porque la app está
+      // corriendo empaquetada como app de Android (TWA) y el almacenamiento
+      // de la sesión de Google que abrió Chrome por fuera no quedó
+      // compartido con la app instalada — Firebase "termina" el redirect sin
+      // arrojar ningún error, pero nunca entrega un usuario. Antes esto
+      // pasaba en silencio (parecía que el login no había hecho nada). Ahora
+      // se avisa explícitamente para que no parezca un cuelgue random.
+      localStorage.removeItem('og6-google-redirect-pending');
+      toast('No se pudo completar el inicio de sesión con Google dentro de la app instalada. Probá abriendo el sitio directo en Chrome, fuera de la app.');
     }
   }).catch(function(e){
+    localStorage.removeItem('og6-google-redirect-pending');
     if(e.code==='auth/unauthorized-domain'){
       toast('Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)');
     } else if(e.code && e.code!=='auth/no-auth-event'){
@@ -1911,10 +1942,45 @@ function bajaRemainingDays(){
 // ── Hiperfoco (premium) ───────────────────────────────────────────────────
 // Devuelve el plan actual: 'free', 'donante'
 function getPlan(){
-  // En modo demo, podemos forzar un plan para testear
-  if(!currentUser || !userSubscription || userSubscription.status!=='active')return 'free';
-  if(userSubscription.expiryDate && new Date(userSubscription.expiryDate)<=new Date())return 'free';
+  // Vista previa de desarrollador: activable manteniendo presionado el logo
+  // 1.5s (ver togglePremiumPreview). Sirve para probar la experiencia de
+  // usuario Donante en tu propio dispositivo sin tener que pagar de verdad
+  // ni usar una segunda cuenta — no afecta a otros usuarios ni es una compra.
+  if(localStorage.getItem('og6-dev-premium-preview')==='1') return 'donante';
+  // BUGFIX: `userSubscription` nunca se declara en ningún lado de este
+  // archivo — se espera que el wrapper nativo de Android (Play Billing) lo
+  // inyecte como window.userSubscription tras verificar una compra real.
+  // Referenciarlo directo (sin "window.") lanzaba ReferenceError si ese
+  // wrapper nativo no estaba presente (por ejemplo, probando en un navegador
+  // normal), lo cual podía romper cualquier pantalla que llamara a
+  // getPlan() — que son varias.
+  var sub = window.userSubscription;
+  if(!currentUser || !sub || sub.status!=='active')return 'free';
+  if(sub.expiryDate && new Date(sub.expiryDate)<=new Date())return 'free';
   return 'donante';
+}
+// Detección de "mantener presionado" el logo (1.5s) para activar/desactivar
+// la vista previa de Donante en este dispositivo, solo para pruebas.
+var _lpTimer = null;
+function _lpStart(){
+  _lpTimer = setTimeout(function(){
+    _lpTimer = null;
+    togglePremiumPreview();
+  }, 1500);
+}
+function _lpEnd(){
+  if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer = null; }
+}
+function togglePremiumPreview(){
+  var on = localStorage.getItem('og6-dev-premium-preview')==='1';
+  if(on){
+    localStorage.removeItem('og6-dev-premium-preview');
+    toast('Vista previa Donante desactivada');
+  } else {
+    localStorage.setItem('og6-dev-premium-preview','1');
+    toast('🧪 Vista previa Donante activada (solo en este dispositivo)');
+  }
+  render();
 }
 function isPremium(){
   return getPlan() !== 'free';
@@ -2105,7 +2171,7 @@ function renderV2Header(){
 
   hdr.innerHTML =
     '<div id="v2-hdr-left">'+
-      '<div style="display:flex;flex-direction:column;gap:2px;">'+
+      '<div style="display:flex;flex-direction:column;gap:2px;" onmousedown="_lpStart()" onmouseup="_lpEnd()" onmouseleave="_lpEnd()" ontouchstart="_lpStart()" ontouchend="_lpEnd()">'+
         '<div style="display:flex;align-items:baseline;gap:1px;line-height:1;">'+
           '<span class="logo-bracket" style="font-size:26px;color:var(--accent);font-family:\'Cormorant Garamond\',serif;font-weight:300;font-style:italic;line-height:.85;">[</span>'+
           '<span class="logo-letters" style="font-size:18px;font-weight:800;letter-spacing:-.04em;color:var(--ink);font-family:\'Cormorant Garamond\',serif;">Gr.</span>'+
@@ -2115,6 +2181,9 @@ function renderV2Header(){
           (am?'<span style="color:var(--accent);">'+esc(am.icon||'')+'</span> ':'')+DAYS[todayIdx()]+
         '</div>'+
       '</div>'+
+      (localStorage.getItem('og6-dev-premium-preview')==='1'
+        ?'<div onclick="togglePremiumPreview()" style="font-size:9px;font-weight:700;color:white;background:#c97842;padding:2px 7px;border-radius:8px;margin-top:3px;cursor:pointer;display:inline-block;">🧪 Vista previa Donante — toca para salir</div>'
+        :'')+
     '</div>'+
     '<div id="v2-hdr-right">'+
       (totalToday>0?
@@ -3143,18 +3212,24 @@ function renderAccount(){
       (isDonante?'25 tareas/período · proyectos ilimitados · toda la personalización desbloqueada. ¡Gracias por apoyar la app! 💛':
        (S.simpleMode?'10 tareas/período (modo simplificado)':'Nivel '+getLevel(S.xp)+' · '+getFreeLimit()+' tareas/período · sube con cada nivel hasta 20')+' · 1 proyecto.')+
     '</div>'+
-    (isDonante?'':
-      // Opciones de pago/donación via Google Play
+    (isDonante?
+      // Ya tiene acceso completo: solo se le ofrece la opción de donar más,
+      // sin mostrarle el botón de "comprar acceso" que ya no le sirve.
+      '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">Donar</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Ya tienes el acceso total. Si quieres seguir apoyando el desarrollo de la app, puedes donar de nuevo cuando quieras. ¡Te lo agradecemos un montón!</div>'+
+        '<div style="display:flex;gap:8px;">'+
+          '<button onclick="triggerGooglePlayPurchase(\'donation_5k\')" style="flex:1;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent);border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">💛 $5.000</button>'+
+        '</div>'+
+      '</div>'
+    :
+      // Todavía no tiene acceso completo: solo se le ofrece comprarlo — sin
+      // mostrar a la vez la opción de "donar", que no aplica hasta que
+      // primero tenga el acceso total.
       '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
         '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">Desbloquear acceso completo</div>'+
         '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Una compra única de <b>$8.000</b> desbloquea 25 tareas/día, proyectos ilimitados y toda la personalización de interfaz.</div>'+
-        '<button onclick="triggerGooglePlayPurchase(\'access_5k\')" style="width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:8px;">🔓 Comprar acceso total (y para siempre) — $5.000</button>'+
-        '<div style="font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 4px;">Donar</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Si ya tienes el acceso total pero quieres seguir apoyando el desarrollo de la app, puedes volver a donar. ¡Te lo agradecemos un montón!</div>'+
-        '<div style="display:flex;gap:8px;">'+
-          '<button onclick="triggerGooglePlayPurchase(\'donation_5k\')" style="flex:1;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent);border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">💛 $5.000</button>'+
-
-        '</div>'+
+        '<button onclick="triggerGooglePlayPurchase(\'access_5k\')" style="width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">🔓 Comprar acceso total (y para siempre) — $5.000</button>'+
       '</div>'
     )+
   '</div>';
