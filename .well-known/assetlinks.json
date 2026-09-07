@@ -1,8 +1,11 @@
-[{
-  "relation": ["delegate_permission/common.handle_all_urls"],
-  "target": {
-    "namespace": "android_app",
-    "package_name": "com.espaciografema01.organizapp",
-    "sha256_cert_fingerprints": ["28:D4:DB:24:D6:92:0D:2D:82:EB:3C:07:0C:5B:A3:D7:28:B1:2B:16:95:6A:34:D5:0C:83:0E:45:0D:E2:DA:D2"]
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "Gramifica",
+      "package_name": "com.espaciografema01.organizapp"",
+      "sha256_cert_fingerprints":
+        ["D4:19:77:E2:4F:A2:AB:FC:BB:60:DF:DC:89:86:5C:0B:F5:41:83:AA:0B:CA:26:74:5B:9B:10:C2:79:B2:0B:8E"]
+    }
   }
-}]
+]
