@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "com.espaciografema01.organizapp",
-    "sha256_cert_fingerprints": ["C3:9D:C6:75:79:38:A4:4E:32:58:E0:7F:2E:1D:02:3E:F3:93:37:24:03:B8:73:29:CA:3F:6A:3B:95:B2:C4:D0"]
+    "sha256_cert_fingerprints": ["28:D4:DB:24:D6:92:0D:2D:82:EB:3C:07:0C:5B:A3:D7:28:B1:2B:16:95:6A:34:D5:0C:83:0E:45:0D:E2:DA:D2"]
   }
 }]
