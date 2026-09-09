@@ -691,7 +691,7 @@ function handleAuth(){
   if(!firebaseAvailable){ toast('Firebase no disponible'); return; }
   var email = document.getElementById('authEmail').value.trim();
   var pass = document.getElementById('authPass').value.trim();
-  if(!email || !pass){ toast('Completá email y contraseña'); return; }
+  if(!email || !pass){ toast('Completa email y contraseña'); return; }
   
   var isSignup = document.getElementById('authBtn').textContent.includes('Crear');
   var promise = isSignup 
@@ -713,91 +713,108 @@ function handleAuth(){
 function handleGoogleSignIn(){
   if(!firebaseAvailable){ toast('Firebase no disponible'); return; }
   var provider = new firebase.auth.GoogleAuthProvider();
-  // Scope de Calendar: permite leer y escribir eventos del usuario en Google Calendar.
-  // Firebase Auth lo pide junto con el login — el usuario lo aprueba en el popup.
-  // El access_token resultante se guarda en currentUser para usarlo en Calendar API.
   provider.addScope('https://www.googleapis.com/auth/calendar.events');
-  // En navegadores móviles (y sobre todo dentro de Custom Tabs / WebViews, que
-  // es como suele abrirse esta app desde el celular) signInWithPopup casi
-  // siempre falla: la ventana emergente no puede comunicarse de vuelta con la
-  // página original. signInWithRedirect es el flujo recomendado por Firebase
-  // para móvil — navega a Google, el usuario inicia sesión, y vuelve a la app.
+
+  // Estrategia de login según contexto:
+  // - TWA (app instalada desde Play Store): usa signInWithRedirect. El Custom
+  //   Tab que abre es "trusted" si el assetlinks.json está bien configurado,
+  //   lo que permite compartir cookies con Chrome y que la sesión persista.
+  // - Navegador móvil normal (Chrome, etc.): también usa redirect porque los
+  //   popups no funcionan bien en móvil.
+  // - Desktop: usa popup, que es más fluido y no requiere redirect.
+  //
+  // IMPORTANTE: en TWA con prueba cerrada de Play Store, el assetlinks.json
+  // puede no estar completamente verificado todavía — en ese caso el redirect
+  // falla silenciosamente. Si eso pasa, el usuario ve el aviso de diagnóstico.
   var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  // Persistencia explícita: si no se fija, algunos contextos (sobre todo TWA
-  // / app instalada desde Play Store, con partición de almacenamiento propia
-  // separada de Chrome) pueden no conservar bien la sesión entre la ida a
-  // Google y la vuelta a la app. Fijarlo a mano antes del redirect reduce
-  // (aunque no garantiza del todo, ver nota en handleGoogleRedirectResult)
-  // ese tipo de pérdida de sesión.
-  var setPersistencePromise = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-  if(isMobile){
-    setPersistencePromise.then(function(){
-      // Marca que dejamos un login en curso — se usa al volver para poder
-      // avisar con un mensaje claro si el redirect "se pierde" (no da error,
-      // pero tampoco vuelve con una sesión), en vez de solo mostrar de nuevo
-      // el botón de "Iniciar sesión" sin ninguna explicación.
+  var isTWA = document.referrer.includes('android-app://');
+
+  // Persistencia LOCAL: la sesión sobrevive a cierres de la app/navegador.
+  // Es crítico setearla ANTES del redirect, no después, porque después de
+  // volver del redirect ya es tarde para cambiar la persistencia.
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){
+    if(isMobile){
       localStorage.setItem('og6-google-redirect-pending', '1');
+      localStorage.setItem('og6-google-redirect-ts', Date.now().toString());
       return auth.signInWithRedirect(provider);
-    }).catch(function(e){
-      localStorage.removeItem('og6-google-redirect-pending');
-      toast(e.code==='auth/unauthorized-domain'
-        ? 'Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)'
-        : e.message);
-    });
-    return;
-  }
-  setPersistencePromise.then(function(){
-    return auth.signInWithPopup(provider);
-  }).then(function(result){
-    // Guardar el access_token de Google para llamadas a Calendar API
-    if(result.credential && result.credential.accessToken){
-      window._googleAccessToken = result.credential.accessToken;
     }
-    toast('Sesión iniciada con Google');
-    // Registrar token FCM para notificaciones push serverless (si está disponible)
-    _registerFCMToken();
+    return auth.signInWithPopup(provider).then(function(result){
+      if(result.credential && result.credential.accessToken){
+        window._googleAccessToken = result.credential.accessToken;
+      }
+      toast('Sesión iniciada con Google');
+      _registerFCMToken();
+    });
   }).catch(function(e){
+    localStorage.removeItem('og6-google-redirect-pending');
+    localStorage.removeItem('og6-google-redirect-ts');
     if(e.code==='auth/unauthorized-domain'){
-      toast('Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)');
+      toast('Este dominio no está autorizado en Firebase');
     } else if(e.code!=='auth/popup-closed-by-user'){
       toast(e.message);
     }
   });
 }
 
-// Al volver de signInWithRedirect, Firebase completa el login acá.
-// Debe llamarse en cuanto carga la página (antes de que el usuario haga nada).
 function handleGoogleRedirectResult(){
   if(!firebaseAvailable || !auth) return;
   var wasPending = localStorage.getItem('og6-google-redirect-pending')==='1';
+  var redirectTs = parseInt(localStorage.getItem('og6-google-redirect-ts')||'0');
+  // Si el redirect fue hace más de 5 minutos y no volvimos, limpiamos la
+  // marca para no mostrar mensajes de error stale en aperturas futuras.
+  if(wasPending && Date.now() - redirectTs > 5*60*1000){
+    localStorage.removeItem('og6-google-redirect-pending');
+    localStorage.removeItem('og6-google-redirect-ts');
+    wasPending = false;
+  }
+
   auth.getRedirectResult().then(function(result){
     if(result && result.user){
       localStorage.removeItem('og6-google-redirect-pending');
+      localStorage.removeItem('og6-google-redirect-ts');
       if(result.credential && result.credential.accessToken){
         window._googleAccessToken = result.credential.accessToken;
       }
-      toast('Sesión iniciada con Google');
+      toast('✓ Sesión iniciada con Google');
       _registerFCMToken();
     } else if(wasPending){
-      // BUGFIX / DIAGNÓSTICO: si habíamos dejado marcado un login en curso y
-      // volvemos sin usuario y SIN error, es casi siempre porque la app está
-      // corriendo empaquetada como app de Android (TWA) y el almacenamiento
-      // de la sesión de Google que abrió Chrome por fuera no quedó
-      // compartido con la app instalada — Firebase "termina" el redirect sin
-      // arrojar ningún error, pero nunca entrega un usuario. Antes esto
-      // pasaba en silencio (parecía que el login no había hecho nada). Ahora
-      // se avisa explícitamente para que no parezca un cuelgue random.
+      // Volvimos del redirect pero sin usuario y sin error — esto pasa casi
+      // siempre en TWA cuando el Digital Asset Links no está verificado
+      // correctamente, causando que Chrome no comparta la sesión con la app.
+      // La solución para el usuario: abrir en Chrome normal y desde ahí
+      // iniciar sesión, la app reconocerá la sesión automáticamente.
       localStorage.removeItem('og6-google-redirect-pending');
-      toast('No se pudo completar el inicio de sesión con Google dentro de la app instalada. Probá abriendo el sitio directo en Chrome, fuera de la app.');
+      localStorage.removeItem('og6-google-redirect-ts');
+      showGoogleSignInFallbackModal();
     }
   }).catch(function(e){
     localStorage.removeItem('og6-google-redirect-pending');
+    localStorage.removeItem('og6-google-redirect-ts');
     if(e.code==='auth/unauthorized-domain'){
-      toast('Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains)');
+      toast('Este dominio no está autorizado en Firebase');
     } else if(e.code && e.code!=='auth/no-auth-event'){
-      toast('Error al iniciar sesión con Google: '+e.message);
+      toast('Error Google Sign-In: '+e.message);
     }
   });
+}
+
+// Modal de fallback cuando el login de Google falla dentro de la app instalada.
+// En vez de un toast que desaparece en 3 segundos y el usuario no sabe qué
+// hacer, muestra instrucciones claras y accionables.
+function showGoogleSignInFallbackModal(){
+  var box = document.createElement('div');
+  box.className = 'conf-box';
+  box.innerHTML = '<div class="conf-inner">'+
+    '<div style="font-size:32px;text-align:center;margin-bottom:8px;">🔐</div>'+
+    '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;text-align:center;">El login de Google no pudo completarse dentro de la app</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;">Esto pasa porque la app está en prueba cerrada y Android todavía no reconoce completamente la verificación del sitio web.<br><br>'+
+    '<b>Solución fácil:</b> abre <b>espaciografema01.github.io/organizapp</b> directo en Chrome, inicia sesión ahí, y luego vuelve a la app — la sesión quedará activa automáticamente.</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+      '<button class="sbtn" onclick="window.open(\'https://espaciografema01.github.io/organizapp\',\'_blank\');this.closest(\'.conf-box\').remove();">Abrir en Chrome</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cerrar</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(box);
 }
 
 // Registrar el token FCM del dispositivo en Firestore para poder
@@ -877,7 +894,7 @@ async function syncTaskToCalendar(task){
       headers: {'Authorization':'Bearer '+token,'Content-Type':'application/json'},
       body: JSON.stringify({
         summary: task.text,
-        description: 'Creado desde Gramific[app]',
+        description: 'Creado desde Gramifica',
         start: {dateTime: startISO, timeZone: 'America/Santiago'},
         end:   {dateTime: endISO,   timeZone: 'America/Santiago'}
       })
@@ -900,6 +917,26 @@ async function syncTaskToCalendar(task){
     toast('Sin conexión — la tarea no se sincronizó con Calendar');
     console.warn('Calendar sync error:', e);
   }
+}
+// Disparador manual de la dirección App → Calendar — antes syncTaskToCalendar()
+// existía pero nada la invocaba nunca, ni automática ni manualmente, así que
+// esa dirección de sincronización no hacía nada pese a que la interfaz la
+// ofrecía. Sigue el mismo patrón manual que importFromCalendar() (botón
+// "ahora") en vez de dispararse solo al guardar una tarea, para no crear
+// eventos duplicados en Calendar cada vez que se edita la misma tarea.
+async function exportTodayToCalendar(){
+  var token = getCalToken();
+  if(!token){ toast('Inicia sesión con Google primero'); return; }
+  var pending = (S.tasks||[]).filter(function(t){
+    return isTaskToday(t) && t.hora && !t.googleEventId;
+  });
+  if(!pending.length){ toast('No hay tareas de hoy con hora pendientes de exportar'); return; }
+  toast('Exportando '+pending.length+' tarea(s)...');
+  for(var i=0;i<pending.length;i++){
+    await syncTaskToCalendar(pending[i]);
+  }
+  saveState();
+  render();
 }
 
 async function importFromCalendar(){
@@ -1040,13 +1077,48 @@ function applySyncResult(cloud, useCloud){
 function showSyncConflictModal(cloud){
   var cloudCount = (cloud.tasks||[]).length;
   var localCount = (S.tasks||[]).length;
+  var cloudStreak = cloud.streak ? cloud.streak.days||0 : 0;
+  var localStreak = S.streak ? S.streak.days||0 : 0;
+  var cloudXP = cloud.xp||0;
+  var localXP = S.xp||0;
+  // Fecha de la última sincronización de la nube, formateada legible
+  var cloudDate = cloud.lastSync
+    ? new Date(cloud.lastSync).toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'desconocida';
+
   var box=document.createElement('div');box.className='conf-box';box.id='sync-conflict-box';
   box.innerHTML='<div class="conf-inner">'+
+    '<div style="font-size:28px;text-align:center;margin-bottom:8px;">☁️ 📱</div>'+
     '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:8px;text-align:center;">Encontramos datos en dos lugares</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px;text-align:center;">Este dispositivo tiene '+localCount+' tarea(s) guardada(s), y tu cuenta de Google ya tenía '+cloudCount+' tarea(s) de otra sesión. ¿Cuáles quieres mantener?</div>'+
+    '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;text-align:center;">Tu cuenta de Google tiene datos distintos a los de este dispositivo. ¿Cuáles quieres conservar?</div>'+
+
+    // Comparación lado a lado
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">'+
+      // Nube
+      '<div style="background:var(--bg);border-radius:12px;padding:12px;text-align:center;">'+
+        '<div style="font-size:20px;margin-bottom:4px;">☁️</div>'+
+        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Nube (Google)</div>'+
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);">'+cloudCount+' tareas</div>'+
+        '<div style="font-size:11px;color:var(--muted);">'+cloudStreak+' días racha</div>'+
+        '<div style="font-size:11px;color:var(--muted);">'+cloudXP+' XP</div>'+
+        '<div style="font-size:10px;color:var(--muted-soft);margin-top:4px;">última sync:<br>'+cloudDate+'</div>'+
+      '</div>'+
+      // Local
+      '<div style="background:var(--bg);border-radius:12px;padding:12px;text-align:center;">'+
+        '<div style="font-size:20px;margin-bottom:4px;">📱</div>'+
+        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Este dispositivo</div>'+
+        '<div style="font-size:13px;font-weight:700;color:var(--ink);">'+localCount+' tareas</div>'+
+        '<div style="font-size:11px;color:var(--muted);">'+localStreak+' días racha</div>'+
+        '<div style="font-size:11px;color:var(--muted);">'+localXP+' XP</div>'+
+        '<div style="font-size:10px;color:var(--accent);font-weight:600;margin-top:4px;">datos actuales</div>'+
+      '</div>'+
+    '</div>'+
+
+    '<div style="font-size:11px;color:var(--muted);background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:14px;line-height:1.5;">⚠️ La opción que no elijas se perderá. Si usaste la app en este dispositivo sin cuenta de Google, elige <b>"Conservar este dispositivo"</b>.</div>'+
+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
-      '<button class="sbtn" onclick="resolveSyncConflict(\'cloud\')">Usar los datos de la nube ('+cloudCount+')</button>'+
-      '<button class="cbtn" onclick="resolveSyncConflict(\'local\')">Mantener los de este dispositivo ('+localCount+')</button>'+
+      '<button class="cbtn" onclick="resolveSyncConflict(\'local\')">📱 Conservar este dispositivo ('+localCount+' tareas)</button>'+
+      '<button class="cbtn" style="color:var(--muted);" onclick="resolveSyncConflict(\'cloud\')">☁️ Usar los datos de la nube ('+cloudCount+' tareas)</button>'+
     '</div></div>';
   document.body.appendChild(box);
 }
@@ -1144,7 +1216,7 @@ var ACCENT="#c97842";
 var TEXTS = {
 
   // ── Mensajes al subir de nivel — uno distinto por cada nivel ─────────────
-  // Si subís a un nivel mayor a los listados, se cicla desde el nivel 1.
+  // Si subes a un nivel mayor a los listados, se cicla desde el nivel 1.
   // Cada mensaje admite los placeholders {nivel} y {nombre} (nombre del símbolo)
   levelUp: [
     // Nivel 1
@@ -1212,12 +1284,11 @@ var TEXTS = {
 // ════════════════════════════════════════════════════════════════════════════
 
 // PLAN GRATUITO: límites según el nivel del usuario (escalan con el progreso)
-// Empieza en 10 tareas/período en nivel 1, sube 1 por nivel hasta 20 en nivel 11+
-// (tope justo debajo del plan Donante, que es fijo en 25).
-// Niveles:  1   2   3   4   5   6   7   8   9   10  11+
-var FREE_LIMITS_BY_LEVEL = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+// Empieza en 8 tareas/período en nivel 1, sube 1 por nivel hasta 20 en nivel 13+.
+// Niveles:  1  2  3   4   5   6   7   8   9   10  11  12  13+
+var FREE_LIMITS_BY_LEVEL = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 function getFreeLimit(){
-  // En modo simplificado no hay niveles: el gratuito queda fijo en la base (10).
+  // En modo simplificado no hay niveles: el gratuito queda fijo en la base (8).
   if(S.simpleMode) return FREE_LIMITS_BY_LEVEL[0];
   var lvl = getLevel(S.xp);
   return FREE_LIMITS_BY_LEVEL[Math.min(lvl-1, FREE_LIMITS_BY_LEVEL.length-1)] || FREE_LIMITS_BY_LEVEL[0];
@@ -1228,15 +1299,18 @@ var FREE_LIMITS = {
   templates: 2,        // Solo 2 plantillas
 };
 
-// PLAN DONANTE: quien donó cualquier monto (desde $10.000) desbloquea todo.
-// Tareas/período fijas en 25 (no depende de nivel — el aporte ya es el "upgrade").
-var TASK_LIMITS_DONANTE = {
-  dia: 25,
-  semana: 25,
-  mes: 25,
-  semestre: 25,
-  "año": 25,
-};
+// PLAN DONANTE: quien donó $5.000 (pago único) desbloquea todo.
+// También escala con el nivel del usuario, igual que el plan gratuito, pero
+// partiendo 12 tareas por delante: empieza en 20 tareas/período en nivel 1,
+// sube 1 por nivel hasta llegar a 32 en nivel 13+.
+// Niveles:    1   2   3   4   5   6   7   8   9   10  11  12  13+
+var DONANTE_LIMITS_BY_LEVEL = [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+function getDonanteLimit(){
+  // En modo simplificado no hay niveles: queda fijo en la base (20).
+  if(S.simpleMode) return DONANTE_LIMITS_BY_LEVEL[0];
+  var lvl = getLevel(S.xp);
+  return DONANTE_LIMITS_BY_LEVEL[Math.min(lvl-1, DONANTE_LIMITS_BY_LEVEL.length-1)] || DONANTE_LIMITS_BY_LEVEL[0];
+}
 
 // Hiperfoco (Donante): mientras está activo, sube el límite a 50/período.
 var TASK_LIMITS_HIPERFOCO = {
@@ -1560,6 +1634,14 @@ var S = {
 
 function uid(){return Math.random().toString(36).substr(2,9);}
 function todayIdx(){var d=new Date().getDay();return d===0?6:d-1;}
+// Número de día del mes (01, 02...) para un día de semana (0=Lun..6=Dom)
+// DENTRO de la semana actual — para mostrarlo junto al nombre ("Lunes 07").
+function weekdayDateNum(dowIdx){
+  var today = new Date(); today.setHours(0,0,0,0);
+  var monday = new Date(today); monday.setDate(today.getDate() - todayIdx());
+  var d = new Date(monday); d.setDate(monday.getDate() + dowIdx);
+  return String(d.getDate()).padStart(2,'0');
+}
 function todayStr(){return new Date().toISOString().slice(0,10);}
 
 // Devuelve clave de semana ISO: YYYY-Www
@@ -2049,10 +2131,10 @@ function currentTaskLimits(){
   var bonus = S.bonusTaskLimit || 0;
   if(isHiperfocoActive() && plan !== 'free') return TASK_LIMITS_HIPERFOCO;
   if(plan === 'donante'){
-    var n = 25 + bonus;
+    var n = getDonanteLimit() + bonus;
     return {dia:n, semana:n, mes:n, semestre:n, "año":n};
   }
-  // Gratuito: 10 en nivel 1, +1 por nivel hasta 20 (fijo en 10 si el modo
+  // Gratuito: 8 en nivel 1, +1 por nivel hasta 20 (fijo en 8 si el modo
   // simplificado está activo, ya que ahí no hay niveles), + bonus de medallas
   var n2 = getFreeLimit() + bonus;
   return {dia:n2, semana:n2, mes:n2, semestre:n2, "año":n2};
@@ -2143,7 +2225,7 @@ function renderRecoveryScreen(tab, err){
   return '<div style="padding:32px 20px;text-align:center;">'+
     '<div style="font-size:40px;margin-bottom:12px;">⚠️</div>'+
     '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:10px;">Esta pantalla tuvo un problema</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px;">No se pudo mostrar "'+esc(tab)+'" por un error interno. El resto de la app debería seguir funcionando — probá con otra pestaña.</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px;">No se pudo mostrar "'+esc(tab)+'" por un error interno. El resto de la app debería seguir funcionando — prueba con otra pestaña.</div>'+
     '<div style="font-size:10px;color:var(--muted-soft);font-family:monospace;background:var(--bg);border-radius:8px;padding:8px;margin:14px 0;word-break:break-word;">'+esc(msg)+'</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;max-width:280px;margin:20px auto 0;">'+
       '<button class="sbtn" onclick="location.reload()">Recargar la app</button>'+
@@ -2274,7 +2356,7 @@ function renderAgendaSectionContent(activeSection, tab, today){
 
       html += '<div style="flex:0 0 140px;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;'+(isToday?'background:var(--accent-bg)':'')+';">';
       html += '<div onclick="S.day='+d+';render();" style="padding:10px 8px;text-align:center;cursor:pointer;border-bottom:2px solid '+(isSelected?'var(--accent)':'var(--line-soft)')+';flex-shrink:0;">'+
-        '<div style="font-size:11px;font-weight:700;color:'+(isToday?'var(--accent)':'var(--muted)')+';">'+DAYS[d].slice(0,3).toUpperCase()+'</div>'+
+        '<div style="font-size:11px;font-weight:700;color:'+(isToday?'var(--accent)':'var(--muted)')+';">'+DAYS[d].slice(0,3).toUpperCase()+' '+weekdayDateNum(d)+'</div>'+
         '<div style="font-size:12px;color:var(--muted);margin-top:1px;">'+done+'/'+dayTasks.length+'</div>'+
       '</div>';
 
@@ -2301,7 +2383,7 @@ function renderAgendaSectionContent(activeSection, tab, today){
     // Día seleccionado + botón agregar
     html += '<div style="padding:8px 16px;background:var(--bg);border-top:1px solid var(--line-soft);">'+
       '<div style="display:flex;align-items:center;gap:8px;">'+
-        '<span style="font-size:13px;font-weight:700;color:var(--ink);">'+DAYS[S.day]+(S.day===today?' · <span style=\'color:var(--accent)\'>Hoy</span>':'')+'</span>'+
+        '<span style="font-size:13px;font-weight:700;color:var(--ink);">'+DAYS[S.day]+' '+weekdayDateNum(S.day)+(S.day===today?' · <span style=\'color:var(--accent)\'>Hoy</span>':'')+'</span>'+
         '<button onclick="openNew(\'dia\')" style="margin-left:auto;background:var(--accent);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Tarea</button>'+
       '</div>'+
     '</div>';
@@ -2401,7 +2483,7 @@ function renderHoy(){
     '<button onclick="S.day=(S.day===0?6:S.day-1);var c=document.getElementById(\'content\');if(c)c.scrollTop=0;render();" '+
       'style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;padding:0 8px;line-height:1;">‹</button>'+
     '<div style="text-align:center;display:flex;align-items:center;gap:8px;">'+
-      '<span class="serif" style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em;">'+DAYS[day]+'</span>'+
+      '<span class="serif" style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em;">'+DAYS[day]+' '+weekdayDateNum(day)+'</span>'+
       (day===today?'<span style="font-size:10px;background:var(--accent);color:white;border-radius:6px;padding:2px 8px;font-weight:700;letter-spacing:.02em;">Hoy</span>':'')+
     '</div>'+
     '<button onclick="S.day=(S.day===6?0:S.day+1);var c=document.getElementById(\'content\');if(c)c.scrollTop=0;render();" '+
@@ -2706,9 +2788,9 @@ function renderEnergySimple(){
 
   // ── Estado actual ─────────────────────────────────────────────────────────
   var modeName = 'Normal', modeDesc = 'Sin modo activo. Rindo a mi ritmo habitual.', modeIcon = '☀️', modeColor = 'var(--accent)';
-  if(hiperfoco){ modeName='Hiperfoco'; modeDesc='Enfoque máximo activado. Tareas ilimitadas visibles.'; modeIcon='🎯'; }
+  if(hiperfoco){ modeName='Hiperfoco'; modeDesc='Enfoque máximo activado. Hasta 50 tareas visibles por período. '+hiperfocoRemainingDays()+' días restantes.'; modeIcon='🎯'; }
   else if(vacaciones){ modeName='Vacaciones'; modeDesc='Modo descanso activo. Solo tareas cruciales.'; modeIcon='🌴'; }
-  else if(am && am.type==='baja'){ modeName='Baja Energía'; modeDesc='Ritmo bajo, pero a buen ritmo. Solo '+S.bajaEnergia.maxTasks+' tareas/día'+(S.bajaEnergia.onlyCrucial?', solo cruciales':'')+'.'; modeIcon=S.bajaEnergia.icon||'🌙'; modeColor=S.bajaEnergia.color||'var(--accent)'; }
+  else if(am && am.type==='baja'){ modeName='Baja Energía'; modeDesc='Ritmo bajo, pero a buen ritmo. Solo '+S.bajaEnergia.maxTasks+' tareas/día'+(S.bajaEnergia.onlyCrucial?', solo cruciales':'')+'. '+bajaRemainingDays()+' días restantes.'; modeIcon=S.bajaEnergia.icon||'🌙'; modeColor=S.bajaEnergia.color||'var(--accent)'; }
   else if(am && am.type==='custom'){
     var cm = (S.modes||[]).find(function(m){return m.id===am.id;});
     if(cm){ modeName=cm.name; modeDesc='Modo personalizado activo.'; modeIcon=cm.icon||'⚡'; modeColor=cm.color||'var(--accent)'; }
@@ -2728,6 +2810,17 @@ function renderEnergySimple(){
   '</div>';
 
   // ── Configuración del modo activo (solo si hay uno) ────────────────────
+  if(vacaciones){
+    // BUGFIX: openEditVacaciones() ya existía completo (umbral, máx. tareas,
+    // mensaje de apoyo) pero no tenía ningún botón real que lo abriera —
+    // Baja Energía y modos personalizados sí tenían su "Editar configuración".
+    html += '<div class="card" style="margin-bottom:10px;">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Configuración · Vacaciones</div>'+
+      '<button onclick="openEditVacaciones()" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:100%;padding:10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;">'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Editar configuración'+
+      '</button>'+
+    '</div>';
+  }
   if(am && am.type==='baja'){
     html += '<div class="card" style="margin-bottom:10px;">'+
       '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Configuración · Baja Energía</div>'+
@@ -2767,6 +2860,9 @@ function renderEnergySimple(){
           '<button onclick="openEditMode(\''+m.id+'\')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px;" title="Editar">'+
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>'+
           '</button>'+
+          '<button onclick="confirmDeleteMode(\''+m.id+'\')" style="background:none;border:none;color:var(--bad);font-size:13px;cursor:pointer;padding:4px;" title="Eliminar">'+
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>'+
+          '</button>'+
           (isActive
             ? '<button onclick="deactivateCurMode();render();" class="cbtn" style="font-size:11px;padding:6px 10px;flex-shrink:0;">Off</button>'
             : '<button onclick="toggleCustomMode(\''+m.id+'\')" class="sbtn" style="font-size:11px;padding:6px 10px;flex-shrink:0;">Activar</button>'
@@ -2802,8 +2898,10 @@ function openEnergySheet(){
   var userModes = S.modes||[];
   var canHF = hiperfocoCanActivate();
   var canBaja = bajaCanActivate();
+  var canVac = vacacionesCanActivate();
   var userModes = S.modes||[];
   var hiperfoco = isHiperfocoActive();
+  var vacaciones = isVacacionesActive();
   var canCreateMode = isPremium() || userModes.length < FREE_LIMITS.customModes;
   var isNormalAct = !S.activeMode && !hiperfoco;
   var isBajaAct = !!(S.activeMode && S.activeMode.type==='baja');
@@ -2828,7 +2926,22 @@ function openEnergySheet(){
         '</div>'+
       '</button>'+
 
-      // Hiperfoco — con estado claro
+      // Vacaciones — BUGFIX: activateVacaciones() y toda su configuración
+      // (umbral, plantilla, mensaje de apoyo) ya existían completos, pero
+      // esta opción nunca se mostraba aquí — el modo era imposible de activar.
+      (vacaciones
+        ? '<button onclick="deactivateVacaciones();document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
+            '<span style="font-size:22px;">🌴</span>'+
+            '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--accent);">Vacaciones — Activo</div><div style="font-size:11px;color:var(--muted);">Toca para desactivar</div></div>'+
+          '</button>'
+        : '<button onclick="'+(canVac.ok?"activateVacaciones();document.getElementById('energy-sheet').remove();render()":"null")+'" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;opacity:'+(canVac.ok?1:0.5)+';" '+(canVac.ok?'':'disabled')+'>'+
+            '<span style="font-size:22px;">🌴</span>'+
+            '<div style="flex:1;">'+
+              '<div style="font-weight:700;font-size:14px;color:var(--ink);">Vacaciones</div>'+
+              '<div style="font-size:11px;color:var(--muted);">'+(canVac.ok?'Máx. '+S.vacaciones.maxTasks+' tareas/día · solo cruciales':'No disponible — en '+canVac.daysLeft+' días')+'</div>'+
+            '</div>'+
+          '</button>'
+      )+
       (hiperfoco
         ? '<button onclick="deactivateHiperfoco();document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
             '<span style="font-size:22px;">🎯</span>'+
@@ -2885,8 +2998,10 @@ function renderYo(){
   html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Perfil</div>';
   html += renderAccount();
 
-  // ── MODO DE USO ───────────────────────────────────────────────────────
-  html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Modo de uso</div>';
+  // ── PERSONALIZACIÓN (modo de uso + interfaz + tema, todo junto porque son
+  // las mismas "cómo se ve y se siente la app para mí" — antes eran 2
+  // encabezados separados sin necesidad) ───────────────────────────────────
+  html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Personalización</div>';
   html += '<div class="card" style="margin-bottom:10px;">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
@@ -2910,9 +3025,6 @@ function renderYo(){
       '</div>'
     ):'')+
   '</div>';
-
-  // ── APARIENCIA ─────────────────────────────────────────────────────────
-  html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Apariencia</div>';
 
   // Vista de interfaz — solo Clásico y Agenda (sin Compacto)
   var currentLayout = S.interfaceLayout || 'default';
@@ -2988,29 +3100,31 @@ function renderYo(){
   // Bloque de gradualidad de Terracota eliminado — predeterminado fijo
 
   // ── MÁS AJUSTES (acordeón) ───────────────────────────────────────────────
-  // Preferencias, Herramientas, Consejos y Datos/backup se usan con poca
-  // frecuencia comparado con Apariencia. Agruparlos detrás de un solo toggle
-  // reduce el scroll inicial y deja arriba solo lo que se ajusta seguido.
+  // 3 grupos con sentido propio: Avisos y calendario (todo lo que te avisa
+  // algo), Ayuda y consejos (todo lo que te guía u orienta), y Datos y
+  // backup. Se usan con poca frecuencia comparado con Personalización, así
+  // que quedan colapsados detrás de un solo toggle.
   var advOpen = !!S._yoAdvancedOpen;
   html += '<div style="margin-top:22px;">';
   html += '<button class="yo-acc-head" onclick="toggleYoAdvanced()">'+
       '<span style="font-size:13px;font-weight:700;color:var(--ink);">Más ajustes</span>'+
-      '<span style="font-size:10px;color:var(--muted);">Preferencias · Herramientas · Datos</span>'+
+      '<span style="font-size:10px;color:var(--muted);">Avisos · Ayuda · Datos</span>'+
       '<span class="chev" style="transform:'+(advOpen?'rotate(180deg)':'none')+';">▾</span>'+
     '</button>';
 
   if(advOpen){
     html += '<div style="padding-top:16px;">';
 
-    // ── NOTIFICACIONES ────────────────────────────────────────────────────
-    html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Notificaciones</div>';
+    // ── AVISOS Y CALENDARIO (recordatorios + sincronización con Google
+    // Calendar viven juntos: ambos son "cómo y cuándo me avisa la app") ──────
+    html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Avisos y calendario</div>';
     var notifOn = S.notifPermission === 'granted';
     var nt = S.notifTiming || {type:'exact', value:15};
     html += '<div class="card" style="margin-bottom:10px;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(notifOn?14:0)+'px;">'+
         '<div style="flex:1;">'+
-          '<div style="font-weight:700;font-size:14px;color:var(--ink);">Recordatorios de tareas</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Avisar cuando llegue la hora de una tarea diaria con horario definido.</div>'+
+          '<div style="font-weight:700;font-size:14px;color:var(--ink);">Permiso de notificaciones</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Necesario para poder recibir avisos. Luego elige qué tareas quieres que te recuerden desde "🔔 Recordatorio" en cada tarea con horario — no se avisa para todas por defecto.</div>'+
         '</div>'+
         (notifOn
           ? '<button onclick="revokeNotif()" class="cbtn" style="font-size:11px;padding:7px 12px;flex-shrink:0;">Desactivar</button>'
@@ -3021,9 +3135,11 @@ function renderYo(){
         // Selector de timing — un solo control tipo reloj "HH:MM" en vez de
         // tres opciones separadas (puntual / minutos / horas). 00:00 = aviso
         // justo a la hora de la tarea; 00:15 = 15 min antes; 01:05 = 1h 5min antes.
+        // Este valor es solo el PREDETERMINADO al activar un recordatorio nuevo
+        // en una tarea — cada tarea puede después ajustar el suyo propio.
         '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
-          '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">¿Cuánto antes avisar?</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">00:00 avisa justo a la hora de la tarea.</div>'+
+          '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">¿Cuánto antes avisar? (valor por defecto)</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">00:00 avisa justo a la hora de la tarea. Cada tarea puede ajustar este valor por su cuenta.</div>'+
           '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;">'+
             '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
               '<button onclick="nudgeNotifHH(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
@@ -3043,8 +3159,8 @@ function renderYo(){
       ) : '')+
     '</div>';
 
-    // ── GOOGLE CALENDAR ────────────────────────────────────────────────────
-    html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Google Calendar</div>';
+    // Google Calendar — agrupado con notificaciones bajo "Avisos y calendario"
+    html += '<div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin:14px 0 8px;">📅 Google Calendar</div>';
     var cs = S.calendarSync || {enabled:false, direction:'both'};
     var hasGoogleSession = !!(currentUser && currentUser.providerData &&
       currentUser.providerData.some(function(p){return p.providerId==='google.com';}));
@@ -3079,14 +3195,22 @@ function renderYo(){
                 '<div><div style="font-size:13px;color:var(--ink);">Bidireccional</div><div style="font-size:11px;color:var(--muted);">Ambas direcciones activas al mismo tiempo.</div></div>'+
               '</label>'+
             '</div>'+
-            '<button class="cbtn" style="width:100%;font-size:12px;" onclick="importFromCalendar()">↓ Importar eventos de hoy ahora</button>'+
+            // Cada botón solo aparece si su dirección está realmente activa —
+            // antes "Importar" se mostraba siempre (aunque no hiciera nada si
+            // la dirección era solo "App → Calendar"), y no existía ningún
+            // botón para la dirección "App → Calendar" pese a estar disponible.
+            (cs.direction!=='cal_to_app'?'<button class="cbtn" style="width:100%;font-size:12px;margin-bottom:'+(cs.direction==='both'?8:0)+'px;" onclick="exportTodayToCalendar()">↑ Exportar tareas de hoy ahora</button>':'')+
+            (cs.direction!=='app_to_cal'?'<button class="cbtn" style="width:100%;font-size:12px;" onclick="importFromCalendar()">↓ Importar eventos de hoy ahora</button>':'')+
           '</div>'
         ) : '')
       )+
     '</div>';
 
-    // ── PREFERENCIAS ───────────────────────────────────────────────────────
-    html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Preferencias</div>';
+    // ── AYUDA Y CONSEJOS (mostrar/ocultar tips, tutorial, consejos rápidos
+    // y feedback: todo lo relacionado a "que la app me guíe" queda junto,
+    // antes eran 2 encabezados sueltos — Preferencias y Herramientas — con
+    // muy poco contenido cada uno) ───────────────────────────────────────
+    html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Ayuda y consejos</div>';
     html += '<div class="card" style="margin-bottom:10px;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
         '<div style="flex:1;">'+
@@ -3099,8 +3223,6 @@ function renderYo(){
       '</div>'+
     '</div>';
 
-    // ── HERRAMIENTAS ──────────────────────────────────────────────────────
-    html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Herramientas</div>';
     [
       {icon:'💡', label:'Tutorial', sub:'Recorrido por la app', action:"startTutorial()"},
       {icon:'💬', label:'Sugerencias y feedback', sub:'Cuéntanos qué mejorarías o qué te gustaría ver', action:"openFeedbackModal()"},
@@ -3209,8 +3331,9 @@ function renderAccount(){
       '<span style="background:'+(isDonante?'#c97842':'#888')+';color:white;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;">'+(isDonante?'Donante':'Gratuito')+'</span>'+
     '</div>'+
     '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:'+(isDonante?0:14)+'px;">'+
-      (isDonante?'25 tareas/período · proyectos ilimitados · toda la personalización desbloqueada. ¡Gracias por apoyar la app! 💛':
-       (S.simpleMode?'10 tareas/período (modo simplificado)':'Nivel '+getLevel(S.xp)+' · '+getFreeLimit()+' tareas/período · sube con cada nivel hasta 20')+' · 1 proyecto.')+
+      (isDonante?
+        (S.simpleMode?'20 tareas/período (modo simplificado)':'Nivel '+getLevel(S.xp)+' · '+getDonanteLimit()+' tareas/período · sube con cada nivel hasta 32')+' · proyectos ilimitados · toda la personalización desbloqueada. ¡Gracias por apoyar la app! 💛':
+       (S.simpleMode?'8 tareas/período (modo simplificado)':'Nivel '+getLevel(S.xp)+' · '+getFreeLimit()+' tareas/período · sube con cada nivel hasta 20')+' · 1 proyecto.')+
     '</div>'+
     (isDonante?
       // Ya tiene acceso completo: solo se le ofrece la opción de donar más,
@@ -3228,7 +3351,7 @@ function renderAccount(){
       // primero tenga el acceso total.
       '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
         '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">Desbloquear acceso completo</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Una compra única de <b>$8.000</b> desbloquea 25 tareas/día, proyectos ilimitados y toda la personalización de interfaz.</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Una compra única de <b>$5.000</b> desbloquea 20 tareas/período (sube con tu nivel hasta 32), proyectos ilimitados y toda la personalización de interfaz.</div>'+
         '<button onclick="triggerGooglePlayPurchase(\'access_5k\')" style="width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">🔓 Comprar acceso total (y para siempre) — $5.000</button>'+
       '</div>'
     )+
@@ -3697,10 +3820,16 @@ function openProjectMenu(pid, event){
       '</span>'+
     '</button>'+
     '<div style="height:1px;background:var(--line-soft);margin:0 8px;"></div>'+
+    '<button onclick="closeProjectMenu();exportGanttXLSX(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
+      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 10l5 5 5-5M4 21h16"/></svg></span>'+
+      '<span style="flex:1;">Exportar a Excel</span>'+
+    '</button>'+
+    '<div style="height:1px;background:var(--line-soft);margin:0 8px;"></div>'+
     '<button onclick="closeProjectMenu();openEditProjectModal(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'+
       '<span style="flex:1;">Editar proyecto</span>'+
     '</button>'+
+    '<div style="height:1px;background:var(--line-soft);margin:3px 8px;"></div>'+
     '<button onclick="closeProjectMenu();closeProjectView();deleteProject(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--bad);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></span>'+
       '<span style="flex:1;">Eliminar proyecto</span>'+
@@ -3731,6 +3860,7 @@ function openProjectListMenu(pid, event){
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'+
       '<span style="flex:1;">Editar proyecto</span>'+
     '</button>'+
+    '<div style="height:1px;background:var(--line-soft);margin:3px 8px;"></div>'+
     '<button onclick="closeProjectMenu();deleteProject(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--bad);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg></span>'+
       '<span style="flex:1;">Eliminar proyecto</span>'+
@@ -3754,7 +3884,7 @@ function openFeedbackModal(){
   box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
     iconBadgeHTML('<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>', 60)+
     '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:6px;text-align:center;">Sugerencias</div>'+
-    '<div style="font-size:12px;color:var(--ink-soft);margin-bottom:14px;text-align:center;line-height:1.5;">Contanos qué te gustaría mejorar, qué falta o qué te encantó. Tu feedback hace mejor la app.</div>'+
+    '<div style="font-size:12px;color:var(--ink-soft);margin-bottom:14px;text-align:center;line-height:1.5;">Cuéntanos qué te gustaría mejorar, qué falta o qué te encantó. Tu feedback hace mejor la app.</div>'+
     '<textarea id="feedback-txt" rows="4" placeholder="Escribe tu sugerencia acá..." style="width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);resize:none;margin-bottom:12px;box-sizing:border-box;"></textarea>'+
     '<div style="display:flex;gap:8px;">'+
       '<button class="sbtn" onclick="sendFeedback()">Enviar</button>'+
@@ -4363,11 +4493,11 @@ function formatDateShort(d){
 // campos de fecha usan este widget propio en vez del picker nativo.
 var CDP = null;
 var CDP_DOW = ['L','M','M','J','V','S','D']; // Lunes a Domingo
-function openCustomDatePicker(inputId){
+function openCustomDatePicker(inputId, disallowPast){
   var input = document.getElementById(inputId);
   if(!input) return;
   var base = input.value ? new Date(input.value+'T12:00:00') : new Date();
-  CDP = {inputId:inputId, viewYear:base.getFullYear(), viewMonth:base.getMonth(), selected: input.value || null};
+  CDP = {inputId:inputId, viewYear:base.getFullYear(), viewMonth:base.getMonth(), selected: input.value || null, minDate: disallowPast ? todayStr() : null};
   cdpRender();
 }
 function cdpClose(){
@@ -4423,7 +4553,12 @@ function cdpGridHTML(){
     var dStr = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
     var isSel = CDP.selected === dStr;
     var isToday = dStr === todayStr2;
-    grid += '<button onclick="cdpPick(\''+dStr+'\')" style="aspect-ratio:1;border:none;border-radius:50%;background:'+(isSel?'var(--accent)':'transparent')+';color:'+(isSel?'white':isToday?'var(--accent)':'var(--ink)')+';font-weight:'+(isSel||isToday?800:500)+';font-size:13px;cursor:pointer;font-family:Inter,sans-serif;'+(isToday&&!isSel?'box-shadow:inset 0 0 0 1.5px var(--accent);':'')+'">'+day+'</button>';
+    var isDisabled = CDP.minDate && dStr < CDP.minDate;
+    if(isDisabled){
+      grid += '<button disabled style="aspect-ratio:1;border:none;border-radius:50%;background:transparent;color:var(--muted-soft);font-weight:500;font-size:13px;cursor:default;font-family:Inter,sans-serif;opacity:.4;">'+day+'</button>';
+    } else {
+      grid += '<button onclick="cdpPick(\''+dStr+'\')" style="aspect-ratio:1;border:none;border-radius:50%;background:'+(isSel?'var(--accent)':'transparent')+';color:'+(isSel?'white':isToday?'var(--accent)':'var(--ink)')+';font-weight:'+(isSel||isToday?800:500)+';font-size:13px;cursor:pointer;font-family:Inter,sans-serif;'+(isToday&&!isSel?'box-shadow:inset 0 0 0 1.5px var(--accent);':'')+'">'+day+'</button>';
+    }
   }
   return grid;
 }
@@ -5068,7 +5203,7 @@ function confirmFactoryReset(){
       '</div>'+
       '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:16px;border:1px solid var(--line);">'+
         '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px;">💡 Recomendación</div>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Exportá un backup antes de continuar.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Exporta un backup antes de continuar.</div>'+
         '<button onclick="exportData()" style="width:100%;background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:9px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">📤 Exportar backup ahora</button>'+
       '</div>'+
       '<div style="display:flex;gap:8px;">'+
@@ -5146,7 +5281,7 @@ function importData(event){
         if(key.startsWith('og6-')){ localStorage.setItem(key, data[key]); count++; }
       });
       loadState(); render();
-      toast('✓ '+count+' datos importados. Si algo no se ve, recargá la app.');
+      toast('✓ '+count+' datos importados. Si algo no se ve, recarga la app.');
     } catch(err){ toast('Error: archivo inválido'); }
   };
   reader.readAsText(file);
@@ -5267,7 +5402,7 @@ function openCategoryManager(){
       '<span class="serif" style="font-weight:700;font-size:20px;">Categorías</span>'+
       '<button onclick="removeOverlay(\'cat-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Organizá tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Organiza tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.</div>'+
     listHTML+
     '<button onclick="newCategory()" style="background:none;border:1.5px dashed var(--accent);color:var(--accent);border-radius:10px;width:100%;padding:10px;font-size:13px;font-weight:600;margin-top:8px;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva categoría</button>'+
     '<button onclick="removeOverlay(\'cat-modal\')" style="width:100%;background:var(--line);color:var(--muted);border:none;border-radius:10px;padding:10px;font-size:13px;margin-top:8px;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
@@ -5367,7 +5502,7 @@ function openTaskMenu(id, event){
       label:'Llevar al día siguiente', action:'moveTaskToNextDay(\''+id+'\')'
     });
     items.push({
-      icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1" y="3" width="9" height="10" rx="1.5"/><path d="M4 3V2a1 1 0 011-1h6a1 1 0 011 1v8a1 1 0 01-1 1h-1"/></svg>',
+      icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="11" height="9.5" rx="1.5"/><path d="M1.5 5.7h11M4.5 1v2.3M9.5 1v2.3"/></svg>',
       label:'Llevar a otro día...', action:'moveTaskToDay(\''+id+'\')'
     });
     items.push({divider:true});
@@ -5997,7 +6132,7 @@ function renderGoals(){
   var ICON_YEAR = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>';
   var emptyMsgs = {
     semana:{icon:ICON_WEEK,msg:'Sin objetivos esta semana',sub:'¿Qué te gustaría lograr en los próximos 7 días?'},
-    mes:{icon:ICON_MONTH,msg:'Sin objetivos este mes',sub:'Pensá en algo importante para este mes.'},
+    mes:{icon:ICON_MONTH,msg:'Sin objetivos este mes',sub:'Piensa en algo importante para este mes.'},
     semestre:{icon:ICON_SEM,msg:'Sin objetivos este semestre',sub:'Una meta a mediano plazo puede ayudarte a enfocarte.'},
     "año":{icon:ICON_YEAR,msg:'Sin objetivos este año',sub:'¿Cuál es tu gran meta para este año?'}
   };
@@ -6035,7 +6170,7 @@ function renderProgress(){
   if(S.simpleMode){
     return '<div style="text-align:center;padding:60px 24px;">'+
       '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;">Progreso desactivado</div>'+
-      '<div style="font-size:12px;color:var(--muted);line-height:1.6;max-width:260px;margin:0 auto 18px;">Estás en modo simplificado — sin niveles ni racha. Puedes reactivarlo cuando quieras desde Yo → Modo de uso.</div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.6;max-width:260px;margin:0 auto 18px;">Estás en modo simplificado — sin niveles ni racha. Puedes reactivarlo cuando quieras desde Yo → Personalización.</div>'+
       '<button class="cbtn" onclick="setTab(\'yo\')">Ir a Ajustes</button>'+
     '</div>';
   }
@@ -6242,6 +6377,15 @@ function taskWeekdayThisWeek(t){
   }
   return t.day;
 }
+// ¿Cuántos días atrás quedó esta fecha respecto a hoy? Negativo = futuro.
+function daysAgoFromDateKey(dateKey){
+  var d = new Date(dateKey+'T00:00:00');
+  var today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((today - d) / 86400000);
+}
+function toastTicketBlocked(){
+  toast('Solo se puede marcar/desmarcar hasta 7 días atrás');
+}
 function openDayDetail(dateKey){
   var d = new Date(dateKey+'T00:00:00');
   var isToday = dateKey === todayStr();
@@ -6249,6 +6393,10 @@ function openDayDetail(dateKey){
   var dLabel = new Date(dateKey+'T12:00:00');
   var dayName = DAYS[dayIdxFromDate(d)];
   var dateLabel = dLabel.toLocaleDateString('es-CL',{day:'numeric',month:'long',year:'numeric'});
+
+  var daysAgo = daysAgoFromDateKey(dateKey);
+  var isPastDay = daysAgo > 0;           // día ya pasado → no se pueden agregar tareas nuevas
+  var canTicket = daysAgo <= 7;          // hasta 7 días atrás se puede marcar/desmarcar
 
   var wIdx = dayIdxFromDate(d);
   var recurring = inCurrentWeek ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx;}) : [];
@@ -6268,8 +6416,11 @@ function openDayDetail(dateKey){
   if(combined.length){
     body += combined.map(function(t){
       var dn=isDone(t);
+      var checkOnclick = canTicket
+        ? "tapTask('"+t.id+"');reopenDayDetail('"+dateKey+"')"
+        : "toastTicketBlocked()";
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);">'+
-        '<div onclick="tapTask(\''+t.id+'\');reopenDayDetail(\''+dateKey+'\')" style="width:19px;height:19px;border-radius:5px;border:1.5px solid '+(dn?'var(--accent)':'var(--muted)')+';background:'+(dn?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;">'+
+        '<div onclick="'+checkOnclick+'" style="width:19px;height:19px;border-radius:5px;border:1.5px solid '+(dn?'var(--accent)':'var(--muted)')+';background:'+(dn?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;'+(canTicket?'':'opacity:.5;')+'">'+
           (dn?'<svg width="10" height="8" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
         '</div>'+
         '<span onclick="closeDayDetail();openEdit(\''+t.id+'\')" style="flex:1;font-size:13px;color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';cursor:pointer;">'+esc(t.text)+(t.date?'':' <span style="font-size:9px;color:var(--muted-soft);">· recurrente</span>')+'</span>'+
@@ -6278,7 +6429,13 @@ function openDayDetail(dateKey){
   } else if(!hist || inCurrentWeek){
     body += '<div style="font-size:12px;color:var(--muted-soft);text-align:center;padding:18px 0;">Sin tareas para este día.</div>';
   }
-  body += '<button onclick="closeDayDetail();openNewDatedTask(\''+dateKey+'\')" style="width:100%;margin-top:12px;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:transparent;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+ Agregar tarea a este día</button>';
+  // No se pueden agregar tareas nuevas a días que ya pasaron — solo se puede
+  // revisar lo archivado. Para días de hoy en adelante, el botón sigue igual.
+  if(isPastDay){
+    body += '<div style="text-align:center;padding:12px 0 2px;font-size:11px;color:var(--muted-soft);">Este día ya pasó — solo puedes revisar lo archivado'+(canTicket?', y marcar/desmarcar tareas.':'.')+'</div>';
+  } else {
+    body += '<button onclick="closeDayDetail();openNewDatedTask(\''+dateKey+'\')" style="width:100%;margin-top:12px;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:transparent;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+ Agregar tarea a este día</button>';
+  }
 
   var box=document.createElement('div');box.className='conf-box';box.id='day-detail-box';
   box.innerHTML = '<div class="conf-inner" style="max-height:78vh;overflow-y:auto;">'+
@@ -6495,177 +6652,6 @@ function setStreakThr(v){
   if(el) el.textContent = v+'%';
 }
 
-function renderEnergy(){
-  var html = '';
-
-  // Estado activo (banner si hay un modo en uso)
-  var activeText = null;
-  if(S.activeMode){
-    if(S.activeMode.type==='baja') activeText = 'Baja Energía';
-    else if(S.activeMode.type==='custom'){
-      var cm = S.modes.find(function(m){return m.id===S.activeMode.id;});
-      activeText = cm ? cm.icon+' '+cm.name : 'Modo personalizado';
-    }
-  } else if(isHiperfocoActive()){
-    activeText = '🎯 Hiperfoco';
-  } else if(isVacacionesActive()){
-    activeText = '🌴 Vacaciones';
-  }
-  
-  if(activeText){
-    html += '<div style="background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:14px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;gap:10px;">'+
-      '<div style="width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);"></div>'+
-      '<div style="flex:1;font-size:13px;color:var(--accent);font-weight:700;">'+esc(activeText)+' activo</div>'+
-    '</div>';
-  }
-
-  // Encabezado y descripción
-  html += '<div class="serif" style="font-size:26px;font-weight:800;color:var(--ink);margin-bottom:4px;letter-spacing:-.02em;">Modos</div>'+
-    '<p style="font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.5;">Adapta el ritmo a cómo te sientes. Las tareas ★ cruciales siguen visibles aunque actives un modo más suave.</p>';
-
-  // ── Modos especiales (sistema) ──────────────────────────────────────────
-  html += '<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Modos del sistema</div>';
-
-  // Helper para renderizar una card de modo con estética consistente
-  function modeCardSystem(opts){
-    // opts = {icon, name, badge, desc, active, remTxt, errTxt, mainBtn, editBtn, tplBtn, color}
-    var color = opts.color || 'var(--accent)';
-    var bordCol = opts.active ? color : 'var(--line)';
-    var bgCol = opts.active ? 'var(--accent-bg)' : 'var(--paper)';
-    return '<div class="card" style="border-color:'+bordCol+';background:'+bgCol+';">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">'+
-        '<div style="flex:1;min-width:0;">'+
-          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
-            '<span style="font-weight:700;font-size:15px;color:var(--ink);">'+opts.icon+' '+esc(opts.name)+'</span>'+
-            (opts.badge?'<span style="font-size:10px;font-weight:700;color:white;background:'+(opts.badgeBg||color)+';border-radius:6px;padding:2px 7px;letter-spacing:.02em;">'+opts.badge+'</span>':'')+
-          '</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5;">'+esc(opts.desc||'')+'</div>'+
-          (opts.remTxt?'<div style="font-size:11px;color:'+color+';margin-top:4px;font-weight:700;">⏳ '+esc(opts.remTxt)+'</div>':'')+
-          (opts.errTxt?'<div style="font-size:11px;color:var(--bad);margin-top:4px;">'+esc(opts.errTxt)+'</div>':'')+
-        '</div>'+
-        (opts.editBtn?'<button onclick="'+opts.editBtn+'" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;line-height:1;" title="Editar">✎</button>':'')+
-      '</div>'+
-      ((opts.tips && S.showModeTips!==false)?'<div style="margin:8px 0;padding-left:2px;">'+opts.tips.map(function(t){return '<div style="font-size:12px;color:var(--ink-soft);line-height:1.7;">· '+esc(t)+'</div>';}).join('')+'</div>':'')+
-      (opts.extraInfo?'<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+opts.extraInfo+'</div>':'')+
-      opts.mainBtn+
-      (opts.tplBtn?'<button onclick="'+opts.tplBtn+'" style="width:100%;margin-top:6px;background:none;border:1.5px dashed var(--line);border-radius:8px;padding:7px;font-size:11px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">📋 '+opts.tplLabel+'</button>':'')+
-    '</div>';
-  }
-
-  // Baja Energía
-  var be=S.bajaEnergia;
-  var canInfo=bajaCanActivate();
-  var isBajaActive=S.activeMode&&S.activeMode.type==='baja';
-  var remDays=isBajaActive?bajaRemainingDays():0;
-  var bePlan=getPlan();
-  var beCooldownTxt = bePlan==='free' ? 'una vez cada 6 meses' : 'sin límite';
-  var bajaMainBtn = isBajaActive
-    ? '<button onclick="deactivateBaja()" style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--line);color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Desactivar</button>'
-    : (canInfo.ok
-      ? '<button onclick="activateBaja()" style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--accent);color:white;cursor:pointer;font-family:Inter,sans-serif;">Activar Baja Energía</button>'
-      : '<button disabled style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:600;background:var(--line);color:var(--muted-soft);font-family:Inter,sans-serif;">No disponible aún</button>'
-    );
-  html += modeCardSystem({
-    icon: be.icon, name: 'Baja Energía',
-    badge: 'Fijo', badgeBg: 'var(--muted)',
-    desc: 'Máx. '+be.daysLimit+' días · '+beCooldownTxt+' · '+be.maxTasks+' tareas/día'+(be.onlyCrucial?' · solo cruciales':''),
-    active: isBajaActive,
-    remTxt: isBajaActive?remDays+' días restantes':null,
-    errTxt: (!canInfo.ok && !isBajaActive)?'Disponible en '+canInfo.daysLeft+' días':null,
-    tips: be.tips,
-    extraInfo: 'Umbral racha: <b style="color:var(--ink-soft);">'+Math.round((be.lowThresh||0.4)*100)+'%</b>',
-    mainBtn: bajaMainBtn,
-    editBtn: 'openEditBaja()',
-  });
-
-  // Hiperfoco
-  var hfActive=isHiperfocoActive();
-  var hfInfo=hiperfocoCanActivate();
-  var hfRem=hfActive?hiperfocoRemainingDays():0;
-  var hfPlan=getPlan();
-  var hfCooldownTxt = hfPlan==='free' ? 'una vez cada 6 meses' : 'sin límite';
-  var hfMainBtn = hfActive
-    ? '<button onclick="deactivateHiperfoco()" style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--line);color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Desactivar Hiperfoco</button>'
-    : (hfInfo.ok
-      ? '<button onclick="activateHiperfoco()" style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--accent);color:white;cursor:pointer;font-family:Inter,sans-serif;">Activar (7 días)</button>'
-      : '<button disabled style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:600;background:var(--line);color:var(--muted-soft);font-family:Inter,sans-serif;">No disponible aún</button>'
-    );
-  html += modeCardSystem({
-    icon: '🎯', name: 'Hiperfoco',
-    desc: HIPERFOCO_DAYS+' días · '+hfCooldownTxt+' · doble de tareas en todos los períodos',
-    active: hfActive,
-    remTxt: hfActive?hfRem+' días restantes':null,
-    errTxt: (!hfActive && !hfInfo.ok && hfInfo.reason==='cooldown')?'Disponible en '+hfInfo.daysLeft+' días':null,
-    tips: ['Aprovechar ese exceso de energía nunca está demás.'],
-    mainBtn: hfMainBtn,
-  });
-
-  // Vacaciones
-  var vacActive = isVacacionesActive();
-  var vc = S.vacaciones;
-  var vacInfo = vacacionesCanActivate();
-  var vacPlan = getPlan();
-  var vacCooldownTxt = vacPlan==='free' ? ' · una vez cada 6 meses' : '';
-  var vacMainBtn = vacActive
-    ? '<button onclick="deactivateVacaciones()" style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--line);color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Desactivar</button>'
-    : (vacInfo.ok
-      ? '<button onclick="activateVacaciones()" style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:var(--accent);color:white;cursor:pointer;font-family:Inter,sans-serif;">Activar Vacaciones</button>'
-      : '<button disabled style="width:100%;margin-top:10px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:600;background:var(--line);color:var(--muted-soft);font-family:Inter,sans-serif;">No disponible aún</button>'
-    );
-  html += modeCardSystem({
-    icon: '🌴', name: 'Vacaciones',
-    desc: 'Menos tareas · umbral '+Math.round((vc.lowThresh||0.3)*100)+'%'+vacCooldownTxt,
-    active: vacActive,
-    errTxt: (!vacActive && !vacInfo.ok)?'Disponible en '+vacInfo.daysLeft+' días':null,
-    tips: ['Para días de descanso sin perder la racha.'],
-    mainBtn: vacMainBtn,
-    editBtn: 'openEditVacaciones()',
-  });
-
-  // ── Modos personalizados ─────────────────────────────────────────────────
-  html += '<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Mis modos personalizados</div>';
-
-  var modesHTML = (S.modes||[]).map(function(m){
-    var isAct=S.activeMode&&S.activeMode.type==='custom'&&S.activeMode.id===m.id;
-    var tplLinked = m.templateId ? (S.templates||[]).find(function(t){return t.id===m.templateId;}) : null;
-    return '<div class="card" style="border-color:'+(isAct?'var(--accent)':'var(--line)')+';background:'+(isAct?'var(--accent-bg)':'var(--paper)')+';">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">'+
-        '<div style="flex:1;min-width:0;">'+
-          '<div style="font-weight:700;font-size:15px;color:var(--ink);">'+m.icon+' '+esc(m.name)+'</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:3px;">Umbral: '+Math.round((m.lowThresh||0.7)*100)+'%'+(m.onlyCrucial?' · solo cruciales':'')+'</div>'+
-          (tplLinked?'<div style="font-size:11px;color:var(--accent);margin-top:4px;font-weight:600;">📋 '+esc(tplLinked.name)+'</div>':'')+
-        '</div>'+
-        '<div style="display:flex;gap:4px;flex-shrink:0;">'+
-          '<button onclick="openEditMode(\''+m.id+'\')" title="Editar" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;line-height:1;">✎</button>'+
-          '<button onclick="delMode(\''+m.id+'\')" title="Eliminar" style="background:none;border:none;color:var(--bad);font-size:16px;cursor:pointer;padding:4px;line-height:1;">×</button>'+
-        '</div>'+
-      '</div>'+
-      (m.tips&&m.tips.length?'<div style="margin:6px 0 8px;">'+m.tips.map(function(t){return '<div style="font-size:12px;color:var(--ink-soft);line-height:1.7;">· '+esc(t)+'</div>';}).join('')+'</div>':'')+
-      '<button onclick="toggleCustomMode(\''+m.id+'\')" style="width:100%;margin-top:6px;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;background:'+(isAct?'var(--line)':'var(--accent)')+';color:'+(isAct?'var(--muted)':'white')+';cursor:pointer;font-family:Inter,sans-serif;">'+(isAct?'Desactivar':'Activar')+'</button>'+
-    '</div>';
-  }).join('');
-
-  if(!(S.modes||[]).length){
-    html += '<div style="text-align:center;padding:18px 0;color:var(--muted);font-size:12px;font-style:italic;">Aún no tienes modos personalizados.</div>';
-  } else {
-    html += modesHTML;
-  }
-
-  var canCreateMode = isPremium() || (S.modes||[]).length < FREE_LIMITS.customModes;
-  html += '<button onclick="openNewMode()" '+(canCreateMode?'':'disabled')+' style="background:transparent;border:1.5px dashed var(--line);border-radius:12px;width:100%;padding:13px;color:'+(canCreateMode?'var(--muted)':'var(--muted-soft)')+';font-size:13px;font-weight:600;cursor:'+(canCreateMode?'pointer':'default')+';font-family:Inter,sans-serif;margin-top:6px;">+ Crear modo personalizado</button>';
-  if(!isPremium()){
-    html += '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">Plan gratuito: máx. '+FREE_LIMITS.customModes+' modo personalizado.</div>';
-  }
-
-  // ── Acceso a Plantillas (link discreto al final) ─────────────────────────
-  html += '<div style="margin-top:24px;padding:14px;border-top:1px solid var(--line-soft);text-align:center;">'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">¿Buscás plantillas de tareas?</div>'+
-    '<button onclick="setTab(\'plantillas\')" style="background:none;border:1.5px solid var(--line);border-radius:10px;padding:8px 18px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">Ir a Plantillas →</button>'+
-  '</div>';
-
-  return html;
-}
-
 function activateBaja(){
   var info=bajaCanActivate();
   if(!info.ok){toast('No disponible: faltan '+info.daysLeft+' días.');return;}
@@ -6678,7 +6664,7 @@ function showBajaWarning(){
   box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
     '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🌿</div>'+
     '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Baja Energía</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para momentos en los que necesitás reducir el ritmo y exigirte menos.</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para momentos en los que necesitas reducir el ritmo y exigirte menos.</div>'+
     '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
       '<div>· Dura hasta <b>'+be.daysLimit+' días</b></div>'+
       '<div>· Solo verás <b>'+be.maxTasks+' tareas/día</b></div>'+
@@ -6805,12 +6791,28 @@ function toggleCustomMode(id){
     saveState();render();
   }
 }
+// Confirmación antes de borrar un modo personalizado — mismo patrón que
+// "Eliminar proyecto" / "Eliminar plantilla" (antes esta acción no existía
+// en la pantalla real de modos; delMode() ya estaba lista pero sin botón).
+function confirmDeleteMode(id){
+  var m = (S.modes||[]).find(function(x){return x.id===id;});
+  if(!m) return;
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);">Eliminar "'+esc(m.name)+'"</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">¿Eliminar este modo personalizado? No se puede deshacer. La plantilla asociada (si tiene) no se borra.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="delMode(\''+id+'\');this.closest(\'.conf-box\').remove();">Eliminar</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
 function delMode(id){
   S.modes=S.modes.filter(function(m){return m.id!==id;});
   if(S.activeMode&&S.activeMode.type==='custom'&&S.activeMode.id===id){
     S.activeMode=null;
   }
   saveState();render();
+  toast('Modo eliminado');
 }
 
 // Selector de plantilla para modos predeterminados
@@ -6877,7 +6879,18 @@ function openEditVacaciones(){
       '<div style="margin-bottom:8px;"><span style="font-size:13px;font-weight:600;color:var(--ink);">💛 Mensaje de apoyo</span></div>'+
       '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(vc.supportMessage||'')+'</div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin:12px 0 16px;line-height:1.5;">Si quieres ocultar las sugerencias de actividades y los mensajes de apoyo de la aplicación lo puedes hacer en desde Yo → Preferencias.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin:12px 0 16px;line-height:1.5;">Si quieres ocultar las sugerencias de actividades y los mensajes de apoyo de la aplicación lo puedes hacer en desde Yo → Más ajustes → Ayuda y consejos.</div>'+
+    // BUGFIX: mismo caso que Baja Energía — openEditVacacTemplate() ya
+    // existía completo pero no tenía ningún botón que lo abriera.
+    '<div class="fsec" style="margin-bottom:16px;">'+
+      '<div class="frow">'+
+        '<div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--ink);">📋 Plantilla asociada</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(vc.templateId?(function(){var tp=(S.templates||[]).find(function(t){return t.id===vc.templateId;});return esc(tp?tp.name:'(eliminada)');})():'Ninguna — se usan tus tareas normales')+'</div>'+
+        '</div>'+
+        '<button class="cbtn" style="font-size:11px;padding:7px 12px;flex-shrink:0;" onclick="removeOverlay(\'mode-modal\');openEditVacacTemplate();">Cambiar</button>'+
+      '</div>'+
+    '</div>'+
     '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="saveVacaciones()">Guardar</button><button class="cbtn" onclick="removeOverlay(\'mode-modal\')">Cancelar</button></div>'+
   '</div>';
   document.body.appendChild(overlay);
@@ -6925,7 +6938,19 @@ function openEditBaja(){
       '</div>'+
       '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(be.emergencyMessage)+'</div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin:4px 0 16px;line-height:1.5;">Los consejos, tareas elementales y el mensaje de apoyo de este modo son fijos y no se pueden editar. Puedes ocultarlos desde Yo → Preferencias.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin:4px 0 16px;line-height:1.5;">Los consejos, tareas elementales y el mensaje de apoyo de este modo son fijos y no se pueden editar. Puedes ocultarlos desde Yo → Más ajustes → Ayuda y consejos.</div>'+
+    // BUGFIX: openEditBajaTemplate() ya existía completo (S.bajaEnergia.templateId
+    // se usa de verdad al activar el modo) pero no había ningún botón para
+    // llegar a él — el modo personalizado sí ofrece esto, Baja Energía no.
+    '<div class="fsec" style="margin-bottom:16px;">'+
+      '<div class="frow">'+
+        '<div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--ink);">📋 Plantilla asociada</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(be.templateId?(function(){var tp=(S.templates||[]).find(function(t){return t.id===be.templateId;});return esc(tp?tp.name:'(eliminada)');})():'Ninguna — se usan tus tareas normales')+'</div>'+
+        '</div>'+
+        '<button class="cbtn" style="font-size:11px;padding:7px 12px;flex-shrink:0;" onclick="removeOverlay(\'mode-modal\');openEditBajaTemplate();">Cambiar</button>'+
+      '</div>'+
+    '</div>'+
     '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="saveBaja()">Guardar</button><button class="cbtn" onclick="removeOverlay(\'mode-modal\')">Cancelar</button></div>'+
   '</div>';
   document.body.appendChild(overlay);
@@ -6988,13 +7013,18 @@ function deleteTemplate(id){
   box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);">Eliminar plantilla</div>'+
     '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">¿Eliminar esta plantilla? No se puede deshacer.</div>'+
     '<div style="display:flex;gap:8px;">'+
-      '<button class="sbtn" style="background:var(--bad);" onclick="(function(){S.templates=(S.templates||[]).filter(function(t){return t.id!==\''+tplId+'\';});saveState();render();document.querySelector(\'.conf-box\').remove();})()">Eliminar</button>'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="_deleteTemplateConfirmed(\''+tplId+'\');this.closest(\'.conf-box\').remove();">Eliminar</button>'+
       '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
     '</div></div>';
   document.body.appendChild(box);
-  return;
+}
+// Separado de deleteTemplate() para que la limpieza de referencias (antes
+// código muerto tras un "return" temprano) sí se ejecute: sin esto, una
+// plantilla eliminada podía quedar "fantasma" asignada en la programación
+// de semanas futuras o como plantilla activa de la semana en curso.
+function _deleteTemplateConfirmed(id){
   S.templates = (S.templates||[]).filter(function(t){return t.id!==id;});
-  // Limpiar de la programación
+  // Limpiar de la programación de semanas futuras
   if(S.weekSchedule){
     Object.keys(S.weekSchedule).forEach(function(k){
       if(S.weekSchedule[k]===id) delete S.weekSchedule[k];
@@ -7207,7 +7237,7 @@ function renderWeekSchedule(){
   if(!(S.templates||[]).length) return '';
   var html='<div class="card" style="margin-top:18px;">'+
     '<div style="font-weight:700;font-size:15px;color:var(--ink);margin-bottom:6px;">📅 Programar semanas</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Asigná una plantilla a las próximas semanas. Se aplicará automáticamente.</div>';
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Asigna una plantilla a las próximas semanas. Se aplicará automáticamente.</div>';
   
   for(var i=1;i<=4;i++){
     var weekKey = nextWeekKey(i);
@@ -7650,7 +7680,7 @@ function openNew(period){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
   showTaskModal();
 }
 // Crear una tarea puntual (con fecha específica) para un día cualquiera —
@@ -7673,12 +7703,12 @@ function openNewDatedTask(dateKey){
     return;
   }
   var wIdx = dayIdxFromDate(new Date(dateKey+'T00:00:00'));
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:true,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:null,duracion:60};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:true,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:null,duracion:60,notif:null};
   showTaskModal();
 }
 function openEdit(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
-  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:(t.checklist||[]).length>0,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date};
+  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:(t.checklist||[]).length>0,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
   M.duracion = t.duracion||60; M.moreOpen = M.hasQty || M.hasCL || !!M.hora || M.hasDate;
   showTaskModal();
 }
@@ -7732,6 +7762,16 @@ function showTaskModal(){
         }).join('')+
         '<button onclick="openNewCategoryFromModal()" style="padding:5px 11px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>'+
       '</div>'+
+    '</div>':'')+
+    // Crucial (solo tareas diarias) — antes solo se podía marcar después de
+    // guardar, desde el menú ⋯ de la tarea; mToggleCrucial() ya existía pero
+    // no tenía botón en el modal. Va junto a Categoría porque es de uso
+    // frecuente, antes de "Más opciones".
+    (isDay?'<div class="frow" style="margin:2px 0 14px;">'+
+      '<span style="font-size:13px;font-weight:600;color:var(--ink);">⭐ Tarea crucial</span>'+
+      '<button class="tog" id="m-crucial-tog" onclick="mToggleCrucial()" style="background:'+(M.crucial?'var(--accent)':'var(--muted-soft)')+';">'+
+        '<span class="tok" style="left:'+(M.crucial?22:2)+'px;"></span>'+
+      '</button>'+
     '</div>':'')+
     // ── Más opciones (colapsable): Cantidad + Checklist interno ─────────────
     // Se usan con menos frecuencia que nombre/categoría — ocultarlas por
@@ -7804,6 +7844,34 @@ function showTaskModal(){
         '</div>'+
         '<div id="m-dur-badge" style="font-size:11px;color:var(--muted);text-align:right;margin-bottom:6px;">'+mDurLabel(M.duracion||60)+'</div>'+
       '</div>'+
+      // Recordatorio — opt-in por tarea: no todas las tareas con horario
+      // necesitan aviso, así que se activa solo para la que uno elige.
+      '<div id="m-notif-block" style="display:'+(M.hora?'block':'none')+';border-top:1px solid var(--line-soft);margin-top:'+(M.hora?12:0)+'px;padding-top:'+(M.hora?12:0)+'px;">'+
+        '<div class="frow" style="margin-bottom:'+(M.notif&&M.notif.on?10:0)+'px;">'+
+          '<span style="font-size:13px;font-weight:600;color:var(--ink);">🔔 Recordatorio para esta tarea</span>'+
+          '<button class="tog" id="m-notif-tog" onclick="mToggleNotif()" style="background:'+(M.notif&&M.notif.on?'var(--accent)':'var(--muted-soft)')+';">'+
+            '<span class="tok" style="left:'+(M.notif&&M.notif.on?22:2)+'px;"></span>'+
+          '</button>'+
+        '</div>'+
+        '<div id="m-notif-area" style="display:'+(M.notif&&M.notif.on?'block':'none')+';">'+
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">00:00 avisa justo a la hora de la tarea. Requiere que hayas activado los permisos de notificación en Yo → Más ajustes.</div>'+
+          '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px;">'+
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+              '<button type="button" onclick="mNudgeNotifHH(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
+              '<span id="m-notif-hh-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String((M.notif&&M.notif.hh)||0).padStart(2,'0')+'</span>'+
+              '<button type="button" onclick="mNudgeNotifHH(-1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">−</button>'+
+              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">horas</span>'+
+            '</div>'+
+            '<span style="font-size:19px;font-weight:800;color:var(--muted-soft);">:</span>'+
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+              '<button type="button" onclick="mNudgeNotifMM(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
+              '<span id="m-notif-mm-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String((M.notif&&M.notif.mm)!=null?M.notif.mm:15).padStart(2,'0')+'</span>'+
+              '<button type="button" onclick="mNudgeNotifMM(-1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">−</button>'+
+              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
     '</div>':'')+
     // Fecha específica (solo tareas diarias) — tarea puntual para un solo día
     // en vez de recurrente cada semana.
@@ -7816,7 +7884,7 @@ function showTaskModal(){
       '</div>'+
       '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';">'+
         '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Esta tarea aparecerá solo ese día — no se repite todas las semanas.</div>'+
-        '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\')" style="cursor:pointer;" value="'+(M.task.date||'')+'"/>'+
+        '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\',true)" style="cursor:pointer;" value="'+(M.task.date||'')+'"/>'+
       '</div>'+
     '</div>':'')+
     // Checklist only for "dia" period
@@ -8001,9 +8069,38 @@ function mToggleHora(){
       if(badge) badge.textContent = mDurLabel(M.duracion);
     }
   }
+  // El recordatorio depende de que la tarea tenga horario definido — si se
+  // desactiva la hora, el recordatorio también se oculta (no se borra su
+  // configuración por si el usuario reactiva la hora más adelante).
+  var notifBlock = document.getElementById('m-notif-block');
+  if(notifBlock) notifBlock.style.display = M.hora ? 'block' : 'none';
 }
 function mSetDuracion(min){
   M.duracion = Math.max(5, Math.min(1440, min||60));
+}
+// ── Recordatorio por tarea (opt-in, no es global) ────────────────────────
+function mToggleNotif(){
+  var def = S.notifTiming || {hh:0, mm:15};
+  if(!M.notif) M.notif = {on:false, hh:def.hh||0, mm:def.mm!=null?def.mm:15};
+  M.notif.on = !M.notif.on;
+  if(M.notif.on && M.notif.hh==null) M.notif.hh = def.hh||0;
+  if(M.notif.on && M.notif.mm==null) M.notif.mm = def.mm!=null?def.mm:15;
+  var tog = document.getElementById('m-notif-tog');
+  var area = document.getElementById('m-notif-area');
+  if(tog){ tog.style.background = M.notif.on?'var(--accent)':'var(--muted-soft)'; var k=tog.querySelector('.tok'); if(k)k.style.left=(M.notif.on?22:2)+'px'; }
+  if(area) area.style.display = M.notif.on?'block':'none';
+}
+function mNudgeNotifHH(delta){
+  if(!M.notif) M.notif = {on:true, hh:0, mm:15};
+  M.notif.hh = Math.min(23, Math.max(0, (M.notif.hh||0) + delta));
+  var el = document.getElementById('m-notif-hh-val');
+  if(el) el.textContent = String(M.notif.hh).padStart(2,'0');
+}
+function mNudgeNotifMM(delta){
+  if(!M.notif) M.notif = {on:true, hh:0, mm:15};
+  M.notif.mm = Math.min(59, Math.max(0, (M.notif.mm||0) + delta));
+  var el = document.getElementById('m-notif-mm-val');
+  if(el) el.textContent = String(M.notif.mm).padStart(2,'0');
 }
 function mToggleCrucial(){
   M.crucial=!M.crucial;
@@ -8168,7 +8265,10 @@ function mSave(){
   var dateInp = isDay ? document.getElementById('m-date-input') : null;
   var specificDate = (isDay && M.hasDate && dateInp && dateInp.value) ? dateInp.value : null;
   var effectiveDay = specificDate ? dayIdxFromDate(new Date(specificDate+'T00:00:00')) : M.task.day;
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,links:M.links,crucial:isDay?!!M.crucial:false,linkMode:M.linkMode||'unit',categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day});
+  // El recordatorio solo tiene sentido si la tarea es diaria y tiene hora
+  // definida; si se desactivó la hora, el recordatorio no se guarda activo.
+  var notifSaved = (isDay && M.hora && M.notif && M.notif.on) ? {on:true, hh:M.notif.hh||0, mm:M.notif.mm!=null?M.notif.mm:15} : null;
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,links:M.links,crucial:isDay?!!M.crucial:false,linkMode:M.linkMode||'unit',categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved});
   if(M.isNew){S.tasks.push(saved);}else{S.tasks=S.tasks.map(function(t){return t.id===saved.id?saved:t;});}
   removeOverlay('task-modal');saveState();checkMedals();render();
 }
@@ -8306,8 +8406,8 @@ var MEDALS_CATALOG = [
   },
   {
     id:'4-tasks-20', emoji:'🔢', title:'Cuatro al hilo',
-    desc:'Completá 4 tareas o más durante 20 días seguidos.',
-    reward:{type:'limit+1', value:1, label:'+1 tarea/día (permanente)'},
+    desc:'Completa 4 tareas o más durante 20 días seguidos.',
+    reward:{type:'limit+1', value:1, label:'+1 tarea/período (permanente)'},
     check:function(){
       var hist = S.dailyHistory || {};
       var today = new Date();
@@ -8321,8 +8421,8 @@ var MEDALS_CATALOG = [
   },
   {
     id:'9-tasks-7', emoji:'⚡', title:'Semana de fuego',
-    desc:'Completá 9 tareas o más durante 7 días seguidos.',
-    reward:{type:'limit+1', value:1, label:'+1 tarea/día (permanente)'},
+    desc:'Completa 9 tareas o más durante 7 días seguidos.',
+    reward:{type:'limit+1', value:1, label:'+1 tarea/período (permanente)'},
     check:function(){
       var hist = S.dailyHistory || {};
       var today = new Date();
@@ -8348,7 +8448,7 @@ var MEDALS_CATALOG = [
   },
   {
     id:'link-task', emoji:'🔗', title:'Conectado',
-    desc:'Vinculá una tarea diaria a una tarea de período mayor.',
+    desc:'Vincula una tarea diaria a una tarea de período mayor.',
     reward:{type:'xp', value:10, label:'+10 XP'},
     check:function(){
       return (S.tasks||[]).some(function(t){
@@ -8360,8 +8460,8 @@ var MEDALS_CATALOG = [
   },
   {
     id:'all-periods', emoji:'🗓️', title:'Visión completa',
-    desc:'Tené al menos una tarea en cada período.',
-    reward:{type:'limit+1', value:1, label:'+1 tarea/período'},
+    desc:'Ten al menos una tarea en cada período.',
+    reward:{type:'limit+1', value:1, label:'+1 tarea/período (permanente)'},
     check:function(){
       var periods = {dia:false, semana:false, mes:false, semestre:false, año:false};
       (S.tasks||[]).forEach(function(t){if(periods.hasOwnProperty(t.period)) periods[t.period]=true;});
@@ -8376,7 +8476,7 @@ var MEDALS_CATALOG = [
   },
   {
     id:'theme-explorer', emoji:'🎨', title:'Decorador',
-    desc:'Probá al menos 5 temas visuales distintos.',
+    desc:'Prueba al menos 5 temas visuales distintos.',
     reward:{type:'xp', value:12, label:'+12 XP'},
     check:function(){return (S.themesUsed||[]).length >= 5;}
   },
@@ -8529,7 +8629,7 @@ function showAchievementShare(days){
     '</div>'+
     '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:10px;">Tu imagen para compartir en Instagram, WhatsApp, etc.</div>'+
     '<button class="lvl-up-btn" style="margin-top:14px;" onclick="downloadShareImage('+days+')">📥 Descargar imagen</button>'+
-    '<button onclick="navigator.share?shareImage('+days+'):toast(\'Compartir no disponible — descargá y compartí manualmente\')" style="width:100%;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;margin-top:8px;">📤 Compartir</button>'+
+    '<button onclick="navigator.share?shareImage('+days+'):toast(\'Compartir no disponible — descarga y comparte manualmente\')" style="width:100%;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;margin-top:8px;">📤 Compartir</button>'+
     '<button onclick="document.getElementById(\'share-modal\').remove()" style="width:100%;background:none;border:none;color:var(--muted);font-size:12px;padding:8px;margin-top:6px;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
   '</div>';
   document.body.appendChild(box);
@@ -8652,7 +8752,7 @@ function shareImage(days){
         text:days+' días de racha en Gramific[app] 🔥'
       }).catch(function(e){console.log('Share cancelled',e);});
     } else {
-      toast('Tu dispositivo no soporta compartir directo. Descargá la imagen.');
+      toast('Tu dispositivo no soporta compartir directo. Descarga la imagen.');
     }
   }, 'image/png');
 }
@@ -8843,7 +8943,7 @@ var MAIN_TOUR = [
     target: '#bnav-yo',
     title: 'Tu perfil y ajustes',
     body: 'Aquí cambias el tema visual, el modo de uso (con o sin niveles/racha), y accedes a los ajustes avanzados.',
-    action: 'Explora Yo → Apariencia para personalizar',
+    action: 'Explora Yo → Personalización para personalizar',
     onEnter: function(){ setTab('yo'); }
   },
   {
@@ -8905,7 +9005,7 @@ function showFirstLevelUpTip(){
     _tourSteps = [{
       target: null,
       title: '¡Subiste de nivel!',
-      body: 'Cada nivel que ganas desbloquea una tarea diaria más (hasta 20). Sigue completando tu umbral cada día para avanzar.'
+      body: (isPremium() ? 'Cada nivel que ganas desbloquea un cupo más en cada período (hasta 32). Sigue completando tu umbral cada día para avanzar.' : 'Cada nivel que ganas desbloquea un cupo más en cada período (hasta 20). Sigue completando tu umbral cada día para avanzar.')
     }];
     _tourIdx=0; _tourActive=true; _tourOnDone=null;
     _slRender();
@@ -8967,7 +9067,7 @@ function showNotifAsk(){
   box.innerHTML='<div class="conf-inner" style="max-width:320px;">'+
     iconBadgeHTML(ICON_BELL, 64)+
     '<div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);text-align:center;">¿Quieres recordatorios?</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;text-align:center;">Te puedo avisar al inicio del día para que veas tus tareas. Sin spam: solo una notificación al día.</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;text-align:center;">Te aviso solo de las tareas que tú elijas, cuando se acerque su hora. Sin spam: nada de notificaciones para todas tus tareas.</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="sbtn" style="font-size:13px;" onclick="grantNotif();this.closest(\'.conf-box\').remove();">Sí, activar</button>'+
       '<button class="tbtn" style="text-align:center;text-decoration:none;" onclick="this.closest(\'.conf-box\').remove();">Ahora no</button>'+
@@ -9020,9 +9120,11 @@ function nudgeNotifMM(delta){
 
 // ── Programador de notificaciones locales ──────────────────────────────────
 // Usa la Web Notifications API para agendar un aviso por cada tarea del día
-// que tenga hora definida. Los timers se recrean cada vez que cambia la
-// configuración o al abrir la app (los timers no persisten entre sesiones —
-// cuando se integre FCM, esto pasa a ser serverless y persistente).
+// que el usuario haya marcado explícitamente con "🔔 Recordatorio para esta
+// tarea" (opt-in por tarea, no automático). Los timers se recrean cada vez
+// que cambia la configuración o al abrir la app (los timers no persisten
+// entre sesiones — cuando se integre FCM, esto pasa a ser serverless y
+// persistente).
 var _notifTimers = [];
 function scheduleNotifications(){
   // Limpiar timers anteriores
@@ -9030,27 +9132,32 @@ function scheduleNotifications(){
   _notifTimers = [];
   if(S.notifPermission !== 'granted') return;
   if(typeof Notification === 'undefined') return;
-  var nt = S.notifTiming || {hh:0, mm:15};
   var today = todayIdx();
+  // Solo tareas que el usuario activó explícitamente con "🔔 Recordatorio
+  // para esta tarea" — ya no se avisa automáticamente para toda tarea con
+  // hora definida, cada una se elige a propósito.
   var todayTasks = (S.tasks||[]).filter(function(t){
-    return isTaskToday(t) && t.hora && !isDone(t);
+    return isTaskToday(t) && t.hora && t.notif && t.notif.on && !isDone(t);
   });
   var now = new Date();
   todayTasks.forEach(function(t){
+    var nt = t.notif || {hh:0, mm:15};
     var parts = t.hora.split(':');
     var h = parseInt(parts[0],10), m = parseInt(parts[1]||'0',10);
     var taskTime = new Date();
     taskTime.setHours(h, m, 0, 0);
-    // Restar el aviso anticipado según configuración (hh horas + mm minutos)
+    // Restar el aviso anticipado según configuración de ESTA tarea (hh horas + mm minutos)
     var alertTime = new Date(taskTime.getTime() - ((nt.hh||0)*60 + (nt.mm||0))*60000);
     var msUntil = alertTime - now;
     if(msUntil < 0) return; // ya pasó hoy
     var taskName = t.text;
     var isExact = !nt.hh && !nt.mm;
     var pre = isExact ? '' : (nt.hh?nt.hh+'h ':'') + (nt.mm?nt.mm+'min ':'');
+    // Sin esc() aquí: la Notification API del sistema muestra texto plano,
+    // no HTML, así que escapar (& → &amp;, etc.) mostraría entidades literales.
     var body = isExact
-      ? 'Es la hora: '+esc(taskName)
-      : 'En '+pre.trim()+': '+esc(taskName);
+      ? 'Es la hora: '+taskName
+      : 'En '+pre.trim()+': '+taskName;
     var timer = setTimeout(function(){
       new Notification('Gramifica', {body: body, icon: '/icon-192.png'});
     }, msUntil);
@@ -9213,6 +9320,10 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   }, {passive:true});
 })();
 loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
+// BUGFIX: trackVisit() existía pero nunca se invocaba desde ningún lado, así
+// que S.visitHistory quedaba vacío para siempre y las medallas "Presente"
+// (7 días seguidos) y "Habitual" (30 días) eran imposibles de conseguir.
+trackVisit();          // Registrar la visita de hoy
 checkMedals();         // Revisar medallas al iniciar
 checkStreakOnLoad();
 checkAutoReset();      // Auto reset on Monday 4 AM
