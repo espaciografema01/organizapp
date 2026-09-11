@@ -1710,6 +1710,7 @@ function loadState(){
     var th=localStorage.getItem('og6-theme');if(th)S.theme=th;
     var tc=localStorage.getItem('og6-bgcolor');if(tc)S.bgColorOverride=tc;
     var smt=localStorage.getItem('og6-showmodetips');if(smt!==null)S.showModeTips=smt==='1';
+    var sndOn=localStorage.getItem('og6-soundon');if(sndOn!==null)S.soundOn=sndOn==='1';
     var il=localStorage.getItem('og6-layout');if(il)S.interfaceLayout=il;
     var hf=localStorage.getItem('og6-hiperfoco');if(hf)S.hiperfoco=JSON.parse(hf);
     var mt=localStorage.getItem('og6-templates');if(mt)S.templates=JSON.parse(mt);
@@ -1783,6 +1784,7 @@ function saveState(){
     localStorage.setItem('og6-theme',S.theme);
     localStorage.setItem('og6-bgcolor',S.bgColorOverride||'default');
     localStorage.setItem('og6-showmodetips',S.showModeTips===false?'0':'1');
+    localStorage.setItem('og6-soundon',S.soundOn===false?'0':'1');
     localStorage.setItem('og6-layout',S.interfaceLayout||'default');
     localStorage.setItem('og6-hiperfoco',JSON.stringify(S.hiperfoco||{}));
     localStorage.setItem('og6-templates',JSON.stringify(S.templates||[]));
@@ -1845,6 +1847,115 @@ function toast(msg){
   toastTimer=setTimeout(function(){el.classList.remove('show');},2200);
 }
 
+// ── Efectos de sonido ────────────────────────────────────────────────────
+// Sintetizados con Web Audio API (sin archivos externos, livianos). Se
+// controlan con S.soundOn (default: activado) desde Yo → Más ajustes →
+// Ayuda y consejos. El AudioContext se crea de forma perezosa (lazy) en el
+// primer sonido, ya que los navegadores exigen un gesto del usuario antes
+// de reproducir audio — como todos estos sonidos se disparan desde un
+// clic/tap, esto nunca es un problema real.
+var _sndCtx = null;
+function _sndGetCtx(){
+  if(_sndCtx) return _sndCtx;
+  try{
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    _sndCtx = new AC();
+  }catch(e){ return null; }
+  return _sndCtx;
+}
+// Un solo tono simple con envolvente (ataque rápido, caída suave).
+function _sndTone(ctx, startAt, freq, dur, type, gainPeak){
+  var osc = ctx.createOscillator();
+  var gain = ctx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.setValueAtTime(freq, startAt);
+  gain.gain.setValueAtTime(0, startAt);
+  gain.gain.linearRampToValueAtTime(gainPeak||0.18, startAt + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + dur + 0.02);
+}
+// type: 'complete' (tarea completada), 'crucial' (marcar como crucial),
+// 'achievement' (logro/medalla/nivel desbloqueado), 'streak' (racha del día
+// lograda), 'add' (tarea creada), 'delete' (tarea eliminada), 'tick' (marcar
+// un ítem de checklist sin completar toda la tarea), 'toggle' (clic suave de
+// un interruptor on/off), 'warn' (acción bloqueada o advertencia).
+function playSound(type){
+  if(S.soundOn===false) return; // activado por defecto
+  var ctx = _sndGetCtx();
+  if(!ctx) return;
+  if(ctx.state==='suspended'){ ctx.resume(); }
+  var now = ctx.currentTime;
+  if(type==='complete'){
+    // Dos notas ascendentes cortas y suaves — "listo ✓"
+    _sndTone(ctx, now, 523.25, 0.14, 'sine', 0.16);      // Do5
+    _sndTone(ctx, now+0.08, 784.0, 0.18, 'sine', 0.16);  // Sol5
+  } else if(type==='crucial'){
+    // Un "ping" brillante y corto, tipo estrella
+    _sndTone(ctx, now, 987.77, 0.10, 'triangle', 0.14);  // Si5
+    _sndTone(ctx, now+0.05, 1318.5, 0.16, 'triangle', 0.12); // Mi6
+  } else if(type==='achievement'){
+    // Pequeña fanfarria ascendente de 4 notas — para medallas/logros/nivel
+    _sndTone(ctx, now,      523.25, 0.14, 'triangle', 0.15); // Do5
+    _sndTone(ctx, now+0.11, 659.25, 0.14, 'triangle', 0.15); // Mi5
+    _sndTone(ctx, now+0.22, 784.00, 0.14, 'triangle', 0.15); // Sol5
+    _sndTone(ctx, now+0.33, 1046.5, 0.28, 'triangle', 0.18); // Do6
+  } else if(type==='streak'){
+    // Más cálido y "de fuego" que el logro genérico — tres notas cortas
+    // con un vibrato leve al final, sin llegar a la nota alta de achievement.
+    _sndTone(ctx, now,      440.00, 0.12, 'sine', 0.15); // La4
+    _sndTone(ctx, now+0.09, 587.33, 0.12, 'sine', 0.15); // Re5
+    _sndTone(ctx, now+0.18, 698.46, 0.22, 'sine', 0.17); // Fa5
+  } else if(type==='add'){
+    // Pop breve y neutro — confirmación de creación, sin ser tan festivo
+    // como completar una tarea.
+    _sndTone(ctx, now, 660.0, 0.09, 'sine', 0.13);
+  } else if(type==='delete'){
+    // Dos notas descendentes cortas — algo se fue, sin sonar alarmante.
+    _sndTone(ctx, now,      392.00, 0.10, 'sine', 0.12); // Sol4
+    _sndTone(ctx, now+0.06, 293.66, 0.14, 'sine', 0.11); // Re4
+  } else if(type==='tick'){
+    // Clic diminuto, más discreto que 'complete', para un solo ítem del
+    // checklist sin cerrar toda la tarea.
+    _sndTone(ctx, now, 900, 0.05, 'square', 0.05);
+  } else if(type==='toggle'){
+    // Clic suave y neutro para interruptores on/off genéricos.
+    _sndTone(ctx, now, 700, 0.045, 'square', 0.045);
+  } else if(type==='warn'){
+    // Zumbido corto y grave — acción bloqueada o que necesita atención.
+    _sndTone(ctx, now, 220, 0.16, 'sawtooth', 0.07);
+  } else if(type==='tab'){
+    // Deslizamiento de tono suave y amigable — para cambios de pestaña,
+    // sea por clic en el tab o por swipe. Más cálido que 'toggle'.
+    var oscT = ctx.createOscillator();
+    var gainT = ctx.createGain();
+    oscT.type = 'sine';
+    oscT.frequency.setValueAtTime(520, now);
+    oscT.frequency.exponentialRampToValueAtTime(680, now+0.09);
+    gainT.gain.setValueAtTime(0, now);
+    gainT.gain.linearRampToValueAtTime(0.09, now+0.015);
+    gainT.gain.exponentialRampToValueAtTime(0.0001, now+0.11);
+    oscT.connect(gainT); gainT.connect(ctx.destination);
+    oscT.start(now); oscT.stop(now+0.13);
+  }
+}
+// ── Vibración táctil (opcional, complementa el sonido en celulares) ───────
+// Se activa/desactiva junto con S.soundOn para mantener un solo interruptor;
+// si el navegador o dispositivo no soporta vibración simplemente no hace nada.
+function vibrate(pattern){
+  if(S.soundOn===false) return;
+  try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
+}
+function toggleSound(){
+  S.soundOn = S.soundOn===false ? true : false;
+  saveState();
+  var tog=document.getElementById('sound-tog');
+  if(tog){tog.style.background=S.soundOn!==false?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(S.soundOn!==false?22:2)+'px';}
+  if(S.soundOn!==false) playSound('complete'); // pequeña muestra al activar
+}
+
 // ── XP ─────────────────────────────────────────────────────────────────────
 // XP is queued briefly so cascade events show as a single +X XP toast
 var _xpQueue=0;
@@ -1878,6 +1989,8 @@ function flushXP(){
 
 // ── Animación de subida de nivel ──────────────────────────────────────────
 function playLevelUpAnimation(){
+  playSound('achievement');
+  vibrate([20,30,20,30,40]);
   // Quitar animación previa si existe
   var old = document.getElementById('lvl-anim');
   if(old) old.remove();
@@ -2142,6 +2255,7 @@ function currentTaskLimits(){
 
 // ── V2 NAVIGATION ─────────────────────────────────────────────────────────
 function setTab(t){
+  var prevTab = S.tab;
   S.tab = t;
   var routeToTab = {
     'hoy':'hoy','dia':'hoy',
@@ -2155,6 +2269,14 @@ function setTab(t){
     var id = b.id.replace('bnav-','');
     b.classList.toggle('active', id === activeTab);
   });
+  if(prevTab !== t){
+    playSound('tab');
+    // Registrar en el historial del navegador para que el botón "atrás" del
+    // celular vuelva a la pestaña anterior en vez de salir de la app —
+    // salvo que este cambio de pestaña sea justamente la RESPUESTA a haber
+    // presionado "atrás" (ver el manejador de popstate más abajo).
+    if(!_tabHistorySuspended){ try{ history.pushState({navTab:t}, ''); }catch(e){} }
+  }
   render();
 }
 
@@ -2753,7 +2875,7 @@ function renderHorario(){
   }
   grid += '</div>';
 
-  return rangeToggle+'<div style="overflow-x:auto;padding-left:16px;">'+grid+'<div style="width:16px;flex-shrink:0;"></div></div>';
+  return rangeToggle+'<div id="horario-scroll-wrap" style="overflow-x:auto;padding-left:16px;">'+grid+'<div style="width:16px;flex-shrink:0;"></div></div>';
 }
 function setHorarioRange(r){
   S.horarioRange = r;
@@ -3219,6 +3341,18 @@ function renderYo(){
         '</div>'+
         '<button class="tog" onclick="toggleShowModeTips()" style="background:'+(S.showModeTips!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
           '<span class="tok" style="left:'+(S.showModeTips!==false?22:2)+'px;"></span>'+
+        '</button>'+
+      '</div>'+
+    '</div>';
+
+    html += '<div class="card" style="margin-bottom:10px;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
+        '<div style="flex:1;">'+
+          '<div style="font-weight:700;font-size:14px;color:var(--ink);">🔊 Efectos de sonido</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Sonidos cortos al crear, completar o eliminar una tarea, marcar un ítem, cambiar de pestaña, activar interruptores, mantener la racha, o desbloquear un logro. Incluye una leve vibración en el celular.</div>'+
+        '</div>'+
+        '<button class="tog" id="sound-tog" onclick="toggleSound()" style="background:'+(S.soundOn!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+          '<span class="tok" style="left:'+(S.soundOn!==false?22:2)+'px;"></span>'+
         '</button>'+
       '</div>'+
     '</div>';
@@ -3818,16 +3952,6 @@ function openProjectMenu(pid, event){
       '<span class="tog" style="background:'+(S.ganttHideWeekends?'var(--accent)':'var(--muted-soft)')+';transform:scale(.8);flex-shrink:0;">'+
         '<span class="tok" style="left:'+(S.ganttHideWeekends?22:2)+'px;"></span>'+
       '</span>'+
-    '</button>'+
-    '<div style="height:1px;background:var(--line-soft);margin:0 8px;"></div>'+
-    '<button onclick="closeProjectMenu();exportGanttXLSX(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
-      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 10l5 5 5-5M4 21h16"/></svg></span>'+
-      '<span style="flex:1;">Exportar a Excel</span>'+
-    '</button>'+
-    '<div style="height:1px;background:var(--line-soft);margin:0 8px;"></div>'+
-    '<button onclick="closeProjectMenu();openEditProjectModal(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
-      '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>'+
-      '<span style="flex:1;">Editar proyecto</span>'+
     '</button>'+
     '<div style="height:1px;background:var(--line-soft);margin:3px 8px;"></div>'+
     '<button onclick="closeProjectMenu();closeProjectView();deleteProject(\''+pid+'\');" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;background:none;border:none;font-size:13px;color:var(--bad);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
@@ -5029,6 +5153,7 @@ function toggleCalendarSync(){
   if(!S.calendarSync) S.calendarSync = {enabled:false, direction:'both'};
   S.calendarSync.enabled = !S.calendarSync.enabled;
   saveState(); render();
+  playSound('toggle');
   toast(S.calendarSync.enabled ? '✓ Sincronización activada' : 'Sincronización desactivada');
 }
 function setCalendarDirection(dir){
@@ -5040,6 +5165,7 @@ function toggleShowModeTips(){
   S.showModeTips = S.showModeTips===false ? true : false;
   saveState();
   render();
+  playSound('toggle');
 }
 function toggleYoAdvanced(){
   S._yoAdvancedOpen = !S._yoAdvancedOpen;
@@ -5485,16 +5611,6 @@ function openTaskMenu(id, event){
   
   var items = [];
   
-  // Crucial (solo day tasks)
-  if(isDay){
-    items.push({
-      icon: t.crucial ? '★' : '☆',
-      label: t.crucial ? 'Quitar estrella crucial' : 'Marcar como crucial',
-      action: 'toggleCrucial(\''+id+'\')'
-    });
-    items.push({divider:true});
-  }
-  
   // Acciones de movimiento (solo tareas del día)
   if(isDay){
     items.push({
@@ -5514,6 +5630,15 @@ function openTaskMenu(id, event){
     items.push({
       icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1" y="3" width="9" height="10" rx="1.5"/><path d="M4 3V2a1 1 0 011-1h6a1 1 0 011 1v8a1 1 0 01-1 1h-1"/><line x1="5" y1="8" x2="9" y2="8" stroke-width="1.3"/><line x1="7" y1="6" x2="7" y2="10" stroke-width="1.3"/></svg>',
       label:'Duplicar a varios días...', action:'duplicateTaskToDays(\''+id+'\')'
+    });
+    items.push({divider:true});
+    // Recordatorio a horario específico — independiente de si la tarea tiene
+    // "Definir horario específico" activado; el recordatorio es un aviso a
+    // una hora fija que uno elige aquí mismo.
+    items.push({
+      icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 0 0 2 2zm6-6v-5a6 6 0 0 0-4-5.66V4a2 2 0 1 0-4 0v1.34A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>',
+      label: t.reminder && t.reminder.time ? 'Editar recordatorio' : 'Añadir recordatorio',
+      action: 'openReminderPopup(\''+id+'\')'
     });
     items.push({divider:true});
   }
@@ -5695,6 +5820,7 @@ function toggleCrucial(id){
   t.crucial = !t.crucial;
   saveState();render();
   checkMedals();
+  if(t.crucial) playSound('crucial');
   toast(t.crucial?'★ Marcada como crucial':'Quitada de cruciales');
 }
 
@@ -6384,6 +6510,7 @@ function daysAgoFromDateKey(dateKey){
   return Math.round((today - d) / 86400000);
 }
 function toastTicketBlocked(){
+  playSound('warn');
   toast('Solo se puede marcar/desmarcar hasta 7 días atrás');
 }
 function openDayDetail(dateKey){
@@ -6517,16 +6644,8 @@ function renderStats(){
     '<div style="font-weight:700;font-size:15px;color:var(--ink);margin-bottom:14px;">📊 Estadísticas</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'+
       '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center;">'+
-        '<div style="font-size:20px;font-weight:800;color:var(--accent);">'+thisWeek+'</div>'+
-        '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Esta semana</div>'+
-      '</div>'+
-      '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center;">'+
         '<div style="font-size:20px;font-weight:800;color:var(--accent);">'+thisMonth+'</div>'+
         '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Este mes</div>'+
-      '</div>'+
-      '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center;">'+
-        '<div style="font-size:20px;font-weight:800;color:var(--accent);">'+totalDone+'</div>'+
-        '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Total completadas</div>'+
       '</div>'+
       '<div style="background:var(--bg);border-radius:10px;padding:10px;text-align:center;">'+
         '<div style="font-size:20px;font-weight:800;color:var(--accent);">'+daysLogged+'</div>'+
@@ -7450,7 +7569,9 @@ function tapCL(taskId,itemId){
   var newDone = newCL.filter(function(i){return i.done;}).length;
   var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
   var delta = newDone - oldDone;
-  finishUpdate(updated, !wasDone && isDone(updated), delta);
+  var justCompleted = !wasDone && isDone(updated);
+  if(!justCompleted) playSound('tick'); // ítem suelto: sonido discreto (el 'complete' llega solo si cierra toda la tarea)
+  finishUpdate(updated, justCompleted, delta);
 }
 function expCL(id){
   var cl=document.getElementById('cl-'+id),exp=document.getElementById('exp-'+id);if(!cl)return;
@@ -7465,6 +7586,8 @@ function finishUpdate(updated, justCompleted, delta){
   render();
   S._justCompletedId = null; // limpiar para que el pop no se repita en próximos renders
   if(justCompleted){
+    playSound('complete');
+    vibrate(30);
     if(!S.rewardedTaskIds[updated.id]){
       S.rewardedTaskIds[updated.id]=true;
       addXP(PT[updated.period]||1);
@@ -7510,7 +7633,7 @@ function propagate(t, justCompleted, delta){
     propagate(updParent, parentJustCompleted, addAmount);
   });
 }
-function delTask(id){S.tasks=S.tasks.filter(function(t){return t.id!==id;});saveState();render();}
+function delTask(id){S.tasks=S.tasks.filter(function(t){return t.id!==id;});saveState();render();playSound('delete');vibrate(20);}
 
 // Agregar rápidamente una tarea elemental sugerida en Baja Energía
 function addElementalTask(text){
@@ -7661,6 +7784,8 @@ function checkResetNotification(){
 
 
 var M={};
+var RM=null; // estado del popup de recordatorio independiente (openReminderPopup)
+var _tabHistorySuspended=false; // evita volver a apilar historial cuando el cambio de pestaña viene de "atrás"
 function openNew(period){
   // Check if creation is currently blocked for this period
   var blockUntil=S.taskBlocks[period];
@@ -7721,10 +7846,10 @@ function showTaskModal(){
   overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('task-modal');});
   function clItemsHTML(){
     return M.checklist.map(function(item){
-      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'+
-        '<div style="width:16px;height:16px;border-radius:5px;border:'+(item.done?'2px solid var(--accent)':'2px solid var(--muted-soft)')+';background:'+(item.done?'var(--accent)':'var(--paper)')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="mToggleCLItem(\''+item.id+'\')">'+( item.done?miniChkSVG():'')+'</div>'+
-        '<input value="'+esc(item.text)+'" placeholder="Ítem..." oninput="mUpdateCL(\''+item.id+'\',this.value)" style="flex:1;border:none;border-bottom:1px solid var(--line);outline:none;font-size:13px;background:transparent;padding:2px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
-        '<button onclick="mRemoveCL(\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:15px;line-height:1;">×</button>'+
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
+        '<div style="width:22px;height:22px;border-radius:6px;border:'+(item.done?'2px solid var(--accent)':'2px solid var(--muted-soft)')+';background:'+(item.done?'var(--accent)':'var(--paper)')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="mToggleCLItem(\''+item.id+'\')">'+( item.done?miniChkSVG():'')+'</div>'+
+        '<input value="'+esc(item.text)+'" placeholder="Ítem..." oninput="mUpdateCL(\''+item.id+'\',this.value)" style="flex:1;border:none;border-bottom:1px solid var(--line);outline:none;font-size:15px;background:transparent;padding:4px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+        '<button onclick="mRemoveCL(\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:18px;line-height:1;">×</button>'+
       '</div>';
     }).join('');
   }
@@ -7751,65 +7876,55 @@ function showTaskModal(){
     '<label class="flbl">Nombre</label>'+
     '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..."/>'+
     (M.isNew?'<button onclick="fillGenericTask()" style="background:none;border:1.5px dashed var(--line);border-radius:8px;width:100%;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;margin:-6px 0 12px;display:flex;align-items:center;justify-content:center;gap:6px;">🎲 Generar tarea genérica</button>':'')+
-    // Categoría (solo tareas diarias) — va antes que "Más opciones" porque se usa seguido
-    (isDay?'<div class="fsec">'+
-      '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Categoría</div>'+
-      '<div id="m-cat-chips" style="display:flex;flex-wrap:wrap;gap:6px;">'+
-        '<button onclick="mSetCategory(null)" style="padding:5px 11px;border:1.5px solid '+(!M.categoryId?'var(--accent)':'var(--line)')+';background:'+(!M.categoryId?'var(--accent-bg)':'transparent')+';color:'+(!M.categoryId?'var(--accent)':'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Sin categoría</button>'+
-        (S.categories||[]).map(function(c){
-          var on = M.categoryId===c.id;
-          return '<button onclick="mSetCategory(\''+c.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?c.color:'var(--line)')+';background:'+(on?c.color+'22':'transparent')+';color:'+(on?c.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
-        }).join('')+
-        '<button onclick="openNewCategoryFromModal()" style="padding:5px 11px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>'+
-      '</div>'+
-    '</div>':'')+
     // Crucial (solo tareas diarias) — antes solo se podía marcar después de
     // guardar, desde el menú ⋯ de la tarea; mToggleCrucial() ya existía pero
-    // no tenía botón en el modal. Va junto a Categoría porque es de uso
-    // frecuente, antes de "Más opciones".
+    // no tenía botón en el modal. Va justo después del nombre por ser de uso
+    // frecuente.
     (isDay?'<div class="frow" style="margin:2px 0 14px;">'+
       '<span style="font-size:13px;font-weight:600;color:var(--ink);">⭐ Tarea crucial</span>'+
       '<button class="tog" id="m-crucial-tog" onclick="mToggleCrucial()" style="background:'+(M.crucial?'var(--accent)':'var(--muted-soft)')+';">'+
         '<span class="tok" style="left:'+(M.crucial?22:2)+'px;"></span>'+
       '</button>'+
     '</div>':'')+
-    // ── Más opciones (colapsable): Cantidad + Checklist interno ─────────────
-    // Se usan con menos frecuencia que nombre/categoría — ocultarlas por
-    // defecto hace que agregar una tarea simple sea más rápido y menos denso.
-    // Se auto-expanden si la tarea ya las tenía activas al editar.
-    '<button type="button" onclick="mToggleMore()" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:4px 0 10px;">'+
-      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Más opciones'+((M.hasQty||M.hasCL||M.hora)&&!M.moreOpen?' · en uso':'')+'</span>'+
-      '<span id="m-more-chev" style="font-size:13px;color:var(--accent);font-weight:700;transition:transform .2s;transform:'+(M.moreOpen?'rotate(180deg)':'none')+';">▾</span>'+
+    // Cantidad — visible fuera de "Más opciones" por ser de uso frecuente,
+    // justo debajo de Tarea crucial. Sin box oscuro, igual que Tarea crucial.
+    '<div class="frow" style="margin:2px 0 14px;">'+
+      '<span style="font-size:13px;font-weight:600;color:var(--ink);">Definir cantidad específica</span>'+
+      '<button class="tog" id="m-qty-tog" onclick="mToggleQty()" style="background:'+(M.hasQty?'var(--accent)':'var(--muted-soft)')+';">'+
+        '<span class="tok" style="left:'+(M.hasQty?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+    (M.hasQty?'<div id="m-qty-area" style="margin:-6px 0 14px;">'+
+      '<div style="display:flex;align-items:center;margin-bottom:'+(M.isNew?0:8)+'px;">'+
+        '<span style="font-size:12px;color:var(--muted);flex:1;">Meta total</span>'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<button class="qb" onclick="mChangeQty(-1)">−</button>'+
+          '<span id="m-qty-val" style="font-size:16px;font-weight:700;min-width:28px;text-align:center;">'+M.qty+'</span>'+
+          '<button class="qb" onclick="mChangeQty(1)">+</button>'+
+        '</div>'+
+      '</div>'+
+      (!M.isNew?'<div style="display:flex;align-items:center;">'+
+        '<span style="font-size:12px;color:var(--muted);flex:1;">Progreso actual</span>'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<button class="qb" onclick="mChangeProg(-1)">−</button>'+
+          '<span id="m-prog-val" style="font-size:16px;font-weight:700;min-width:28px;text-align:center;">'+(t.prog||0)+'</span>'+
+          '<button class="qb" onclick="mChangeProg(1)">+</button>'+
+        '</div>'+
+      '</div>':'')+
+    '</div>':'<div id="m-qty-area" style="display:none;"></div>')+
+    // ── Más opciones (colapsable, solo tareas diarias): Horario + Fecha +
+    // Checklist van todas dentro de un mismo box oscuro (una sola fsec);
+    // Categoría queda en su propio box separado porque es de otra naturaleza.
+    // Se usan con menos frecuencia que nombre/crucial/cantidad — ocultarlas
+    // por defecto hace que agregar una tarea simple sea más rápido y menos
+    // denso. Se auto-expanden si la tarea ya las tenía activas al editar.
+    (isDay?'<button type="button" onclick="mToggleMore()" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:4px 0 10px;">'+
+      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Más opciones'+((M.hasCL||M.hora)&&!M.moreOpen?' · en uso':'')+'</span>'+
+      '<span id="m-more-chev" style="font-size:20px;color:var(--accent);font-weight:700;line-height:.6;transition:transform .2s;transform:'+(M.moreOpen?'rotate(180deg)':'none')+';">▾</span>'+
     '</button>'+
     '<div id="m-more-area" style="display:'+(M.moreOpen?'block':'none')+';">'+
     '<div class="fsec">'+
-      '<div class="frow" style="margin-bottom:'+(M.hasQty?12:0)+'px;">'+
-        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Tiene cantidad</span>'+
-        '<button class="tog" id="m-qty-tog" onclick="mToggleQty()" style="background:'+(M.hasQty?'var(--accent)':'var(--muted-soft)')+';">'+
-          '<span class="tok" style="left:'+(M.hasQty?22:2)+'px;"></span>'+
-        '</button>'+
-      '</div>'+
-      '<div id="m-qty-area" style="display:'+(M.hasQty?'block':'none')+';">'+
-        '<div style="display:flex;align-items:center;margin-bottom:'+(M.isNew?0:8)+'px;">'+
-          '<span style="font-size:12px;color:var(--muted);flex:1;">Meta total</span>'+
-          '<div style="display:flex;align-items:center;gap:10px;">'+
-            '<button class="qb" onclick="mChangeQty(-1)">−</button>'+
-            '<span id="m-qty-val" style="font-size:16px;font-weight:700;min-width:28px;text-align:center;">'+M.qty+'</span>'+
-            '<button class="qb" onclick="mChangeQty(1)">+</button>'+
-          '</div>'+
-        '</div>'+
-        (!M.isNew?'<div style="display:flex;align-items:center;">'+
-          '<span style="font-size:12px;color:var(--muted);flex:1;">Progreso actual</span>'+
-          '<div style="display:flex;align-items:center;gap:10px;">'+
-            '<button class="qb" onclick="mChangeProg(-1)">−</button>'+
-            '<span id="m-prog-val" style="font-size:16px;font-weight:700;min-width:28px;text-align:center;">'+(t.prog||0)+'</span>'+
-            '<button class="qb" onclick="mChangeProg(1)">+</button>'+
-          '</div>'+
-        '</div>':'')+
-      '</div>'+
-    '</div>'+
-    // Hora (solo tareas diarias) — para poder verlas ordenadas en Plan → Horario
-    (isDay?'<div class="fsec">'+
+      // Hora — para poder verlas ordenadas en Plan → Horario
       '<div class="frow" style="margin-bottom:'+(M.hora?10:0)+'px;">'+
         '<span style="font-size:13px;font-weight:600;color:var(--ink);">Definir horario específico</span>'+
         '<button class="tog" id="m-hora-tog" onclick="mToggleHora()" style="background:'+(M.hora?'var(--accent)':'var(--muted-soft)')+';">'+
@@ -7855,7 +7970,7 @@ function showTaskModal(){
         '</div>'+
         '<div id="m-notif-area" style="display:'+(M.notif&&M.notif.on?'block':'none')+';">'+
           '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">00:00 avisa justo a la hora de la tarea. Requiere que hayas activado los permisos de notificación en Yo → Más ajustes.</div>'+
-          '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:12px;">'+
+          '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--paper);border-radius:12px;padding:12px;">'+
             '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
               '<button type="button" onclick="mNudgeNotifHH(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
               '<span id="m-notif-hh-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String((M.notif&&M.notif.hh)||0).padStart(2,'0')+'</span>'+
@@ -7872,12 +7987,11 @@ function showTaskModal(){
           '</div>'+
         '</div>'+
       '</div>'+
-    '</div>':'')+
-    // Fecha específica (solo tareas diarias) — tarea puntual para un solo día
-    // en vez de recurrente cada semana.
-    (isDay?'<div class="fsec">'+
+      '<div style="height:1px;background:var(--line-soft);margin:14px 0;"></div>'+
+      // Fecha específica — tarea puntual para un solo día en vez de recurrente
+      // cada semana.
       '<div class="frow" style="margin-bottom:'+(M.hasDate?10:0)+'px;">'+
-        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Fecha específica (no recurrente)</span>'+
+        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Fecha específica</span>'+
         '<button class="tog" id="m-date-tog" onclick="mToggleDate()" style="background:'+(M.hasDate?'var(--accent)':'var(--muted-soft)')+';">'+
           '<span class="tok" style="left:'+(M.hasDate?22:2)+'px;"></span>'+
         '</button>'+
@@ -7886,9 +8000,8 @@ function showTaskModal(){
         '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Esta tarea aparecerá solo ese día — no se repite todas las semanas.</div>'+
         '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\',true)" style="cursor:pointer;" value="'+(M.task.date||'')+'"/>'+
       '</div>'+
-    '</div>':'')+
-    // Checklist only for "dia" period
-    (isDay?'<div class="fsec">'+
+      '<div style="height:1px;background:var(--line-soft);margin:14px 0;"></div>'+
+      // Checklist interno
       '<div class="frow" style="margin-bottom:'+(M.hasCL?12:0)+'px;">'+
         '<span style="font-size:13px;font-weight:600;color:var(--ink);">Checklist interno</span>'+
         '<button class="tog" id="m-cl-tog" onclick="mToggleCLSection()" style="background:'+(M.hasCL?'var(--accent)':'var(--muted-soft)')+';">'+
@@ -7897,10 +8010,22 @@ function showTaskModal(){
       '</div>'+
       '<div id="m-cl-area" style="display:'+(M.hasCL?'block':'none')+';">'+
         '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
-        '<button onclick="mAddCL()" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:2px 0;">+ Agregar ítem</button>'+
+        '<button onclick="mAddCL()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px 0;">+ Agregar ítem</button>'+
       '</div>'+
-    '</div>':'')+
     '</div>'+
+    // Categoría — box separado, distinto en naturaleza a lo anterior
+    '<div class="fsec">'+
+      '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Categoría</div>'+
+      '<div id="m-cat-chips" style="display:flex;flex-wrap:wrap;gap:6px;">'+
+        '<button onclick="mSetCategory(null)" style="padding:5px 11px;border:1.5px solid '+(!M.categoryId?'var(--accent)':'var(--line)')+';background:'+(!M.categoryId?'var(--accent-bg)':'transparent')+';color:'+(!M.categoryId?'var(--accent)':'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Sin categoría</button>'+
+        (S.categories||[]).map(function(c){
+          var on = M.categoryId===c.id;
+          return '<button onclick="mSetCategory(\''+c.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?c.color:'var(--line)')+';background:'+(on?c.color+'22':'transparent')+';color:'+(on?c.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
+        }).join('')+
+        '<button onclick="openNewCategoryFromModal()" style="padding:5px 11px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>'+
+      '</div>'+
+    '</div>'+
+    '</div>':'')+
     '<div style="display:flex;gap:8px;margin-top:4px;">'+
       '<button class="sbtn" onclick="mSave()">'+(M.isNew?'Crear':'Guardar')+'</button>'+
       '<button class="cbtn" onclick="removeOverlay(\'task-modal\')">Cancelar</button>'+
@@ -7925,6 +8050,7 @@ function mToggleDate(){
   if(tog) tog.style.background = M.hasDate?'var(--accent)':'var(--muted-soft)';
   if(tok) tok.style.left = M.hasDate?'22px':'2px';
   var inp=document.getElementById('m-date-input'); if(inp) inp.value = M.task.date||'';
+  playSound('toggle');
 }
 // ── Time picker helpers (desde / hasta) ──────────────────────────────────────────────────────────────
 function mHoraTo12(hora24){
@@ -8074,6 +8200,7 @@ function mToggleHora(){
   // configuración por si el usuario reactiva la hora más adelante).
   var notifBlock = document.getElementById('m-notif-block');
   if(notifBlock) notifBlock.style.display = M.hora ? 'block' : 'none';
+  playSound('toggle');
 }
 function mSetDuracion(min){
   M.duracion = Math.max(5, Math.min(1440, min||60));
@@ -8089,6 +8216,7 @@ function mToggleNotif(){
   var area = document.getElementById('m-notif-area');
   if(tog){ tog.style.background = M.notif.on?'var(--accent)':'var(--muted-soft)'; var k=tog.querySelector('.tok'); if(k)k.style.left=(M.notif.on?22:2)+'px'; }
   if(area) area.style.display = M.notif.on?'block':'none';
+  playSound('toggle');
 }
 function mNudgeNotifHH(delta){
   if(!M.notif) M.notif = {on:true, hh:0, mm:15};
@@ -8106,6 +8234,7 @@ function mToggleCrucial(){
   M.crucial=!M.crucial;
   var tog=document.getElementById('m-crucial-tog');
   if(tog){tog.style.background=M.crucial?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(M.crucial?22:2)+'px';}
+  if(M.crucial){ playSound('crucial'); vibrate(15); }
 }
 function openNewCategoryFromModal(){
   // Modal rápido para crear categoría desde el modal de tarea
@@ -8180,6 +8309,7 @@ function mToggleQty(){
   if(tog){tog.style.background=M.hasQty?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(M.hasQty?22:2)+'px';}
   if(area)area.style.display=M.hasQty?'block':'none';
   var v=document.getElementById('m-qty-val');if(v)v.textContent=M.qty;
+  playSound('toggle');
 }
 function mChangeQty(d){M.qty=Math.max(2,M.qty+d);var v=document.getElementById('m-qty-val');if(v)v.textContent=M.qty;}
 function mChangeProg(d){M.task.prog=Math.max(0,Math.min(M.qty,(M.task.prog||0)+d));var v=document.getElementById('m-prog-val');if(v)v.textContent=M.task.prog;}
@@ -8189,11 +8319,12 @@ function mToggleCLSection(){
   var tog=document.getElementById('m-cl-tog'),area=document.getElementById('m-cl-area');
   if(tog){tog.style.background=M.hasCL?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(M.hasCL?22:2)+'px';}
   if(area){area.style.display=M.hasCL?'block':'none';mRerenderCL();}
+  playSound('toggle');
 }
 function mAddCL(){M.checklist.push({id:uid(),text:'',done:false});mRerenderCL();}
 function mRemoveCL(id){M.checklist=M.checklist.filter(function(i){return i.id!==id;});mRerenderCL();}
 function mUpdateCL(id,val){for(var i=0;i<M.checklist.length;i++){if(M.checklist[i].id===id){M.checklist[i].text=val;break;}}}
-function mToggleCLItem(id){for(var i=0;i<M.checklist.length;i++){if(M.checklist[i].id===id){M.checklist[i].done=!M.checklist[i].done;break;}}mRerenderCL();}
+function mToggleCLItem(id){for(var i=0;i<M.checklist.length;i++){if(M.checklist[i].id===id){M.checklist[i].done=!M.checklist[i].done;playSound('tick');break;}}mRerenderCL();}
 function mRerenderCL(){
   var area=document.getElementById('m-cl-items');if(!area)return;
   area.innerHTML=M.checklist.map(function(item){
@@ -8271,6 +8402,7 @@ function mSave(){
   var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,links:M.links,crucial:isDay?!!M.crucial:false,linkMode:M.linkMode||'unit',categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved});
   if(M.isNew){S.tasks.push(saved);}else{S.tasks=S.tasks.map(function(t){return t.id===saved.id?saved:t;});}
   removeOverlay('task-modal');saveState();checkMedals();render();
+  playSound(M.isNew?'add':'toggle');
 }
 function removeOverlay(id){
   var el=document.getElementById(id);
@@ -8338,6 +8470,7 @@ function checkAndUnlockAchievement(days){
       addXP(xpBonus);
       saveState();
       setTimeout(function(){
+        playSound('achievement');
         showRewardToast('🏆 '+getAchievementName(days).title, '+'+xpBonus+' XP');
       }, 500);
     }
@@ -8532,6 +8665,8 @@ function trackVisit(){
 }
 
 function showStreakAchieved(days,bonus){
+  playSound('streak');
+  vibrate([25,40,25]);
   var box=document.createElement('div');
   box.className='lvl-up';box.id='streak-modal';
   var milestone='';
@@ -9118,6 +9253,87 @@ function nudgeNotifMM(delta){
   scheduleNotifications();
 }
 
+// ── Recordatorio independiente (desde el menú ⋯ de una tarea) ──────────────
+// A diferencia del recordatorio dentro de "Editar tarea" (que exige activar
+// "Definir horario específico" y avisa X tiempo ANTES de esa hora), este se
+// pone directamente desde el menú ⋯ de la tarea, sin requerir horario, y
+// guarda una hora exacta de aviso (t.reminder.time = 'HH:MM').
+function openReminderPopup(id){
+  var t = S.tasks.find(function(x){return x.id===id;});
+  if(!t) return;
+  var existing = (t.reminder && t.reminder.time) ? t.reminder.time.split(':') : null;
+  RM = {taskId:id, hh: existing?parseInt(existing[0],10):9, mm: existing?parseInt(existing[1],10):0};
+  renderReminderPopup();
+}
+function renderReminderPopup(){
+  removeOverlay('reminder-modal');
+  var t = S.tasks.find(function(x){return x.id===RM.taskId;});
+  if(!t) return;
+  var hasExisting = !!(t.reminder && t.reminder.time);
+  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='reminder-modal';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('reminder-modal');});
+  overlay.innerHTML='<div class="sheet" style="max-width:340px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<span class="serif" style="font-weight:700;font-size:18px;">🔔 Recordatorio</span>'+
+      '<button onclick="removeOverlay(\'reminder-modal\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Elige la hora a la que quieres recibir un aviso para "'+esc(t.text)+'". No es necesario que la tarea tenga un horario específico.</div>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;">'+
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+        '<button type="button" onclick="rmNudgeHH(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
+        '<span id="rm-hh-val" style="font-size:20px;font-weight:800;color:var(--ink);min-width:38px;text-align:center;font-variant-numeric:tabular-nums;">'+String(RM.hh).padStart(2,'0')+'</span>'+
+        '<button type="button" onclick="rmNudgeHH(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
+        '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">hora</span>'+
+      '</div>'+
+      '<span style="font-size:20px;font-weight:800;color:var(--muted-soft);">:</span>'+
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+        '<button type="button" onclick="rmNudgeMM(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
+        '<span id="rm-mm-val" style="font-size:20px;font-weight:800;color:var(--ink);min-width:38px;text-align:center;font-variant-numeric:tabular-nums;">'+String(RM.mm).padStart(2,'0')+'</span>'+
+        '<button type="button" onclick="rmNudgeMM(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
+        '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" onclick="saveReminder()">Guardar</button>'+
+      (hasExisting?'<button class="cbtn" onclick="removeReminder()" style="color:var(--bad);">Quitar</button>':'<button class="cbtn" onclick="removeOverlay(\'reminder-modal\')">Cancelar</button>')+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(overlay);
+}
+function rmNudgeHH(delta){
+  if(!RM) return;
+  RM.hh = ((RM.hh + delta) % 24 + 24) % 24;
+  var el=document.getElementById('rm-hh-val'); if(el) el.textContent=String(RM.hh).padStart(2,'0');
+}
+function rmNudgeMM(delta){
+  if(!RM) return;
+  RM.mm = ((RM.mm + delta) % 60 + 60) % 60;
+  var el=document.getElementById('rm-mm-val'); if(el) el.textContent=String(RM.mm).padStart(2,'0');
+}
+function saveReminder(){
+  if(!RM) return;
+  var t = S.tasks.find(function(x){return x.id===RM.taskId;});
+  if(!t){ RM=null; return; }
+  t.reminder = {time: String(RM.hh).padStart(2,'0')+':'+String(RM.mm).padStart(2,'0')};
+  saveState();
+  scheduleNotifications();
+  removeOverlay('reminder-modal');
+  toast('🔔 Recordatorio guardado');
+  RM=null;
+  render();
+}
+function removeReminder(){
+  if(!RM) return;
+  var t = S.tasks.find(function(x){return x.id===RM.taskId;});
+  if(t) delete t.reminder;
+  saveState();
+  scheduleNotifications();
+  removeOverlay('reminder-modal');
+  toast('Recordatorio eliminado');
+  RM=null;
+  render();
+}
+
 // ── Programador de notificaciones locales ──────────────────────────────────
 // Usa la Web Notifications API para agendar un aviso por cada tarea del día
 // que el usuario haya marcado explícitamente con "🔔 Recordatorio para esta
@@ -9133,13 +9349,13 @@ function scheduleNotifications(){
   if(S.notifPermission !== 'granted') return;
   if(typeof Notification === 'undefined') return;
   var today = todayIdx();
+  var now = new Date();
   // Solo tareas que el usuario activó explícitamente con "🔔 Recordatorio
   // para esta tarea" — ya no se avisa automáticamente para toda tarea con
   // hora definida, cada una se elige a propósito.
   var todayTasks = (S.tasks||[]).filter(function(t){
     return isTaskToday(t) && t.hora && t.notif && t.notif.on && !isDone(t);
   });
-  var now = new Date();
   todayTasks.forEach(function(t){
     var nt = t.notif || {hh:0, mm:15};
     var parts = t.hora.split(':');
@@ -9160,6 +9376,24 @@ function scheduleNotifications(){
       : 'En '+pre.trim()+': '+taskName;
     var timer = setTimeout(function(){
       new Notification('Gramifica', {body: body, icon: '/icon-192.png'});
+    }, msUntil);
+    _notifTimers.push(timer);
+  });
+  // Recordatorios independientes puestos desde el menú ⋯ (t.reminder.time),
+  // no requieren que la tarea tenga "horario específico" activado.
+  var reminderTasks = (S.tasks||[]).filter(function(t){
+    return isTaskToday(t) && t.reminder && t.reminder.time && !isDone(t);
+  });
+  reminderTasks.forEach(function(t){
+    var parts = t.reminder.time.split(':');
+    var h = parseInt(parts[0],10), m = parseInt(parts[1]||'0',10);
+    var alertTime = new Date();
+    alertTime.setHours(h, m, 0, 0);
+    var msUntil = alertTime - now;
+    if(msUntil < 0) return; // ya pasó hoy
+    var taskName = t.text;
+    var timer = setTimeout(function(){
+      new Notification('Gramifica', {body: 'Recordatorio: '+taskName, icon: '/icon-192.png'});
     }, msUntil);
     _notifTimers.push(timer);
   });
@@ -9213,18 +9447,46 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 
   var sx=0, sy=0, startTime=0;
   var dragging=false, axis=null; // null | 'x' | 'y'
+  var swipeMode=null; // null | 'hoy' | 'plan' | 'energia' — se fija en touchstart
 
   // Overlay de feedback visual durante el drag
   var ghost = document.createElement('div');
   ghost.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:9;opacity:0;transition:opacity .15s;display:flex;align-items:center;justify-content:center;font-size:40px;';
   document.body.appendChild(ghost);
 
-  function isHoy(){
-    return (S.tab==='hoy'||S.tab==='dia') && (S.interfaceLayout||'default')==='default';
+  function isDefaultLayout(){ return (S.interfaceLayout||'default')==='default'; }
+  function isHoy(){ return (S.tab==='hoy'||S.tab==='dia') && isDefaultLayout(); }
+  // Plan (Objetivos / Progreso / Horario) y Energía (Modos / Plantillas)
+  // también se pueden recorrer deslizando, igual que los días en Hoy.
+  function planSubtabs(){ return S.simpleMode ? ['objetivos','horario'] : ['objetivos','progreso','horario']; }
+  function energiaSubtabs(){ return ['modos','plantillas']; }
+  function currentSwipeMode(){
+    if(!isDefaultLayout()) return null;
+    if(S.tab==='hoy'||S.tab==='dia') return 'hoy';
+    if(S.tab==='plan'||S.tab==='objetivos'||S.tab==='progreso'||S.tab==='horario') return 'plan';
+    if(S.tab==='energia'||S.tab==='modos'||S.tab==='plantillas') return 'energia';
+    return null;
+  }
+  function currentSubtab(mode){
+    if(mode==='plan') return (S.tab==='progreso'&&!S.simpleMode)?'progreso':(S.tab==='horario')?'horario':'objetivos';
+    if(mode==='energia') return (S.tab==='plantillas')?'plantillas':'modos';
+    return null;
+  }
+  // Dentro de Plan → Horario hay una grilla que se desplaza horizontalmente
+  // por sí misma (ver id="horario-scroll-wrap"); si el gesto empieza ahí
+  // dejamos que sea un scroll normal en vez de cambiar de pestaña.
+  function startedOnHorarioScroll(target){
+    var wrap = document.getElementById('horario-scroll-wrap');
+    return !!(wrap && wrap.contains(target) && wrap.scrollWidth > wrap.clientWidth + 4);
   }
 
   c.addEventListener('touchstart', function(e){
-    if(!isHoy()) return;
+    swipeMode = currentSwipeMode();
+    if(!swipeMode) return;
+    if(swipeMode==='plan' && currentSubtab('plan')==='horario' && startedOnHorarioScroll(e.target)){
+      swipeMode = null; // dejar que la grilla scrollee normalmente
+      return;
+    }
     sx = e.touches[0].clientX;
     sy = e.touches[0].clientY;
     startTime = Date.now();
@@ -9234,7 +9496,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   }, {passive:true});
 
   c.addEventListener('touchmove', function(e){
-    if(!dragging||!isHoy()) return;
+    if(!dragging||!swipeMode) return;
     var dx = e.touches[0].clientX - sx;
     var dy = e.touches[0].clientY - sy;
 
@@ -9258,10 +9520,11 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     dragging = false;
     ghost.style.opacity = '0';
 
-    if(!isHoy() || axis !== 'x'){
+    if(!swipeMode || axis !== 'x'){
       c.style.transition = 'transform .2s ease';
       c.style.transform = '';
       axis = null;
+      swipeMode = null;
       return;
     }
 
@@ -9275,28 +9538,55 @@ if(S.notifPermission === 'granted') scheduleNotifications();
       c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
       c.style.transform = '';
       axis = null;
+      swipeMode = null;
       return;
     }
 
-    // Dirección y animación de salida
-    var goRight = dx > 0; // dedo hacia derecha = día anterior
-    var exitX = goRight ? '40%' : '-40%';
-    // Transición suave: fade + pequeño desplazamiento
+    // Si es Plan o Energía pero solo tienen 1-2 sub-pestañas, calculamos a
+    // cuál saltar; si el modo es 'hoy' seguimos con la lógica original de día.
+    var mode = swipeMode;
+    var goRight = dx > 0; // dedo hacia la derecha = ítem anterior (día/pestaña previa)
+    var nextSubtab = null;
+    if(mode==='plan' || mode==='energia'){
+      var subtabs = mode==='plan' ? planSubtabs() : energiaSubtabs();
+      var cur = currentSubtab(mode);
+      var idx = subtabs.indexOf(cur);
+      if(idx<0) idx=0;
+      if(subtabs.length<2){ // nada a donde ir — cancelar con rebote
+        c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
+        c.style.transform = '';
+        axis = null; swipeMode = null;
+        return;
+      }
+      var nextIdx = goRight ? (idx===0?subtabs.length-1:idx-1) : (idx===subtabs.length-1?0:idx+1);
+      nextSubtab = subtabs[nextIdx];
+    }
+
+    // Transición suave: fade + pequeño desplazamiento (misma animación para
+    // día, sub-pestañas de Plan y sub-pestañas de Energía)
     c.style.transition = 'transform .14s ease-out, opacity .14s';
     c.style.transform = 'translateX('+(goRight?'-8%':'8%')+')';
     c.style.opacity = '0';
 
     setTimeout(function(){
-      if(goRight){
-        S.day = S.day === 0 ? 6 : S.day - 1;
+      if(mode==='hoy'){
+        if(goRight){
+          S.day = S.day === 0 ? 6 : S.day - 1;
+        } else {
+          S.day = S.day === 6 ? 0 : S.day + 1;
+        }
+        c.style.transition = 'none';
+        c.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
+        c.style.opacity = '0';
+        c.scrollTop = 0;
+        render();
       } else {
-        S.day = S.day === 6 ? 0 : S.day + 1;
+        c.style.transition = 'none';
+        c.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
+        c.style.opacity = '0';
+        c.scrollTop = 0;
+        setTab(nextSubtab); // ya hace render() y toca el sonido de cambio de pestaña
       }
-      c.style.transition = 'none';
-      c.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
-      c.style.opacity = '0';
-      c.scrollTop = 0;
-      render();
       requestAnimationFrame(function(){
         requestAnimationFrame(function(){
           c.style.transition = 'transform .18s ease-out, opacity .16s';
@@ -9307,17 +9597,105 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     }, 130);
 
     axis = null;
+    swipeMode = null;
   }, {passive:true});
 
   // Limpiar si se cancela el touch
   c.addEventListener('touchcancel', function(){
     dragging = false;
     axis = null;
+    swipeMode = null;
     ghost.style.opacity = '0';
     c.style.transition = 'transform .2s ease';
     c.style.transform = '';
     c.style.opacity = '1';
   }, {passive:true});
+})();
+
+// ── Botón "atrás" del sistema (o gesto de volver) ───────────────────────────
+// Por defecto, en una SPA como esta, el botón físico/gesto de "atrás" del
+// celular sale directamente de la app: el navegador nunca se enteró de que
+// "cambiaste de pestaña" o "abriste un modal", porque todo eso pasa
+// reemplazando el HTML de la página en vez de navegar de verdad. Esto lo
+// arregla apoyándose en la History API:
+//   1) Cada modal/overlay que se agrega a <body> (editar tarea, confirmar
+//      eliminar, menús ⋯, etc.) empuja una entrada al historial. Si se cierra
+//      "a mano" (Guardar/Cancelar/click afuera), sincronizamos retrocediendo
+//      nosotros mismos para no dejar una entrada fantasma.
+//   2) Cada cambio de pestaña real (setTab) también empuja una entrada — ver
+//      más arriba.
+// Al presionar "atrás", primero se cierra el modal más reciente si hay uno
+// abierto; si no hay ninguno, se vuelve a la pestaña anterior. Solo cuando ya
+// no queda nada de esto en el historial de la app, "atrás" vuelve a hacer lo
+// de siempre (salir / volver a la página anterior fuera de la app).
+(function(){
+  var trackedModals = []; // pila de nodos <div> de modales/overlays abiertos
+  var handlingPop = false;   // true mientras cerramos algo en respuesta a "atrás"
+  var syntheticBack = false; // true cuando somos NOSOTROS quienes llamamos history.back()
+
+  function isTrackable(node){
+    // Cualquier elemento agregado directamente a <body> de aquí en adelante
+    // cuenta como "modal": overlays de tareas, confirmaciones, menús ⋯, hojas
+    // de opciones, animaciones de logro, etc. Los elementos permanentes
+    // (contenido, nav inferior, toast, splash, el "ghost" del swipe...) ya
+    // existían antes de empezar a observar, así que nunca disparan esto.
+    return node.nodeType === 1 && node.parentNode === document.body;
+  }
+
+  var mo = new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      if(m.addedNodes) m.addedNodes.forEach(function(node){
+        if(!isTrackable(node) || handlingPop) return;
+        try{ history.pushState({navModal:true}, ''); }catch(e){}
+        trackedModals.push(node);
+      });
+      if(m.removedNodes) m.removedNodes.forEach(function(node){
+        var idx = trackedModals.indexOf(node);
+        if(idx === -1) return;
+        var wasTop = idx === trackedModals.length - 1;
+        trackedModals.splice(idx, 1);
+        // Se cerró "a mano" (botón Guardar/Cancelar/tocar afuera). Si era el
+        // que estaba arriba de la pila, sincronizamos el historial
+        // retrocediendo nosotros para no dejar una entrada fantasma. Si no
+        // era el de arriba (p.ej. una animación que se autodestruye mientras
+        // hay otro modal abierto encima), no tocamos el historial para no
+        // cerrar el modal equivocado.
+        if(!handlingPop && wasTop){
+          syntheticBack = true;
+          try{ history.back(); }catch(e){ syntheticBack = false; }
+        }
+      });
+    });
+  });
+  mo.observe(document.body, {childList:true});
+
+  function closeTopModal(){
+    var node = trackedModals[trackedModals.length-1];
+    if(!node) return;
+    handlingPop = true;
+    if(node.id){
+      // Reutiliza el mismo fade-out que ya usa el resto de la app para cerrar
+      try{ removeOverlay(node.id); }catch(e){ if(node.parentNode) node.remove(); }
+    } else if(node.parentNode){
+      node.remove();
+    }
+    trackedModals.pop();
+    setTimeout(function(){ handlingPop = false; }, 220);
+  }
+
+  window.addEventListener('popstate', function(e){
+    if(syntheticBack){ syntheticBack = false; return; }
+    if(trackedModals.length){
+      closeTopModal();
+      return;
+    }
+    var targetTab = (e.state && e.state.navTab) ? e.state.navTab : 'hoy';
+    if(targetTab !== S.tab){
+      _tabHistorySuspended = true;
+      setTab(targetTab);
+      _tabHistorySuspended = false;
+    }
+  });
 })();
 loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
 // BUGFIX: trackVisit() existía pero nunca se invocaba desde ningún lado, así
