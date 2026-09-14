@@ -622,6 +622,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </div>
+  <div id="sel-bar" style="display:none;position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1.5px solid var(--line);z-index:850;padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom));align-items:center;gap:8px;box-shadow:0 -4px 16px rgba(0,0,0,.1);"></div>
 </div>
 <script>
 // ════════════════════════════════════════════════════════════════════════════
@@ -2281,6 +2282,206 @@ function setTab(t){
 }
 
 
+// ── Selección múltiple (mantener presionado) ────────────────────────────────
+// Mantener presionado un ítem seleccionable (tarea, proyecto, o modo) entra en
+// "modo selección": aparece una casilla en cada ítem del mismo tipo y una
+// barra inferior con acciones en lote (eliminar, categoría, mover de día...
+// según el tipo). Una vez dentro, un toque normal alterna la selección sin
+// tener que volver a mantener presionado.
+var SEL = {active:false, type:null, ids:[]};
+var _selLpTimer = null, _selLpX = 0, _selLpY = 0, _selLpFired = false;
+
+function selLpStart(type, id, ev){
+  if(SEL.active) return; // ya en modo selección: el tap normal decide (ver taskHTMLSelectable, etc.)
+  var p = (ev.touches && ev.touches[0]) || ev;
+  _selLpX = p.clientX; _selLpY = p.clientY;
+  _selLpFired = false;
+  clearTimeout(_selLpTimer);
+  _selLpTimer = setTimeout(function(){
+    _selLpFired = true;
+    enterSelectMode(type, id);
+  }, 480);
+}
+function selLpMove(ev){
+  if(!_selLpTimer) return;
+  var p = (ev.touches && ev.touches[0]) || ev;
+  if(Math.abs(p.clientX-_selLpX)>10 || Math.abs(p.clientY-_selLpY)>10){
+    clearTimeout(_selLpTimer); _selLpTimer=null;
+  }
+}
+function selLpEnd(){
+  clearTimeout(_selLpTimer); _selLpTimer = null;
+}
+function enterSelectMode(type, firstId){
+  SEL.active = true; SEL.type = type; SEL.ids = [firstId];
+  playSound('toggle');
+  vibrate(15);
+  render();
+}
+function toggleSelect(type, id){
+  if(!SEL.active || SEL.type!==type) return;
+  var idx = SEL.ids.indexOf(id);
+  if(idx===-1) SEL.ids.push(id); else SEL.ids.splice(idx,1);
+  playSound('tick');
+  if(SEL.ids.length===0){ exitSelectMode(); return; }
+  render();
+}
+function exitSelectMode(){
+  SEL.active=false; SEL.type=null; SEL.ids=[];
+  render();
+}
+function selBarBtnStyle(color){
+  return 'background:none;border:1.5px solid var(--line);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;color:'+(color||'var(--ink-soft)')+';cursor:pointer;flex-shrink:0;';
+}
+function renderSelBar(){
+  var bar = document.getElementById('sel-bar');
+  if(!bar) return;
+  if(!SEL.active){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  var n = SEL.ids.length;
+  var actionsHTML = '';
+  var trashIcon = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>';
+  if(SEL.type==='tasks'){
+    var allDia = SEL.ids.every(function(id){
+      var t = S.tasks.find(function(x){return x.id===id;});
+      return t && t.period==='dia';
+    });
+    actionsHTML =
+      (allDia ? '<button onclick="selBulkSetCategory()" title="Asignar categoría" style="'+selBarBtnStyle()+'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 22H4v-7l9.41-9.41a2 2 0 0 1 2.83 0l4.35 4.35a2 2 0 0 1 0 2.83Z"/><path d="M7.5 7.5 3 3"/></svg></button>' : '')+
+      (allDia ? '<button onclick="selBulkMoveDay()" title="Mover a otro día" style="'+selBarBtnStyle()+'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>' : '')+
+      '<button onclick="selBulkDeleteTasks()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
+  } else if(SEL.type==='projects'){
+    actionsHTML = '<button onclick="selBulkDeleteProjects()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
+  } else if(SEL.type==='modes'){
+    actionsHTML = '<button onclick="selBulkDeleteModes()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
+  }
+  bar.innerHTML =
+    '<button onclick="exitSelectMode()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:2px 8px;line-height:1;flex-shrink:0;">×</button>'+
+    '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;">'+n+' seleccionada'+(n===1?'':'s')+'</span>'+
+    '<div style="display:flex;gap:6px;flex-shrink:0;">'+actionsHTML+'</div>';
+}
+
+// Acciones en lote — Tareas
+function selBulkDeleteTasks(){
+  var n = SEL.ids.length;
+  var box=document.createElement('div');box.className='conf-box';
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:8px;">Eliminar '+n+' tarea'+(n===1?'':'s')+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Esta acción no se puede deshacer.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="selBulkDeleteTasksConfirmed(this)">Eliminar</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function selBulkDeleteTasksConfirmed(btn){
+  var ids = SEL.ids.slice();
+  S.tasks = S.tasks.filter(function(t){return ids.indexOf(t.id)===-1;});
+  saveState();
+  playSound('delete'); vibrate(20);
+  var cb = btn.closest('.conf-box'); if(cb) cb.remove();
+  toast(ids.length+' tarea'+(ids.length===1?'':'s')+' eliminada'+(ids.length===1?'':'s'));
+  exitSelectMode();
+}
+function selBulkSetCategory(){
+  var cats = S.categories||[];
+  var box=document.createElement('div');box.className='conf-box';
+  var chipsHTML = '<button onclick="selBulkApplyCategory(null,this)" style="padding:7px 13px;border:1.5px solid var(--line);background:transparent;color:var(--muted);border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;margin:3px;">Sin categoría</button>'+
+    cats.map(function(c){
+      return '<button onclick="selBulkApplyCategory(\''+c.id+'\',this)" style="padding:7px 13px;border:1.5px solid '+c.color+';background:'+c.color+'22;color:'+c.color+';border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;margin:3px;">'+esc(c.name)+'</button>';
+    }).join('')+
+    '<button onclick="this.closest(\'.conf-box\').remove();openNewCategoryFromModal();" style="padding:7px 13px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;margin:3px;">+ Nueva</button>';
+  box.innerHTML='<div class="conf-inner">'+
+    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:6px;">Asignar categoría</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">A '+SEL.ids.length+' tarea'+(SEL.ids.length===1?'':'s')+' seleccionada'+(SEL.ids.length===1?'':'s')+'.</div>'+
+    '<div style="display:flex;flex-wrap:wrap;margin:-3px -3px 12px;">'+chipsHTML+'</div>'+
+    '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()" style="width:100%;">Cancelar</button>'+
+  '</div>';
+  document.body.appendChild(box);
+}
+function selBulkApplyCategory(catId, btn){
+  var ids = SEL.ids.slice();
+  var n = 0;
+  S.tasks.forEach(function(t){
+    if(ids.indexOf(t.id)!==-1 && t.period==='dia'){ t.categoryId = catId; n++; }
+  });
+  saveState();
+  playSound('toggle');
+  var cb = btn.closest('.conf-box'); if(cb) cb.remove();
+  toast(n+' tarea'+(n===1?'':'s')+' actualizada'+(n===1?'':'s'));
+  exitSelectMode();
+}
+function selBulkMoveDay(){
+  var box=document.createElement('div');box.className='conf-box';
+  var dayBtns = DAYS.map(function(d,i){
+    return '<button onclick="selBulkApplyDay('+i+',this)" style="padding:9px 4px;border:1.5px solid var(--line);background:var(--paper);border-radius:10px;font-size:11px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">'+d.slice(0,3)+'</button>';
+  }).join('');
+  box.innerHTML='<div class="conf-inner">'+
+    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:6px;">Mover a otro día</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">'+SEL.ids.length+' tarea'+(SEL.ids.length===1?'':'s')+' pasará'+(SEL.ids.length===1?'':'n')+' a recurrir ese día de la semana.</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px;">'+dayBtns+'</div>'+
+    '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()" style="width:100%;">Cancelar</button>'+
+  '</div>';
+  document.body.appendChild(box);
+}
+function selBulkApplyDay(dayIdx, btn){
+  var ids = SEL.ids.slice();
+  var n=0;
+  S.tasks.forEach(function(t){
+    if(ids.indexOf(t.id)!==-1 && t.period==='dia'){ t.day = dayIdx; n++; }
+  });
+  saveState();
+  playSound('toggle');
+  var cb = btn.closest('.conf-box'); if(cb) cb.remove();
+  toast(n+' tarea'+(n===1?'':'s')+' movida'+(n===1?'':'s')+' a '+DAYS[dayIdx]);
+  exitSelectMode();
+}
+
+// Acciones en lote — Proyectos
+function selBulkDeleteProjects(){
+  var n = SEL.ids.length;
+  var box=document.createElement('div');box.className='conf-box';
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:8px;">Eliminar '+n+' proyecto'+(n===1?'':'s')+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Esta acción no se puede deshacer.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="selBulkDeleteProjectsConfirmed(this)">Eliminar</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function selBulkDeleteProjectsConfirmed(btn){
+  var ids = SEL.ids.slice();
+  S.projects = (S.projects||[]).filter(function(p){return ids.indexOf(p.id)===-1;});
+  if(ids.indexOf(S.activeProjectId)!==-1) S.activeProjectId=null;
+  saveState();
+  playSound('delete'); vibrate(20);
+  var cb = btn.closest('.conf-box'); if(cb) cb.remove();
+  toast(ids.length+' proyecto'+(ids.length===1?'':'s')+' eliminado'+(ids.length===1?'':'s'));
+  exitSelectMode();
+}
+
+// Acciones en lote — Modos
+function selBulkDeleteModes(){
+  var n = SEL.ids.length;
+  var box=document.createElement('div');box.className='conf-box';
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:8px;">Eliminar '+n+' modo'+(n===1?'':'s')+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">Esta acción no se puede deshacer. Las plantillas asociadas (si tienen) no se borran.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="selBulkDeleteModesConfirmed(this)">Eliminar</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function selBulkDeleteModesConfirmed(btn){
+  var ids = SEL.ids.slice();
+  S.modes = (S.modes||[]).filter(function(m){return ids.indexOf(m.id)===-1;});
+  if(S.activeMode && S.activeMode.type==='custom' && ids.indexOf(S.activeMode.id)!==-1) S.activeMode=null;
+  saveState();
+  playSound('delete'); vibrate(20);
+  var cb = btn.closest('.conf-box'); if(cb) cb.remove();
+  toast(ids.length+' modo'+(ids.length===1?'':'s')+' eliminado'+(ids.length===1?'':'s'));
+  exitSelectMode();
+}
+
 function render(){
   // BUGFIX CRÍTICO: renderV2Header() corre en TODO render(), sin importar la
   // pestaña — si algo ahí lanza una excepción (encabezado con datos
@@ -2304,6 +2505,15 @@ function render(){
   // FAB secundario de reinicio — solo en modo simplificado, si está habilitado
   var fabReset = document.getElementById('fab-reset');
   if(fabReset) fabReset.style.display = (fabVisible && S.simpleMode && S.simpleModeFabReset) ? 'flex' : 'none';
+
+  // Modo selección múltiple: la barra de acciones en lote reemplaza al nav
+  // inferior y al FAB mientras está activa, para no competir por espacio ni
+  // permitir acciones normales a medio camino de una selección.
+  renderSelBar();
+  if(SEL.active){
+    if(bottomNav) bottomNav.style.display = 'none';
+    if(fabWrap) fabWrap.style.display = 'none';
+  }
 
   // BUGFIX CRÍTICO: antes, si renderProyectosTab()/renderEnergiaV2()/renderYo()
   // lanzaban una excepción a mitad de camino (por ejemplo por datos guardados
@@ -2972,7 +3182,22 @@ function renderEnergySimple(){
   } else {
     userModes.forEach(function(m){
       var isActive = S.activeMode&&S.activeMode.type==='custom'&&S.activeMode.id===m.id;
-      html += '<div class="card" style="margin-bottom:8px;border-color:'+(isActive?'var(--accent)':'var(--line)')+';">'+
+      if(SEL.active && SEL.type==='modes'){
+        var checked = SEL.ids.indexOf(m.id)!==-1;
+        html += '<div onclick="toggleSelect(\'modes\',\''+m.id+'\')" class="card" style="margin-bottom:8px;cursor:pointer;border-color:'+(checked?'var(--accent)':'var(--line)')+';background:'+(checked?'var(--accent-bg)':'var(--paper)')+';">'+
+          '<div style="display:flex;align-items:center;gap:10px;">'+
+            '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(checked?'var(--accent)':'var(--muted-soft)')+';background:'+(checked?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(checked?chkSVG():'')+'</div>'+
+            '<span style="font-size:20px;">'+m.icon+'</span>'+
+            '<div style="flex:1;min-width:0;">'+
+              '<div style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(m.name)+'</div>'+
+              '<div style="font-size:11px;color:var(--muted);">'+(m.maxTasks||5)+' tareas · umbral '+(m.lowThresh?Math.round(m.lowThresh*100)+'%':'—')+'</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+        return;
+      }
+      var lpAttrs = 'ontouchstart="selLpStart(\'modes\',\''+m.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'modes\',\''+m.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()"';
+      html += '<div class="card" '+lpAttrs+' style="margin-bottom:8px;border-color:'+(isActive?'var(--accent)':'var(--line)')+';">'+
         '<div style="display:flex;align-items:center;gap:10px;">'+
           '<span style="font-size:22px;">'+m.icon+'</span>'+
           '<div style="flex:1;min-width:0;">'+
@@ -2994,8 +3219,11 @@ function renderEnergySimple(){
     });
   }
 
-  // Botón crear modo — siempre visible (bloqueado si se superó el límite del plan)
-  if(canCreateMode){
+  // Botón crear modo — siempre visible (bloqueado si se superó el límite del
+  // plan), salvo mientras se está seleccionando en lote.
+  if(SEL.active && SEL.type==='modes'){
+    // oculto: no competir con la barra de acciones en lote
+  } else if(canCreateMode){
     html += '<button onclick="openNewMode()" style="width:100%;background:none;border:1.5px dashed var(--accent);border-radius:12px;padding:12px;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;">'+
       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'+
       'Diseñar modo personalizado'+
@@ -3592,8 +3820,19 @@ function renderProyectosTab(){
       (p.sections||[]).forEach(function(s){ countLeafs(s.tasks||[]); });
       var pct = total ? Math.round(done/total*100) : 0;
       var secCount = (p.sections||[]).length;
+      if(SEL.active && SEL.type==='projects'){
+        var checked = SEL.ids.indexOf(p.id)!==-1;
+        html += '<div onclick="toggleSelect(\'projects\',\''+p.id+'\')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:'+(checked?'var(--accent-bg)':'var(--paper)')+';border:1px solid '+(checked?'var(--accent)':'var(--line)')+';border-radius:14px;cursor:pointer;margin-bottom:8px;border-left:4px solid '+p.color+';">'+
+          '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(checked?'var(--accent)':'var(--muted-soft)')+';background:'+(checked?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(checked?chkSVG():'')+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(p.name)+'</div>'+
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+secCount+' sección'+(secCount===1?'':'es')+' · '+total+' tarea'+(total===1?'':'s')+'</div>'+
+          '</div>'+
+        '</div>';
+        return;
+      }
       html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
-        '<div onclick="openProjectView(\''+p.id+'\')" style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:14px;cursor:pointer;border-left:4px solid '+p.color+';transition:opacity .12s;" ontouchstart="this.style.opacity=.7" ontouchend="this.style.opacity=1">'+
+        '<div onclick="openProjectView(\''+p.id+'\')" ontouchstart="this.style.opacity=.7;selLpStart(\'projects\',\''+p.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="this.style.opacity=1;selLpEnd()" ontouchcancel="this.style.opacity=1;selLpEnd()" onmousedown="selLpStart(\'projects\',\''+p.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()" style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--paper);border:1px solid var(--line);border-radius:14px;cursor:pointer;border-left:4px solid '+p.color+';transition:opacity .12s;">'+
         // Anillo de progreso compacto (30px)
         '<div style="flex-shrink:0;position:relative;width:36px;height:36px;">'+
           '<svg viewBox="0 0 36 36" width="36" height="36">'+
@@ -3621,7 +3860,10 @@ function renderProyectosTab(){
     });
   }
 
-  if(can){
+  if(SEL.active && SEL.type==='projects'){
+    // El botón de crear proyecto se oculta durante la selección para no
+    // competir con la barra de acciones en lote.
+  } else if(can){
     html += '<button onclick="openNewProjectModal()" style="width:100%;background:var(--accent);color:white;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px;">'+
       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/></svg>'+
       'Nuevo proyecto'+
@@ -5541,6 +5783,7 @@ function miniChkSVG(){return '<svg width="9" height="7" viewBox="0 0 9 7" fill="
 function mpHTML(r,h){h=h||4;return '<div class="mpbar" style="height:'+h+'px"><div class="mpbar-fill" style="width:'+Math.min(100,Math.round(r*100))+'%;height:100%;"></div></div>';}
 
 function taskHTML(t,showPeriod){
+  if(SEL.active && SEL.type==='tasks') return taskHTMLSelectable(t,showPeriod);
   var done=isDone(t),r=tRatio(t);
   var hasQty=(t.qty||1)>1,hasCL=t.checklist&&t.checklist.length>0;
   var clDone=hasCL?t.checklist.filter(function(i){return i.done;}).length:0;
@@ -5565,7 +5808,11 @@ function taskHTML(t,showPeriod){
   var category = (t.period==='dia' && t.categoryId) ? (S.categories||[]).find(function(c){return c.id===t.categoryId;}) : null;
   var categoryTag = category ? '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:'+category.color+';color:white;font-weight:600;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;" title="Categoría">'+esc(category.name)+'</span>' : '';
   var horaTag = (t.period==='dia' && t.hora) ? '<span style="font-size:10px;padding:2px 6px;border-radius:10px;background:var(--accent-bg);color:var(--accent);font-weight:700;flex-shrink:0;" title="Hora">'+esc(t.hora)+'</span>' : '';
-  return '<div class="task-item'+(justPopped?' row-glow':'')+'" id="ti-'+t.id+'">'+
+  // Mantener presionado sobre la fila entra en modo de selección múltiple
+  // (ver SEL / selLpStart) — no interfiere con los toques normales, ya que
+  // solo dispara tras ~480ms sin moverse.
+  var lpAttrs = 'ontouchstart="selLpStart(\'tasks\',\''+t.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'tasks\',\''+t.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()"';
+  return '<div class="task-item'+(justPopped?' row-glow':'')+'" id="ti-'+t.id+'" '+lpAttrs+'>'+
     '<div class="task-row">'+
       '<div class="'+chkCls+'" onclick="tapTask(\''+t.id+'\')">'+innerChk+'</div>'+
       '<div style="flex:1;min-width:0;">'+
@@ -5587,6 +5834,25 @@ function taskHTML(t,showPeriod){
       // Botón ⋯ menú
       '<button onclick="openTaskMenu(\''+t.id+'\',event)" style="background:none;border:none;color:var(--muted);font-size:18px;padding:0 4px;flex-shrink:0;line-height:1;letter-spacing:1px;">⋯</button>'+
     '</div>'+clHTML+
+  '</div>';
+}
+// Fila simplificada mostrada mientras hay una selección múltiple de tareas en
+// curso: una sola casilla que alterna la selección, sin los botones normales
+// (editar, vincular, ⋯) para evitar acciones a medio camino de una selección.
+function taskHTMLSelectable(t,showPeriod){
+  var checked = SEL.ids.indexOf(t.id)!==-1;
+  var category = (t.period==='dia' && t.categoryId) ? (S.categories||[]).find(function(c){return c.id===t.categoryId;}) : null;
+  var categoryTag = category ? '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:'+category.color+';color:white;font-weight:600;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">'+esc(category.name)+'</span>' : '';
+  var tagHTML=showPeriod?'<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:'+(PC[t.period]||'var(--line)')+';color:var(--ink-soft);font-weight:600;flex-shrink:0;">'+PL[t.period]+'</span>':'';
+  return '<div class="task-item" id="ti-'+t.id+'" onclick="toggleSelect(\'tasks\',\''+t.id+'\')" style="cursor:pointer;background:'+(checked?'var(--accent-bg)':'transparent')+';border-radius:10px;">'+
+    '<div class="task-row">'+
+      '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(checked?'var(--accent)':'var(--muted-soft)')+';background:'+(checked?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(checked?chkSVG():'')+'</div>'+
+      '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">'+
+        (t.crucial?'<span class="crucial-star">★</span>':'')+
+        '<span style="font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">'+esc(t.text)+'</span>'+
+        categoryTag+tagHTML+
+      '</div>'+
+    '</div>'+
   '</div>';
 }
 
@@ -6751,9 +7017,28 @@ function openStreakCfg(){
         return '<button onclick="setStreakThr('+v+')" style="flex:1;padding:12px 6px;border-radius:10px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+v+'%</button>';
       }).join('')+
     '</div>'+
-    '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()" style="width:100%;">Cerrar</button>'+
+    '<div style="height:1px;background:var(--line-soft);margin:2px 0 16px;"></div>'+
+    '<div class="frow" style="margin-bottom:8px;">'+
+      '<div style="flex:1;padding-right:10px;">'+
+        '<div style="font-weight:600;font-size:13px;color:var(--ink);">Libre los fines de semana</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">No exige el umbral sábado ni domingo — retómalo el lunes y esos dos días se suman solos a tu racha, sin cortarla.</div>'+
+      '</div>'+
+      '<button class="tog" id="streak-weekend-tog" onclick="toggleStreakSkipWeekends()" style="background:'+(sc.skipWeekends?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(sc.skipWeekends?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+    '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()" style="width:100%;margin-top:10px;">Cerrar</button>'+
     '</div>';
   document.body.appendChild(box);
+}
+function toggleStreakSkipWeekends(){
+  if(!S.streakCfg) S.streakCfg={};
+  S.streakCfg.skipWeekends = !S.streakCfg.skipWeekends;
+  saveState();
+  playSound('toggle');
+  var tog=document.getElementById('streak-weekend-tog');
+  if(tog){tog.style.background=S.streakCfg.skipWeekends?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(S.streakCfg.skipWeekends?22:2)+'px';}
+  toast(S.streakCfg.skipWeekends ? '🌤️ Fines de semana libres de racha' : 'Fines de semana vuelven a contar para la racha');
 }
 function setStreakThr(v){
   S.streakCfg.threshold=v/100;
@@ -7894,8 +8179,8 @@ function showTaskModal(){
         '<span class="tok" style="left:'+(M.hasQty?22:2)+'px;"></span>'+
       '</button>'+
     '</div>'+
-    (M.hasQty?'<div id="m-qty-area" style="margin:-6px 0 14px;">'+
-      '<div style="display:flex;align-items:center;margin-bottom:'+(M.isNew?0:8)+'px;">'+
+    '<div id="m-qty-area" style="display:'+(M.hasQty?'block':'none')+';margin:-6px 0 14px;">'+
+      '<div style="display:flex;align-items:center;">'+
         '<span style="font-size:12px;color:var(--muted);flex:1;">Meta total</span>'+
         '<div style="display:flex;align-items:center;gap:10px;">'+
           '<button class="qb" onclick="mChangeQty(-1)">−</button>'+
@@ -7903,15 +8188,8 @@ function showTaskModal(){
           '<button class="qb" onclick="mChangeQty(1)">+</button>'+
         '</div>'+
       '</div>'+
-      (!M.isNew?'<div style="display:flex;align-items:center;">'+
-        '<span style="font-size:12px;color:var(--muted);flex:1;">Progreso actual</span>'+
-        '<div style="display:flex;align-items:center;gap:10px;">'+
-          '<button class="qb" onclick="mChangeProg(-1)">−</button>'+
-          '<span id="m-prog-val" style="font-size:16px;font-weight:700;min-width:28px;text-align:center;">'+(t.prog||0)+'</span>'+
-          '<button class="qb" onclick="mChangeProg(1)">+</button>'+
-        '</div>'+
-      '</div>':'')+
-    '</div>':'<div id="m-qty-area" style="display:none;"></div>')+
+      (!M.isNew?'<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">El avance se marca directamente tocando los tickets de la tarea, no aquí.</div>':'')+
+    '</div>'+
     // ── Más opciones (colapsable, solo tareas diarias): Horario + Fecha +
     // Checklist van todas dentro de un mismo box oscuro (una sola fsec);
     // Categoría queda en su propio box separado porque es de otra naturaleza.
@@ -8298,6 +8576,7 @@ function mSetCategory(id){
       var on = M.categoryId===c.id;
       html += '<button onclick="mSetCategory(\''+c.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?c.color:'var(--line)')+';background:'+(on?c.color+'22':'transparent')+';color:'+(on?c.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
     });
+    html += '<button onclick="openNewCategoryFromModal()" style="padding:5px 11px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>';
     catSection.innerHTML = html;
   } else {
     showTaskModal(); // fallback
@@ -8312,7 +8591,6 @@ function mToggleQty(){
   playSound('toggle');
 }
 function mChangeQty(d){M.qty=Math.max(2,M.qty+d);var v=document.getElementById('m-qty-val');if(v)v.textContent=M.qty;}
-function mChangeProg(d){M.task.prog=Math.max(0,Math.min(M.qty,(M.task.prog||0)+d));var v=document.getElementById('m-prog-val');if(v)v.textContent=M.task.prog;}
 function mToggleCLSection(){
   M.hasCL=!M.hasCL;
   if(M.hasCL&&M.checklist.length===0)M.checklist=[{id:uid(),text:'',done:false}];
@@ -8626,8 +8904,6 @@ function checkMedals(){
     if(m.check()){
       S.medals.push({id:m.id, dateUnlocked:new Date().toISOString()});
       changed = true;
-      // Primera medalla: mostrar mini-tutorial
-      if(S.medals.length === 1){ showFirstMedalTip(); }
       // Entregar recompensa (si tiene) y mostrar el modal de medalla desbloqueada
       // con la medallita animada + confeti, en vez de un simple toast de texto.
       if(m.reward){
@@ -8892,17 +9168,47 @@ function shareImage(days){
   }, 'image/png');
 }
 
-// On load: if last activity was 2+ days ago, reset streak
+// On load: if last activity was 2+ days ago, reset streak — salvo que se
+// haya activado "Libre los fines de semana" y el hueco sea puro sábado y
+// domingo, en cuyo caso esos días se auto-completan y la racha sigue viva.
 function checkStreakOnLoad(){
   if(!S.streak.lastDate)return;
   var last=new Date(S.streak.lastDate);
   var today=new Date(todayStr());
   var diff=Math.round((today-last)/86400000);
-  if(diff>=2){
-    // streak broken
-    S.streak={days:0,lastDate:S.streak.lastDate,total:S.streak.total||0};
-    saveState();
+  if(diff<2) return;
+
+  if(S.streakCfg && S.streakCfg.skipWeekends){
+    var businessGapDays = 0;
+    var weekendDays = [];
+    var cursor = new Date(last);
+    cursor.setDate(cursor.getDate()+1); // día siguiente al último registrado
+    while(cursor < today){
+      var dow = cursor.getDay(); // 0=domingo, 6=sábado
+      if(dow===0||dow===6) weekendDays.push(cursor.toISOString().slice(0,10));
+      else businessGapDays++;
+      cursor.setDate(cursor.getDate()+1);
+    }
+    if(businessGapDays===0 && weekendDays.length){
+      // El hueco fue solo fin de semana: se "rellenan" esos días como parte
+      // de la racha en vez de cortarla.
+      if(!S.dailyHistory) S.dailyHistory={};
+      weekendDays.forEach(function(ds){
+        S.dailyHistory[ds] = {ratio:1, completed:0, total:0, streakReached:true, weekendSkipped:true};
+      });
+      S.streak.days += weekendDays.length;
+      S.streak.total = (S.streak.total||0) + weekendDays.length;
+      S.streak.lastDate = weekendDays[weekendDays.length-1];
+      saveState();
+      return;
+    }
+    // Si hubo al menos un día hábil real sin actividad de por medio, la
+    // racha se evalúa igual que si la opción estuviera desactivada.
   }
+
+  // streak broken
+  S.streak={days:0,lastDate:S.streak.lastDate,total:S.streak.total||0};
+  saveState();
 }
 
 // ── Notificaciones (preguntar muy de a poco) ───────────────────────────────
@@ -8923,7 +9229,7 @@ function _ensureSpotlightDOM(){
   style.innerHTML = [
     '#sl-overlay{position:fixed;inset:0;z-index:9000;pointer-events:none;}',
     '#sl-cutout{position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.55);border-radius:12px;transition:all .35s cubic-bezier(.4,0,.2,1);}',
-    '#sl-tooltip{position:absolute;background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:18px 18px 14px;max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.25);transition:all .35s cubic-bezier(.4,0,.2,1);}',
+    '#sl-tooltip{position:absolute;background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:18px 18px 14px;max-width:260px;max-height:calc(100vh - 24px);overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.25);transition:left .35s cubic-bezier(.4,0,.2,1),top .35s cubic-bezier(.4,0,.2,1);}',
     '#sl-tooltip .sl-title{font-family:"Cormorant Garamond",serif;font-size:17px;font-weight:700;color:var(--ink);margin-bottom:6px;}',
     '#sl-tooltip .sl-body{font-size:12.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;}',
     '#sl-tooltip .sl-action{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:5px;}',
@@ -8947,8 +9253,22 @@ function _slPosition(step){
   if(!cutout||!tip) return;
 
   var PAD = 10;
+  var EDGE = 12; // margen mínimo respecto a los bordes de la pantalla
   var targetEl = step.target ? document.querySelector(step.target) : null;
-  var vw = window.innerWidth, vh = window.innerHeight;
+  // window.innerHeight no siempre refleja el alto realmente visible en
+  // celular (la barra de direcciones del navegador aparece/desaparece y lo
+  // desincroniza) — visualViewport es más confiable cuando está disponible.
+  var vw = (window.visualViewport ? window.visualViewport.width : window.innerWidth);
+  var vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+
+  // Medir el tooltip YA renderizado con su contenido real, en vez de asumir
+  // una altura fija — el texto de cada paso varía, y en pantallas chicas o
+  // con letra más grande (accesibilidad) puede ocupar bastante más de lo
+  // esperado. getBoundingClientRect() da el tamaño real sin importar dónde
+  // esté posicionado ahora mismo (max-width/max-height ya lo acotan).
+  var tipRect = tip.getBoundingClientRect();
+  var tipW = tipRect.width || 260;
+  var tipH = tipRect.height || 200;
 
   if(targetEl){
     var r = targetEl.getBoundingClientRect();
@@ -8960,21 +9280,34 @@ function _slPosition(step){
     pulse.style.display = 'block';
     pulse.style.left = (r.left + r.width/2 - 18)+'px';
     pulse.style.top  = (r.top + r.height/2 - 18)+'px';
-    // Tooltip debajo o arriba según espacio
-    var tipH = 200;
-    if(r.bottom + tipH + 20 < vh){
-      tip.style.top  = (r.bottom + 14)+'px';
+    // Tooltip debajo o arriba, según cuál lado tiene espacio real suficiente
+    // para la altura YA medida (no una estimación).
+    var spaceBelow = vh - r.bottom - EDGE;
+    var spaceAbove = r.top - EDGE;
+    var top;
+    if(spaceBelow >= tipH + 14){
+      top = r.bottom + 14;
+    } else if(spaceAbove >= tipH + 14){
+      top = r.top - tipH - 14;
     } else {
-      tip.style.top  = Math.max(8, r.top - tipH - 14)+'px';
+      // No cabe cómodo ni arriba ni abajo (pantalla chica o texto largo):
+      // se ubica del lado con más espacio disponible; si aún así no entra
+      // completo, el propio tooltip scrollea internamente (ver overflow-y
+      // en el CSS) en vez de quedar cortado sin forma de verlo.
+      top = spaceBelow >= spaceAbove ? (r.bottom + 14) : Math.max(EDGE, r.top - tipH - 14);
     }
-    var tipX = Math.min(Math.max(8, r.left), vw - 276);
+    // Clamp final: nunca permitir que el tooltip quede arriba/abajo del viewport
+    top = Math.max(EDGE, Math.min(top, vh - tipH - EDGE));
+    tip.style.top = top+'px';
+    var tipX = Math.max(EDGE, Math.min(r.left, vw - tipW - EDGE));
     tip.style.left = tipX+'px';
   } else {
-    // Sin elemento objetivo: centrado en pantalla
+    // Sin elemento objetivo: centrado en pantalla, también acotado a lo que
+    // realmente cabe.
     cutout.style.left='50%'; cutout.style.top='40%'; cutout.style.width='0'; cutout.style.height='0';
     pulse.style.display='none';
-    tip.style.left = Math.max(8,(vw-276)/2)+'px';
-    tip.style.top  = Math.max(8,(vh-240)/2)+'px';
+    tip.style.left = Math.max(EDGE, (vw-tipW)/2)+'px';
+    tip.style.top  = Math.max(EDGE, Math.min((vh-tipH)/2, vh - tipH - EDGE))+'px';
   }
 }
 
@@ -9010,8 +9343,12 @@ function _slRender(){
       )+
     '</div>';
 
-  // Posicionar después de un frame para que el DOM esté pintado
-  requestAnimationFrame(function(){ _slPosition(step); });
+  // Posicionar después de que el DOM esté pintado con el contenido real (doble
+  // rAF: dos frames de margen para que fuentes/layout ya estén asentados
+  // antes de medir la altura real del tooltip).
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){ _slPosition(step); });
+  });
 
   // Hacer que el cutout sí deje pasar los clics al elemento objetivo
   var cutout = document.getElementById('sl-cutout');
@@ -9036,6 +9373,17 @@ function tourDone(){
   _tourActive = false;
   if(_tourOnDone) _tourOnDone();
   _tourOnDone = null;
+}
+// Si el celular rota o cambia el alto disponible (p.ej. se abre el teclado,
+// o el navegador muestra/oculta la barra de direcciones), recalculamos la
+// posición del tooltip activo para que no quede mal ubicado.
+window.addEventListener('resize', function(){
+  if(_tourActive && _tourSteps[_tourIdx]) _slPosition(_tourSteps[_tourIdx]);
+});
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', function(){
+    if(_tourActive && _tourSteps[_tourIdx]) _slPosition(_tourSteps[_tourIdx]);
+  });
 }
 
 // ── Tour de bienvenida (primera apertura) ─────────────────────────────────
@@ -9145,30 +9493,6 @@ function showFirstLevelUpTip(){
     _tourIdx=0; _tourActive=true; _tourOnDone=null;
     _slRender();
   }, 800);
-}
-
-// ── Mini-tutorial al ganar la primera medalla ────────────────────────────
-function showFirstMedalTip(){
-  if(S.medalTipSeen) return;
-  S.medalTipSeen = true; saveState();
-  setTimeout(function(){
-    _tourSteps = [
-      {
-        target: null,
-        title: '¡Tu primera medalla!',
-        body: 'Las medallas se desbloquean al alcanzar hitos: rachas, tareas completadas, niveles. Puedes verlas todas en Plan → Progreso → tu perfil de medallas.'
-      },
-      {
-        target: '#bnav-plan',
-        title: 'Mira tu progreso',
-        body: 'Ve a Plan → Progreso para ver todas tus medallas ganadas y las que están próximas.',
-        action: 'Toca Plan para explorar',
-        onEnter: function(){ setTab('progreso'); }
-      }
-    ];
-    _tourIdx=0; _tourActive=true; _tourOnDone=null;
-    _slRender();
-  }, 600);
 }
 
 function maybeShowTutorial(){
