@@ -8072,20 +8072,27 @@ var M={};
 var RM=null; // estado del popup de recordatorio independiente (openReminderPopup)
 var _tabHistorySuspended=false; // evita volver a apilar historial cuando el cambio de pestaña viene de "atrás"
 function openNew(period){
-  // Check if creation is currently blocked for this period
-  var blockUntil=S.taskBlocks[period];
+  var isDia = period==='dia';
+  var dayIdx = isDia ? S.day : null;
+  // Para tareas del día, el límite es POR DÍA de la semana (8 para lunes, 8
+  // para martes, etc.), no un total compartido entre los 7 días — cada día
+  // se cuenta y se bloquea por separado.
+  var blockKey = isDia ? ('dia_'+dayIdx) : period;
+  var blockUntil=S.taskBlocks[blockKey];
   if(blockUntil&&new Date(blockUntil)>new Date()){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
   // Check current count vs limit
-  var count=S.tasks.filter(function(t){return t.period===period;}).length;
+  var count = isDia
+    ? S.tasks.filter(function(t){return t.period==='dia' && t.day===dayIdx;}).length
+    : S.tasks.filter(function(t){return t.period===period;}).length;
   var limit=currentTaskLimits()[period]||999;
   if(count>=limit){
     // Lock for TASK_BLOCK_DAYS days
     var until=new Date();
     until.setDate(until.getDate()+TASK_BLOCK_DAYS);
-    S.taskBlocks[period]=until.toISOString();
+    S.taskBlocks[blockKey]=until.toISOString();
     saveState();
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
@@ -8097,22 +8104,25 @@ function openNew(period){
 // pasado, hoy o futuro — sin importar si es la semana actual. Se usa desde
 // el detalle de día del calendario de racha.
 function openNewDatedTask(dateKey){
-  var blockUntil=S.taskBlocks['dia'];
+  var wIdx = dayIdxFromDate(new Date(dateKey+'T00:00:00'));
+  // Mismo criterio que openNew(): el límite de tareas del día es por día de
+  // la semana, así que se cuenta y bloquea contra ESE día en particular.
+  var blockKey = 'dia_'+wIdx;
+  var blockUntil=S.taskBlocks[blockKey];
   if(blockUntil&&new Date(blockUntil)>new Date()){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  var count=S.tasks.filter(function(t){return t.period==='dia';}).length;
+  var count=S.tasks.filter(function(t){return t.period==='dia' && t.day===wIdx;}).length;
   var limit=currentTaskLimits()['dia']||999;
   if(count>=limit){
     var until=new Date();
     until.setDate(until.getDate()+TASK_BLOCK_DAYS);
-    S.taskBlocks['dia']=until.toISOString();
+    S.taskBlocks[blockKey]=until.toISOString();
     saveState();
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  var wIdx = dayIdxFromDate(new Date(dateKey+'T00:00:00'));
   M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:true,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:null,duracion:60,notif:null};
   showTaskModal();
 }
