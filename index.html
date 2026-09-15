@@ -1643,7 +1643,39 @@ function weekdayDateNum(dowIdx){
   var d = new Date(monday); d.setDate(monday.getDate() + dowIdx);
   return String(d.getDate()).padStart(2,'0');
 }
-function todayStr(){return new Date().toISOString().slice(0,10);}
+// BUGFIX CRÍTICO — huso horario: `new Date().toISOString().slice(0,10)`
+// convierte SIEMPRE a UTC. En Chile (UTC-3 u UTC-4 según horario de
+// verano) eso hacía que la fecha "de hoy" cambiara varias horas ANTES de
+// la medianoche real — a las 21-23h la app ya pensaba que era mañana.
+// Eso disparaba de noche el reinicio semanal automático (pensado para
+// los lunes a las 4 AM) y borraba las tareas ya marcadas como hechas
+// ese mismo día. `localDateStr` arma la fecha con los campos LOCALES del
+// dispositivo, que es lo correcto para "qué día es hoy para el usuario".
+function localDateStr(d){
+  d = d || new Date();
+  var y = d.getFullYear();
+  var m = String(d.getMonth()+1).padStart(2,'0');
+  var day = String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+// Parsea un string 'YYYY-MM-DD' como medianoche LOCAL. `new Date('YYYY-MM-DD')`
+// interpreta ese string como UTC por spec, así que leerlo después con
+// getDay()/getDate() (que son locales) podía devolver el día anterior en
+// husos con offset negativo como Chile. Usar esto en vez de `new Date(str)`
+// para cualquier fecha guardada con localDateStr/todayStr.
+function parseLocalDate(s){
+  if(!s) return null;
+  var parts = String(s).slice(0,10).split('-');
+  return new Date(+parts[0], +parts[1]-1, +parts[2]);
+}
+// Suma (o resta) días de calendario usando campos locales en vez de sumar
+// milisegundos fijos (86400000). Sumar ms fijos falla justo el día del
+// cambio de horario de verano/invierno, porque ese día no dura 24 horas
+// exactas — con esto, el cambio de hora en Chile ya no corre los cálculos.
+function addDaysLocal(d, n){
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()+n, d.getHours()||0, d.getMinutes()||0, d.getSeconds()||0);
+}
+function todayStr(){return localDateStr(new Date());}
 
 // Devuelve clave de semana ISO: YYYY-Www
 function getWeekKey(date){
@@ -1711,8 +1743,14 @@ function loadState(){
     var th=localStorage.getItem('og6-theme');if(th)S.theme=th;
     var tc=localStorage.getItem('og6-bgcolor');if(tc)S.bgColorOverride=tc;
     var smt=localStorage.getItem('og6-showmodetips');if(smt!==null)S.showModeTips=smt==='1';
+    var cc=localStorage.getItem('og6-collapsedcats');if(cc)S.collapsedCats=JSON.parse(cc);
     var sndOn=localStorage.getItem('og6-soundon');if(sndOn!==null)S.soundOn=sndOn==='1';
     var il=localStorage.getItem('og6-layout');if(il)S.interfaceLayout=il;
+    // BUGFIX / pedido: se eliminó la posibilidad de elegir "Agenda semanal"
+    // como vista de interfaz — se fuerza Clásico para todos, incluso para
+    // quienes tenían 'agenda' guardado de antes y se habrían quedado sin
+    // forma de volver (ya no existe el selector en Yo).
+    S.interfaceLayout='default';
     var hf=localStorage.getItem('og6-hiperfoco');if(hf)S.hiperfoco=JSON.parse(hf);
     var mt=localStorage.getItem('og6-templates');if(mt)S.templates=JSON.parse(mt);
     var cg=localStorage.getItem('og6-categories');if(cg)S.categories=JSON.parse(cg);
@@ -1785,6 +1823,7 @@ function saveState(){
     localStorage.setItem('og6-theme',S.theme);
     localStorage.setItem('og6-bgcolor',S.bgColorOverride||'default');
     localStorage.setItem('og6-showmodetips',S.showModeTips===false?'0':'1');
+    localStorage.setItem('og6-collapsedcats',JSON.stringify(S.collapsedCats||{}));
     localStorage.setItem('og6-soundon',S.soundOn===false?'0':'1');
     localStorage.setItem('og6-layout',S.interfaceLayout||'default');
     localStorage.setItem('og6-hiperfoco',JSON.stringify(S.hiperfoco||{}));
@@ -2225,6 +2264,30 @@ function activateHiperfoco(){
     else if(info.reason==='active')toast('Hiperfoco ya está activo');
     return;
   }
+  // Aviso explicativo antes de activar — mismo patrón que Baja Energía.
+  showHiperfocoWarning();
+}
+function showHiperfocoWarning(){
+  var plan=getPlan();
+  var cooldownDays = isIlimitado() ? 0 : (plan==='free' ? FREE_MODE_COOLDOWN_DAYS : HIPERFOCO_COOLDOWN_DAYS);
+  var box=document.createElement('div');box.className='conf-box';
+  box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
+    '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🎯</div>'+
+    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Hiperfoco</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para períodos cortos de enfoque máximo, cuando quieres ver todas tus tareas sin límite artificial.</div>'+
+    '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
+      '<div>· Dura <b>'+HIPERFOCO_DAYS+' días</b></div>'+
+      '<div>· Sube el límite a <b>hasta '+TASK_LIMITS_HIPERFOCO.dia+' tareas visibles</b> por período</div>'+
+      (cooldownDays>0?'<div style="margin-top:6px;color:var(--accent);font-weight:600;">Una vez usado, queda inhabilitado por '+cooldownDays+' días.</div>':'')+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">Úsalo con intención: subir el límite de tareas no reemplaza descansar cuando corresponde.</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+      '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();doActivateHiperfoco();">Sí, activar Hiperfoco</button>'+
+      '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function doActivateHiperfoco(){
   S.hiperfoco={activeSince:new Date().toISOString(),lastUsed:S.hiperfoco?S.hiperfoco.lastUsed:null};
   S.hiperfocoUsedCount = (S.hiperfocoUsedCount||0) + 1;
   saveState();
@@ -3376,35 +3439,11 @@ function renderYo(){
     ):'')+
   '</div>';
 
-  // Vista de interfaz — solo Clásico y Agenda (sin Compacto)
-  var currentLayout = S.interfaceLayout || 'default';
-  var layouts = [
-    {
-      id:'default',
-      name:'Clásico',
-      desc:'Vista simple de un día a la vez. Pestañas inferiores para navegar.',
-      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg>'
-    },
-    {
-      id:'agenda',
-      name:'Agenda semanal',
-      desc:'Los 7 días como columnas. Toda la semana visible de un vistazo.',
-      icon:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M13 3v3M16 3v3M8 13v4M13 13v4M16 13v3"/></svg>'
-    },
-  ];
-  html += '<div class="card" style="margin-bottom:10px;">'+
-    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:12px;">Vista de la interfaz</div>'+
-    '<div style="display:flex;gap:8px;">'+
-    layouts.map(function(l){
-      var on = currentLayout === l.id;
-      return '<button onclick="setInterfaceLayout(\''+l.id+'\')" style="flex:1;padding:12px 8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';border-radius:12px;background:'+(on?'var(--accent-bg)':'var(--paper)')+';cursor:pointer;font-family:Inter,sans-serif;display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-        '<span style="color:'+(on?'var(--accent)':'var(--ink-soft)')+';display:flex;">'+l.icon+'</span>'+
-        '<span style="font-size:12px;font-weight:700;color:'+(on?'var(--accent)':'var(--ink-soft)')+';">'+l.name+'</span>'+
-        '<span style="font-size:10px;color:var(--muted);text-align:center;line-height:1.4;">'+l.desc+'</span>'+
-      '</button>';
-    }).join('')+
-    '</div>'+
-  '</div>';
+  // BUGFIX / pedido: se quitó el selector "Vista de la interfaz"
+  // (Clásico / Agenda semanal) — ya no se deja elegir, toda la app usa
+  // siempre la vista predeterminada (Clásico). Ver también la migración
+  // en loadState() que fuerza S.interfaceLayout a 'default' para quienes
+  // ya tenían Agenda semanal guardada de antes.
 
   // Tema visual — blanco absoluto como predeterminado inicial
   var FREE_THEMES = ['light','dark','bosque'];  // Disponibles sin pagar
@@ -3597,20 +3636,7 @@ function renderYo(){
       '</button>';
     });
 
-    // Consejos rápidos — gestos que no son obvios a simple vista
-    html += '<div class="card" style="margin-bottom:8px;">'+
-      '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:10px;">💡 Consejos rápidos</div>'+
-      [
-        {icon:'👆',txt:'Desliza a los lados en <b>Hoy</b> para cambiar de día.'},
-        {icon:'✏️',txt:'Doble toque sobre el nombre de una tarea para editarla al instante.'},
-        {icon:'🔢',txt:'Toca el círculo de porcentaje en un proyecto para avanzarlo de a poco.'},
-      ].map(function(tip){
-        return '<div style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;">'+
-          '<span style="font-size:15px;flex-shrink:0;line-height:1.4;">'+tip.icon+'</span>'+
-          '<span style="font-size:12px;color:var(--ink-soft);line-height:1.5;">'+tip.txt+'</span>'+
-        '</div>';
-      }).join('')+
-    '</div>';
+    // BUGFIX / pedido: se quitó la tarjeta "Consejos rápidos" de Yo.
 
     // ── DATOS Y BACKUP ────────────────────────────────────────────────────
     html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;">Datos y backup</div>';
@@ -3899,7 +3925,7 @@ function openNewProjectModal(){
     '<label class="flbl" style="margin-top:10px;">Descripción (opcional)</label>'+
     '<input id="np-desc" class="finp" placeholder="¿De qué se trata?"/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Fecha de inicio</label><input id="np-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-start\')" style="cursor:pointer;" value="'+new Date().toISOString().slice(0,10)+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Fecha de inicio</label><input id="np-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-start\')" style="cursor:pointer;" value="'+todayStr()+'"/></div>'+
       '<div style="flex:1;"><label class="flbl">Fecha de fin</label><input id="np-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-end\')" style="cursor:pointer;"/></div>'+
     '</div>'+
     '<label class="flbl" style="margin-top:10px;">Color</label>'+
@@ -4707,7 +4733,7 @@ function openAddTaskModal(pid, sid, parentTaskId){
     '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:12px;">'+parentLabel+'</div>'+
     '<label class="flbl">Nombre</label><input id="nat-name" class="finp" placeholder="Describe esta tarea..."/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="nat-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'nat-start\')" style="cursor:pointer;" value="'+(p&&p.start?p.start:new Date().toISOString().slice(0,10))+'"/></div>'+
+      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="nat-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'nat-start\')" style="cursor:pointer;" value="'+(p&&p.start?p.start:todayStr())+'"/></div>'+
       '<div style="flex:1;"><label class="flbl">Fin</label><input id="nat-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'nat-end\')" style="cursor:pointer;"/></div>'+
     '</div>'+
     '<div style="display:flex;gap:8px;margin-top:14px;">'+
@@ -5630,7 +5656,7 @@ function exportData(){
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'gramifica-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.download = 'gramifica-backup-'+todayStr()+'.json';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
@@ -6067,6 +6093,11 @@ function closeTaskMenu(){
 function toggleCatSection(catId){
   if(!S.collapsedCats) S.collapsedCats = {};
   S.collapsedCats[catId] = !S.collapsedCats[catId];
+  // BUGFIX: esto nunca llamaba a saveState(), así que el plegado/desplegado
+  // de categorías vivía solo en memoria — al cerrar y volver a abrir la app,
+  // S.collapsedCats no se cargaba de ningún lado y todo volvía a mostrarse
+  // desplegado, aunque el usuario lo hubiera dejado plegado.
+  saveState();
   // Toggle rápido sin re-render completo
   var body = document.getElementById('cat-body-'+catId);
   var sec = document.getElementById('cat-sec-'+catId);
@@ -6096,7 +6127,7 @@ function moveTaskToNextDay(id){
   if(!t) return;
   if(t.date){
     var nd=new Date(t.date+'T12:00:00'); nd.setDate(nd.getDate()+1);
-    t.date=nd.toISOString().slice(0,10); t.day=dayIdxFromDate(nd);
+    t.date=localDateStr(nd); t.day=dayIdxFromDate(nd);
     t.done=false; t.prog=0;
     saveState();render();
     toast('→ Tarea movida a '+formatDateShort(t.date));
@@ -6128,7 +6159,7 @@ function duplicateTaskToNextDay(id){
   if(!t) return;
   if(t.date){
     var nd=new Date(t.date+'T12:00:00'); nd.setDate(nd.getDate()+1);
-    var copy1 = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), date:nd.toISOString().slice(0,10), day:dayIdxFromDate(nd), done:false, prog:0});
+    var copy1 = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), date:localDateStr(nd), day:dayIdxFromDate(nd), done:false, prog:0});
     copy1.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
     S.tasks.push(copy1);
     saveState();render();
@@ -6685,7 +6716,7 @@ function renderStreakCalendar(){
   var streakAtStart = 0;
   // Sumar días cumplidos en el historial antes de este mes
   Object.keys(hist).sort().forEach(function(k){
-    var d2 = new Date(k);
+    var d2 = parseLocalDate(k);
     if(d2 < new Date(year,month,1) && hist[k].streakReached) streakAtStart++;
   });
   
@@ -6693,7 +6724,7 @@ function renderStreakCalendar(){
   
   for(var day=1; day<=lastDay; day++){
     var d = new Date(year, month, day);
-    var key = d.toISOString().slice(0,10);
+    var key = localDateStr(d);
     var data = hist[key];
     var isFuture = d > today;
     var isToday = key === todayKey;
@@ -6861,11 +6892,11 @@ function renderStats(){
   var keys = Object.keys(hist);
   var thisWeek = 0, thisMonth = 0, totalDone = 0, daysLogged = 0;
   var today = new Date();
-  var weekStart = new Date(today.getTime() - 7*86400000);
-  var monthStart = new Date(today.getTime() - 30*86400000);
+  var weekStart = addDaysLocal(today, -7);
+  var monthStart = addDaysLocal(today, -30);
   
   keys.forEach(function(k){
-    var d = new Date(k);
+    var d = parseLocalDate(k);
     var data = hist[k];
     if(!data)return;
     daysLogged++;
@@ -6879,8 +6910,8 @@ function renderStats(){
   var xpDays = [];
   var lastXp = 0;
   for(var i=13;i>=0;i--){
-    var d = new Date(today.getTime() - i*86400000);
-    var key = d.toISOString().slice(0,10);
+    var d = addDaysLocal(today, -i);
+    var key = localDateStr(d);
     if(xpHist[key]!==undefined){
       lastXp = xpHist[key];
     }
@@ -7134,6 +7165,29 @@ function activateVacaciones(){
   if(S.activeMode){toast('Desactiva primero el modo activo');return;}
   var info=vacacionesCanActivate();
   if(!info.ok){toast('Disponible en '+info.daysLeft+' días');return;}
+  // Aviso explicativo antes de activar — mismo patrón que Baja Energía.
+  showVacacionesWarning();
+}
+function showVacacionesWarning(){
+  var vc = S.vacaciones;
+  var box=document.createElement('div');box.className='conf-box';
+  box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
+    '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🌴</div>'+
+    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Vacaciones</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para cuando estás fuera de tu rutina habitual y quieres bajar la exigencia sin perder del todo el hilo.</div>'+
+    '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
+      '<div>· Solo verás <b>'+vc.maxTasks+' tareas/día</b></div>'+
+      '<div>· Umbral de racha baja a <b>'+Math.round((vc.lowThresh||0.3)*100)+'%</b></div>'+
+      '<div style="margin-top:6px;color:var(--accent);font-weight:600;">Una vez usado, queda inhabilitado por '+FREE_MODE_COOLDOWN_DAYS+' días.</div>'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">Si solo quieres bajar el ritmo unos días sin usar este modo, considera un modo personalizado o una plantilla con menos tareas.</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+      '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();doActivateVacaciones();">Sí, activar Vacaciones</button>'+
+      '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function doActivateVacaciones(){
   S.vacaciones.activeSince = todayStr();
   S.activeMode = {type:'vacaciones'};
   S.vacacionesUsedCount = (S.vacacionesUsedCount||0) + 1;
@@ -7277,8 +7331,10 @@ function openEditVacaciones(){
     '<div style="display:flex;gap:8px;margin-bottom:16px;" id="vc-thresh-btns">'+
       [20,30,40,50].map(function(v){var on=Math.round((vc.lowThresh||0.3)*100)===v;return '<button onclick="vcSetThresh('+v+')" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:13px;font-family:Inter,sans-serif;">'+v+'%</button>';}).join('')+
     '</div>'+
-    '<label class="flbl">Máximo de tareas por día</label>'+
-    '<input id="vc-max" class="finp" type="number" min="1" max="10" value="'+vc.maxTasks+'"/>'+
+    // BUGFIX / pedido: "Máximo de tareas por día" se sacó de acá — Baja
+    // Energía ya no lo dejaba editar (es un valor fijo del modo), así que
+    // Vacaciones ahora es consistente con eso en vez de ser la única
+    // excepción editable.
     '<div class="fsec" style="background:var(--accent-bg);margin-top:12px;">'+
       '<div style="margin-bottom:8px;"><span style="font-size:13px;font-weight:600;color:var(--ink);">💛 Mensaje de apoyo</span></div>'+
       '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(vc.supportMessage||'')+'</div>'+
@@ -7309,8 +7365,8 @@ function vcSetThresh(v){
   });
 }
 function saveVacaciones(){
-  var max = Number(document.getElementById('vc-max').value)||3;
-  S.vacaciones.maxTasks = max;
+  // BUGFIX: "vc-max" ya no existe en el formulario (ver openEditVacaciones),
+  // así que esto ya no debe leerlo ni sobrescribir S.vacaciones.maxTasks.
   if(S.vacaciones.suggestions)S.vacaciones.suggestions = S.vacaciones.suggestions.filter(function(s){return s&&s.trim();});
   removeOverlay('mode-modal');saveState();render();
 }
@@ -7940,14 +7996,14 @@ function isWeekend(){
   return d===0||d===6;
 }
 
-// Tracks if reset has been used this weekend (key = ISO date of Saturday)
+// Tracks if reset has been used this weekend (key = fecha local del sábado)
 function getCurrentWeekendKey(){
   var d=new Date();
   var dow=d.getDay();
-  if(dow===6)return d.toISOString().slice(0,10);
+  if(dow===6)return localDateStr(d);
   if(dow===0){
-    var sat=new Date(d.getTime()-86400000);
-    return sat.toISOString().slice(0,10);
+    var sat=addDaysLocal(d,-1);
+    return localDateStr(sat);
   }
   return null;
 }
@@ -8018,7 +8074,13 @@ function checkAutoReset(){
   var now=new Date();
   var dow=now.getDay(); // Mon=1
   var hour=now.getHours();
-  var todayKey=now.toISOString().slice(0,10);
+  // BUGFIX: antes esta clave salía de now.toISOString() (UTC), mientras que
+  // dow/hour de arriba son locales. En Chile eso hacía que, de noche, esta
+  // función pensara que ya era "otro día" (uno que no coincidía con
+  // S.lastAutoReset) y disparara el reinicio semanal completo fuera de
+  // hora — desmarcando tareas que el usuario ya había completado ese
+  // mismo día. Ahora todoKey usa la misma fecha LOCAL que dow y hour.
+  var todayKey=localDateStr(now);
   if(dow===1&&hour>=4&&S.lastAutoReset!==todayKey){
     // Auto reset — solo tareas recurrentes (sin fecha específica). Las tareas
     // puntuales (t.date) son de un solo día y no se desmarcan ni se tocan
@@ -8775,8 +8837,8 @@ var MEDALS_CATALOG = [
       var v = S.visitHistory || {};
       var today = new Date();
       for(var i=0;i<7;i++){
-        var d = new Date(today.getTime() - i*86400000);
-        if(!v[d.toISOString().slice(0,10)]) return false;
+        var d = addDaysLocal(today, -i);
+        if(!v[localDateStr(d)]) return false;
       }
       return true;
     }
@@ -8789,8 +8851,8 @@ var MEDALS_CATALOG = [
       var v = S.visitHistory || {};
       var today = new Date();
       for(var i=0;i<30;i++){
-        var d = new Date(today.getTime() - i*86400000);
-        if(!v[d.toISOString().slice(0,10)]) return false;
+        var d = addDaysLocal(today, -i);
+        if(!v[localDateStr(d)]) return false;
       }
       return true;
     }
@@ -8833,8 +8895,8 @@ var MEDALS_CATALOG = [
       var hist = S.dailyHistory || {};
       var today = new Date();
       for(var i=0;i<20;i++){
-        var d = new Date(today.getTime() - i*86400000);
-        var data = hist[d.toISOString().slice(0,10)];
+        var d = addDaysLocal(today, -i);
+        var data = hist[localDateStr(d)];
         if(!data || (data.completed||0) < 4) return false;
       }
       return true;
@@ -8848,8 +8910,8 @@ var MEDALS_CATALOG = [
       var hist = S.dailyHistory || {};
       var today = new Date();
       for(var i=0;i<7;i++){
-        var d = new Date(today.getTime() - i*86400000);
-        var data = hist[d.toISOString().slice(0,10)];
+        var d = addDaysLocal(today, -i);
+        var data = hist[localDateStr(d)];
         if(!data || (data.completed||0) < 9) return false;
       }
       return true;
@@ -9183,8 +9245,12 @@ function shareImage(days){
 // domingo, en cuyo caso esos días se auto-completan y la racha sigue viva.
 function checkStreakOnLoad(){
   if(!S.streak.lastDate)return;
-  var last=new Date(S.streak.lastDate);
-  var today=new Date(todayStr());
+  // BUGFIX: new Date('YYYY-MM-DD') parsea como medianoche UTC; leer luego
+  // .getDay() (local) sobre eso podía devolver el día de la semana
+  // equivocado en husos con offset negativo como Chile. parseLocalDate
+  // arma la fecha con medianoche LOCAL, que es lo que corresponde acá.
+  var last=parseLocalDate(S.streak.lastDate);
+  var today=parseLocalDate(todayStr());
   var diff=Math.round((today-last)/86400000);
   if(diff<2) return;
 
@@ -9195,7 +9261,7 @@ function checkStreakOnLoad(){
     cursor.setDate(cursor.getDate()+1); // día siguiente al último registrado
     while(cursor < today){
       var dow = cursor.getDay(); // 0=domingo, 6=sábado
-      if(dow===0||dow===6) weekendDays.push(cursor.toISOString().slice(0,10));
+      if(dow===0||dow===6) weekendDays.push(localDateStr(cursor));
       else businessGapDays++;
       cursor.setDate(cursor.getDate()+1);
     }
