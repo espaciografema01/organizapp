@@ -267,6 +267,15 @@ input{font-family:'Inter',sans-serif;color:var(--ink);}
 .period-tab{padding:5px 14px;border-radius:20px;font-size:13px;border:1.5px solid var(--line);background:var(--paper);color:var(--muted);}
 .period-tab.active{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);}
 
+/* Pedido: reemplaza los óvalos planos de semana/mes/semestre/año por un
+   segmented-control tipo "chip", con ícono + etiqueta y una pastilla que
+   se resalta sola al elegir — más parecido a un selector nativo. */
+.period-tab-row{display:flex;gap:3px;background:var(--bg);border-radius:15px;padding:4px;margin-bottom:18px;}
+.period-tab-v2{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 4px 8px;border-radius:11px;border:none;background:transparent;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;}
+.period-tab-v2 .ptab-ic{display:flex;color:inherit;}
+.period-tab-v2 .ptab-lbl{font-size:10.5px;font-weight:700;letter-spacing:.01em;}
+.period-tab-v2.active{background:var(--paper);color:var(--accent);box-shadow:0 1px 5px rgba(0,0,0,.09);}
+
 .card{background:var(--paper);border-radius:14px;border:1px solid var(--line);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
 
 /* ── Mejoras visuales globales ────────────────────────────────────────── */
@@ -276,7 +285,7 @@ button:active{transform:scale(0.96);}
 .v2-card:active{transform:scale(0.99);}
 .finp:focus{border-bottom-color:var(--accent);}
 .finp{transition:border-color .2s;}
-.period-tab,.bnav-btn{transition:color .2s,background .2s,border-color .2s;}
+.period-tab,.period-tab-v2,.bnav-btn{transition:color .2s,background .2s,border-color .2s,box-shadow .2s;}
 ::-webkit-scrollbar{width:0;height:0;}
 @keyframes fadeSlideIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
 .streak-badge{transition:transform .15s;}
@@ -1204,6 +1213,28 @@ var DAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"
 var PERIODS = ["dia","semana","mes","semestre","año"];
 var PL = {dia:"Día",semana:"Semana",mes:"Mes",semestre:"Semestre","año":"Año"};
 var PT = {dia:1,semana:3,mes:5,semestre:10,"año":10};
+// Pedido: poder desactivar períodos (ej. "semestre") desde Personalización.
+// "día" nunca se puede desactivar — es la vista base de la app. Desactivar
+// un período lo oculta de la pestaña Objetivos y de la lista de destinos al
+// vincular; las tareas que ya existan en ese período no se borran, solo
+// quedan fuera de esas dos listas hasta que se reactive.
+function isPeriodEnabled(p){
+  return p==='dia' || !(S.disabledPeriods && S.disabledPeriods[p]);
+}
+function enabledGoalPeriods(){
+  return PERIODS.filter(function(p){return p!=='dia' && isPeriodEnabled(p);});
+}
+// Íconos compartidos por período (mismo trazo, dos tamaños: chico para las
+// pestañas de Objetivos, grande para los estados vacíos de esa pantalla).
+var PERIOD_ICON_INNER = {
+  semana:'<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/>',
+  mes:'<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/><circle cx="12" cy="15" r="2.2"/>',
+  semestre:'<path d="M3.5 16c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/><circle cx="12" cy="9" r="4"/>',
+  "año":'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>'
+};
+function periodIconSVG(period, size, sw){
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.5)+'" stroke-linecap="round" stroke-linejoin="round">'+(PERIOD_ICON_INNER[period]||'')+'</svg>';
+}
 var PC = {dia:"#e8dec9",semana:"#f5e3d3",mes:"#e8c5a8",semestre:"#d4b896",año:"#c97842"};
 var LVL_XP = [0,10,30,75,150,300,600,1200,1800,2700,4050]; // niveles 1-10 fijos; 11+ usan ×1.5
 // Earth tone palette for level symbols
@@ -1887,6 +1918,8 @@ function loadState(){
     var pts=localStorage.getItem('og6-projecttourseen');if(pts)S.projectTourSeen=pts==='1';
     var lts=localStorage.getItem('og6-leveltipseen');if(lts)S.levelTipSeen=lts==='1';
     var mts=localStorage.getItem('og6-medaltipseen');if(mts)S.medalTipSeen=mts==='1';
+    var ccm=localStorage.getItem('og6-catcollapsemode');if(ccm)S.catCollapseMode=ccm;
+    var dp=localStorage.getItem('og6-disabledperiods');if(dp)S.disabledPeriods=JSON.parse(dp);
     // ── dataVersion: migración segura ──────────────────────────────────
     var dv=localStorage.getItem('og6-dataversion');
     var savedVersion=dv?Number(dv):0;
@@ -1962,6 +1995,8 @@ function saveState(){
     localStorage.setItem('og6-leveltipseen',S.levelTipSeen?'1':'0');
     localStorage.setItem('og6-medaltipseen',S.medalTipSeen?'1':'0');
     localStorage.setItem('og6-dataversion',String(S.dataVersion||1));
+    localStorage.setItem('og6-catcollapsemode',S.catCollapseMode||'remember');
+    localStorage.setItem('og6-disabledperiods',JSON.stringify(S.disabledPeriods||{}));
     // Auto-push a la nube si hay sesión
     if(typeof currentUser !== 'undefined' && currentUser){
       if(typeof pushToCloud === 'function'){
@@ -2790,9 +2825,11 @@ function renderV2Header(){
   var R = 13, C = 2*Math.PI*R;
   var offset = C*(1-info.ratio);
   var dayTasks = S.tasks.filter(function(t){return isTaskToday(t);});
-  var doneToday = dayTasks.filter(isDone).length;
   var totalToday = dayTasks.length;
-  var dayPct = totalToday > 0 ? Math.round(doneToday/totalToday*100) : 0;
+  // Pedido: el % del día también refleja avance parcial (cantidad/checklist
+  // a medias), igual que el umbral de racha — no solo tareas 100% listas.
+  var partialToday = dayTasks.reduce(function(s,tk){return s+tRatio(tk);},0);
+  var dayPct = totalToday > 0 ? Math.round(partialToday/totalToday*100) : 0;
   var am = getActiveMode();
 
   hdr.innerHTML =
@@ -3036,25 +3073,30 @@ function renderHoy(){
       'style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;padding:0 8px;line-height:1;">›</button>'+
   '</div>';
 
-  // Tabs de categorías
+  // Tabs de categorías — pedido: agregar un filtro "Pendientes" (tareas del
+  // día que faltan completar) sin que sea una categoría nueva de verdad —
+  // es un valor especial de filtro ('__pending'), no un id en S.categories.
+  // Por eso la barra se muestra siempre (antes solo aparecía si había
+  // categorías creadas), para que "Pendientes" esté disponible igual.
   var cats = S.categories || [];
   if(!S.activeCatFilter) S.activeCatFilter = 'all';
-  if(cats.length > 0){
-    html += '<div id="cat-tabs-bar">'+
-      '<button class="cat-tab-btn'+(S.activeCatFilter==='all'?' active':'')+'" onclick="setCatFilter(\'all\')">Todas</button>'+
-      cats.map(function(c){
-        var on = S.activeCatFilter===c.id;
-        return '<button class="cat-tab-btn'+(on?' active':'')+'" onclick="setCatFilter(\''+c.id+'\')" style="'+(on?'border-color:'+c.color+';color:'+c.color+';background:'+c.color+'22;':'')+'" >'+esc(c.name)+'</button>';
-      }).join('')+
-    '</div>';
-  }
+  html += '<div id="cat-tabs-bar">'+
+    '<button class="cat-tab-btn'+(S.activeCatFilter==='all'?' active':'')+'" onclick="setCatFilter(\'all\')">Todas</button>'+
+    '<button class="cat-tab-btn'+(S.activeCatFilter==='__pending'?' active':'')+'" onclick="setCatFilter(\'__pending\')">Pendientes</button>'+
+    cats.map(function(c){
+      var on = S.activeCatFilter===c.id;
+      return '<button class="cat-tab-btn'+(on?' active':'')+'" onclick="setCatFilter(\''+c.id+'\')" style="'+(on?'border-color:'+c.color+';color:'+c.color+';background:'+c.color+'22;':'')+'" >'+esc(c.name)+'</button>';
+    }).join('')+
+  '</div>';
 
   // Tareas
   if(!S.collapsedCats) S.collapsedCats = {};
   var all = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===day;});
-  var filtered = (S.activeCatFilter && S.activeCatFilter !== 'all')
-    ? all.filter(function(t){return t.categoryId === S.activeCatFilter;})
-    : all;
+  var filtered = (S.activeCatFilter==='__pending')
+    ? all.filter(function(t){return !isDone(t);})
+    : (S.activeCatFilter && S.activeCatFilter !== 'all')
+      ? all.filter(function(t){return t.categoryId === S.activeCatFilter;})
+      : all;
   var onlyCrucial = am && am.onlyCrucial;
   var crucial = filtered.filter(function(t){return t.crucial;});
   var visible = S.showHidden ? filtered : (onlyCrucial ? crucial : filtered);
@@ -3079,8 +3121,8 @@ function renderHoy(){
     cats.forEach(function(cat){
       var group = catGroups[cat.id];
       if(!group||!group.length) return;
-      var collapsed = S.collapsedCats[cat.id];
       var doneInCat = group.filter(isDone).length;
+      var collapsed = isCatCollapsed(cat.id, doneInCat, group.length);
       html += '<div id="cat-sec-'+cat.id+'">'+
         '<div class="cat-sec-head" onclick="toggleCatSection(\''+cat.id+'\')">'+
           '<div style="width:8px;height:8px;border-radius:50%;background:'+cat.color+';flex-shrink:0;"></div>'+
@@ -3100,9 +3142,9 @@ function renderHoy(){
     html += visible.length
       ? visible.map(function(t){return taskHTML(t);}).join('')
       : '<div style="padding:40px 16px;text-align:center;">'+
-          '<div style="font-size:38px;margin-bottom:10px;opacity:.35;">'+(S.activeCatFilter!=='all'?'🗂':(day===today?'🌱':'📋'))+'</div>'+
-          '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">'+(S.activeCatFilter!=='all'?'Nada en esta categoría':(day===today?'Día en blanco':'Sin tareas este día'))+'</div>'+
-          '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">'+(day===today?'Agrega tu primera tarea del día':'Planifica este día agregando tareas')+'</div>'+
+          '<div style="font-size:38px;margin-bottom:10px;opacity:.35;">'+(S.activeCatFilter==='__pending'?'✅':S.activeCatFilter!=='all'?'🗂':(day===today?'🌱':'📋'))+'</div>'+
+          '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">'+(S.activeCatFilter==='__pending'?'¡Ya no queda nada pendiente!':S.activeCatFilter!=='all'?'Nada en esta categoría':(day===today?'Día en blanco':'Sin tareas este día'))+'</div>'+
+          '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">'+(S.activeCatFilter==='__pending'?'Todo lo de este día ya está completado.':day===today?'Agrega tu primera tarea del día':'Planifica este día agregando tareas')+'</div>'+
           (S.activeCatFilter==='all'?'<button class="cbtn" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;font-weight:700;" onclick="openNew(\'dia\')">+ Agregar tarea</button>':'')+
         '</div>';
   }
@@ -3330,7 +3372,14 @@ function renderHorarioSemanal(){
       grid += '<div style="border-top:1px solid var(--line-soft);border-left:1px solid var(--line-soft);background:'+(isToday?'var(--accent-bg)40':'transparent')+';position:relative;height:'+ROWH+'px;box-sizing:border-box;overflow:visible;">'+
         cellEvs.map(function(ev){
           var t = ev.t;
-          var dn = isDone(t);
+          // BUGFIX: las tareas recurrentes tienen un solo estado "hecho"
+          // compartido para toda la semana (se resetea el lunes) — no uno
+          // por cada semana. Al navegar a otra semana (offset≠0) mostrar
+          // ese estado actual no tiene sentido: una semana futura no puede
+          // estar "tickeada" todavía, y una pasada ya no refleja lo que
+          // pasó ahí. Las puntuales (con fecha propia) sí son reales
+          // siempre, en cualquier semana que se esté mirando.
+          var dn = (t.date || offset===0) ? isDone(t) : false;
           var startMin = ev.startMin;
           var topPx = Math.round((startMin % 60)/60*ROWH);
           var dur = t.duracion||60;
@@ -3685,9 +3734,15 @@ function renderYoMain(){
   var prefSub = S.simpleMode ? 'Modo simplificado activo' : 'Modo de uso, sonido, sugerencias';
   var THEME_NAMES = {light:'Blanco',dark:'Oscuro',bosque:'Bosque',terracota:'Terracota',sepia:'Sepia',oceano:'Océano',atardecer:'Atardecer',galaxia:'Galaxia',cereza:'Cereza'};
   var currentThemeName = THEME_NAMES[S.theme] || 'Blanco';
+  var CAT_MODE_NAMES = {'always-collapsed':'Siempre plegadas','smart':'Plegar las completas','remember':'Recordar tu elección','always-expanded':'Siempre desplegadas'};
+  var catModeSub = CAT_MODE_NAMES[S.catCollapseMode||'remember'];
+  var disabledPeriodsList = ['semana','mes','semestre','año'].filter(function(p){return S.disabledPeriods && S.disabledPeriods[p];});
+  var periodsSub = disabledPeriodsList.length ? disabledPeriodsList.map(function(p){return PL[p];}).join(', ')+' desactivado'+(disabledPeriodsList.length>1?'s':'') : 'Todos activos';
   html += yoSectionHTML('Personalización',
     yoRowHTML('preferencias','⚙️','Preferencias', prefSub, false)+
-    yoRowHTML('tema','🎨','Tema visual', currentThemeName, true)
+    yoRowHTML('tema','🎨','Tema visual', currentThemeName, false)+
+    yoRowHTML('categorias','🗂️','Categorías', catModeSub, false)+
+    yoRowHTML('periodos','📆','Períodos', periodsSub, true)
   );
 
   // ── Avisos ────────────────────────────────────────────────────────────
@@ -3722,12 +3777,12 @@ function renderYoMain(){
 function renderYoScreenWrap(screen){
   var titles = {
     perfil:'Perfil', plan:'Nivel de acceso', preferencias:'Preferencias',
-    tema:'Tema visual', notificaciones:'Notificaciones', calendario:'Google Calendar',
+    tema:'Tema visual', categorias:'Categorías', periodos:'Períodos', notificaciones:'Notificaciones', calendario:'Google Calendar',
     ayuda:'Ayuda', datos:'Datos y privacidad'
   };
   var renderers = {
     perfil:renderYoPerfilScreen, plan:renderYoPlanScreen, preferencias:renderYoPreferenciasScreen,
-    tema:renderYoTemaScreen, notificaciones:renderYoNotificacionesScreen, calendario:renderYoCalendarioScreen,
+    tema:renderYoTemaScreen, categorias:renderYoCategoriasScreen, periodos:renderYoPeriodosScreen, notificaciones:renderYoNotificacionesScreen, calendario:renderYoCalendarioScreen,
     ayuda:renderYoAyudaScreen, datos:renderYoDatosScreen
   };
   if(!renderers[screen]){ S.yoScreen=null; return renderYoMain(); }
@@ -3935,7 +3990,76 @@ function renderYoTemaScreen(){
   '</div>';
 }
 
-// ── Yo → Notificaciones ──────────────────────────────────────────────────
+// ── Yo → Categorías ──────────────────────────────────────────────────────
+// Pedido: elegir cómo se pliegan/despliegan las categorías al entrar a Hoy.
+function renderYoCategoriasScreen(){
+  var mode = S.catCollapseMode || 'remember';
+  var options = [
+    {id:'always-collapsed', title:'Siempre plegadas', sub:'Todas las categorías arrancan cerradas — las abres tú, una por una, cuando quieras verlas.'},
+    {id:'smart', title:'Plegar solo las completas', sub:'Se pliega sola la categoría en cuanto termines todas sus tareas del día; las que aún tienen pendientes quedan desplegadas.'},
+    {id:'remember', title:'Recordar tu última elección', sub:'Cada categoría queda tal como la dejaste la última vez que la plegaste o desplegaste a mano. (Como funciona hoy.)'},
+    {id:'always-expanded', title:'Siempre desplegadas', sub:'Todas las categorías se muestran siempre abiertas, sin necesidad de tocar nada.'}
+  ];
+  var html = '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px;">Elige cómo quieres que se vean tus categorías de tareas al entrar a Hoy.</div>';
+  html += '<div class="card" style="padding:6px;">'+
+    options.map(function(o,i){
+      var active = mode===o.id;
+      return '<button onclick="setCatCollapseMode(\''+o.id+'\')" style="width:100%;text-align:left;display:flex;align-items:flex-start;gap:10px;padding:12px 10px;border:none;background:none;cursor:pointer;font-family:Inter,sans-serif;'+(i<options.length-1?'border-bottom:1px solid var(--line-soft);':'')+'">'+
+        '<div style="width:19px;height:19px;border-radius:50%;border:1.5px solid '+(active?'var(--accent)':'var(--line)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">'+
+          (active?'<div style="width:10px;height:10px;border-radius:50%;background:var(--accent);"></div>':'')+
+        '</div>'+
+        '<div style="flex:1;">'+
+          '<div style="font-weight:700;font-size:13.5px;color:'+(active?'var(--accent)':'var(--ink)')+';">'+o.title+'</div>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.5;">'+o.sub+'</div>'+
+        '</div>'+
+      '</button>';
+    }).join('')+
+  '</div>';
+  return html;
+}
+function setCatCollapseMode(mode){
+  S.catCollapseMode = mode;
+  saveState();
+  render();
+}
+
+// ── Yo → Períodos ────────────────────────────────────────────────────────
+// Pedido: poder desactivar períodos (ej. semestral) que no se usan.
+function renderYoPeriodosScreen(){
+  var periods = ['semana','mes','semestre','año'];
+  var html = '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px;">Desactiva los períodos que no uses — desaparecen de la pestaña Objetivos y de las opciones al vincular tareas. "Día" no se puede desactivar. Si ya tenías tareas en un período que desactivas, no se borran: solo quedan ocultas hasta que lo reactives.</div>';
+  html += '<div class="card" style="padding:4px 14px;">'+
+    periods.map(function(p,i){
+      var on = isPeriodEnabled(p);
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;'+(i<periods.length-1?'border-bottom:1px solid var(--line-soft);':'')+'">'+
+        '<div style="display:flex;align-items:center;gap:10px;flex:1;">'+
+          '<span style="color:var(--muted);display:flex;">'+periodIconSVG(p,18,1.6)+'</span>'+
+          '<div style="font-weight:700;font-size:14px;color:var(--ink);">'+PL[p]+'</div>'+
+        '</div>'+
+        '<button class="tog" onclick="togglePeriodEnabled(\''+p+'\')" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+          '<span class="tok" style="left:'+(on?22:2)+'px;"></span>'+
+        '</button>'+
+      '</div>';
+    }).join('')+
+  '</div>';
+  return html;
+}
+function togglePeriodEnabled(period){
+  if(!S.disabledPeriods) S.disabledPeriods = {};
+  var willDisable = !S.disabledPeriods[period];
+  if(willDisable){
+    var stillOn = ['semana','mes','semestre','año'].filter(function(p){return p!==period && isPeriodEnabled(p);});
+    if(!stillOn.length){
+      toast('Debe quedar al menos un período activo además de Día');
+      return;
+    }
+  }
+  S.disabledPeriods[period] = willDisable;
+  saveState();
+  render();
+}
+
+
 function renderYoNotificacionesScreen(){
   var notifOn = S.notifPermission === 'granted';
   var nt = S.notifTiming || {type:'exact', value:15};
@@ -6237,12 +6361,16 @@ function taskHTML(t,showPeriod){
   var hasQty=(t.qty||1)>1,hasCL=t.checklist&&t.checklist.length>0;
   var clDone=hasCL?t.checklist.filter(function(i){return i.done;}).length:0;
   var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:700;color:var(--accent);">'+(t.prog||0)+'</span>':(r>0&&hasCL?'<span style="font-size:7px;font-weight:700;color:var(--accent);">'+clDone+'</span>':''));
-  var chkCls='chk'+(hasQty?' circle':'')+(done?' done':r>0?' partial':'');
+  // Pedido: las tareas con cantidad usan la misma casilla cuadrada
+  // redondeada que el resto (antes eran un círculo aparte, sin motivo para
+  // diferenciarse visualmente del resto de las tareas).
+  var chkCls='chk'+(done?' done':r>0?' partial':'');
   var justPopped = (S._justCompletedId === t.id);
   if(justPopped) chkCls += ' chk-pop';
   var clHTML='';
+  var clIsOpen = !!(S._clOpen && S._clOpen[t.id]);
   if(hasCL){
-    clHTML='<div id="cl-'+t.id+'" style="display:none;padding-left:33px;padding-bottom:10px;">';
+    clHTML='<div id="cl-'+t.id+'" style="display:'+(clIsOpen?'block':'none')+';padding-left:33px;padding-bottom:10px;">';
     t.checklist.forEach(function(item){
       // Pedido: los ítems con cantidad muestran un stepper −/+ en vez de un
       // check simple, para diferenciarlos de un vistazo. El 🔗 es solo un
@@ -6296,7 +6424,7 @@ function taskHTML(t,showPeriod){
         '</div>'+
         ((hasQty||hasCL)?mpHTML(r):'')+tagHTML+
       '</div>'+
-      (hasCL?'<button onclick="expCL(\''+t.id+'\')" id="exp-'+t.id+'" style="background:none;border:none;color:var(--muted);font-size:14px;padding:0 3px;flex-shrink:0;transition:transform .2s;">▾</button>':'')+
+      (hasCL?'<button onclick="expCL(\''+t.id+'\')" id="exp-'+t.id+'" style="background:none;border:none;color:var(--muted);font-size:14px;padding:0 3px;flex-shrink:0;transition:transform .2s;transform:'+(clIsOpen?'rotate(180deg)':'none')+';">▾</button>':'')+
       // Botón editar — visible directo
       '<button onclick="openEdit(\''+t.id+'\')" title="Editar" style="background:none;border:none;color:var(--muted);font-size:15px;padding:0 4px;flex-shrink:0;line-height:1;">✎</button>'+
       // Botón vincular — pedido: ahora se puede vincular con tareas del
@@ -6419,23 +6547,54 @@ function openTaskMenu(id, event){
 // botón (el de al lado del lápiz ✎, sin abrir el editor), sea que se
 // quiera vincular la tarea completa o uno de sus propios ítems de
 // checklist con una tarea superior (tenga o no checklist ella misma).
+//
+// Estado del "picker" de vínculos — vive acá afuera (no en S) porque es
+// pura UI de un modal flotante, no datos a guardar:
+//   LINK_PICK_MODE       — modo elegido para el PRÓXIMO vínculo nuevo que
+//                           se cree ('unit' = 1 a 1, 'completion' = todo el
+//                           origen equivale a 1 recién al completarse).
+//   LINK_PICK_TASK_ID / LINK_PICK_SOURCE_ITEM — a qué tarea/ítem origen
+//                           corresponde el picker abierto, para poder
+//                           refrescarlo tras cambiar el modo.
+//   LINK_PICK_DIRTY       — pedido: al plegar/desplegar un período o
+//                           marcar/quitar un vínculo NO se refresca la
+//                           página de fondo en cada click (nada de
+//                           render() ahí) — solo se actualiza el propio
+//                           modal. Esta bandera queda pendiente y recién
+//                           se aplica un solo render() de fondo al cerrar
+//                           el modal (botón "Listo"), ya con todo resuelto.
+var LINK_PICK_MODE = 'unit';
+var LINK_PICK_TASK_ID = null;
+var LINK_PICK_SOURCE_ITEM = null;
+var LINK_PICK_DIRTY = false;
 function openLinkModal(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
+  LINK_PICK_MODE = 'unit'; // nueva sesión de vinculación — arranca en modo por defecto
+  LINK_PICK_DIRTY = false;
   if(t.checklist && t.checklist.length){
-    openCLSourcePicker(id); // elegir cuál de sus ítems vincular
+    openCLSourcePicker(id); // elegir cuál de sus ítems vincular (o la tarea completa)
   } else {
     openLinkTargetPicker(id, null); // vincular la tarea completa
   }
 }
 // Paso 1 (solo si la tarea tiene checklist propio): elegir qué ítem
-// vincular — con checklist activo, la tarea ya no avanza como un todo, así
-// que no tiene sentido vincularla completa (ver mToggleCLSection).
+// vincular — o, pedido, vincular la TAREA COMPLETA igual, aunque tenga
+// checklist propio (cada ítem que se complete cuenta como 1 unidad hacia
+// el destino elegido, o como 1 recién al completarse todo, según el modo).
 function openCLSourcePicker(taskId){
   var t = S.tasks.find(function(x){return x.id===taskId;});
   if(!t) return;
   var old=document.getElementById('link-picker-box');if(old)old.remove();
   var box=document.createElement('div');box.className='conf-box';box.id='link-picker-box';
+  var wholeLinks = normalizeLinks(t.clLinkUp).map(function(l){return findCLItem(l.taskId,l.itemId);}).filter(Boolean);
+  var wholeLabel = wholeLinks.length ? wholeLinks.map(function(linked){return esc(linked.task.text)+(linked.item?(' · '+esc(linked.item.text||'ítem')):' (tarea completa)');}).join(', ') : null;
+  var wholeRow = '<button onclick="openLinkTargetPicker(\''+taskId+'\',null)" style="width:100%;text-align:left;padding:10px 12px;border:1.5px solid '+(wholeLinks.length?'var(--accent)':'var(--line)')+';background:'+(wholeLinks.length?'var(--accent-bg)':'var(--paper)')+';border-radius:10px;margin-bottom:10px;cursor:pointer;font-family:Inter,sans-serif;">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--ink);">📦 Vincular la tarea COMPLETA</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Cada ítem que completes acá suma hacia el destino que elijas.</div>'+
+    (wholeLabel?'<div style="font-size:11px;color:var(--accent);margin-top:4px;">⬆ '+wholeLabel+'</div>':'')+
+  '</button>'+
+  '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 8px;">O vincula un ítem puntual</div>';
   var rows = t.checklist.map(function(it){
     var links = normalizeLinks(it.linkUp).map(function(l){return findCLItem(l.taskId,l.itemId);}).filter(Boolean);
     var label = links.length ? links.map(function(linked){return esc(linked.task.text)+(linked.item?(' · '+esc(linked.item.text||'ítem')):' (tarea completa)');}).join(', ') : null;
@@ -6446,24 +6605,32 @@ function openCLSourcePicker(taskId){
   }).join('');
   box.innerHTML='<div class="conf-inner" style="max-width:360px;max-height:80vh;overflow-y:auto;">'+
     '<div class="serif" style="font-weight:700;font-size:17px;margin-bottom:4px;">Vincular</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Esta tarea tiene checklist propio — elige qué ítem quieres vincular (puedes elegir más de una tarea destino para cada ítem).</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes elegir más de una tarea destino para cada uno).</div>'+
+    wholeRow+
     rows+
-    '<button class="cbtn" style="margin-top:6px;" onclick="this.closest(\'.conf-box\').remove();">Cerrar</button>'+
+    '<button class="cbtn" style="margin-top:6px;" onclick="this.closest(\'.conf-box\').remove();if(LINK_PICK_DIRTY){LINK_PICK_DIRTY=false;render();}">Cerrar</button>'+
   '</div>';
   document.body.appendChild(box);
 }
-// Paso 2: elegir el/los destino(s). sourceItemId es '' si se vincula la
-// tarea completa, o el id de uno de sus propios ítems de checklist.
-// Pedido: una tarea puede vincularse a VARIAS tareas destino a la vez —
-// tanto de períodos más amplios como de su mismo período (ej. una tarea
-// semanal puede sumar a otra tarea semanal Y a una mensual/semestral/anual,
-// todas al mismo tiempo). Por eso cada fila alterna (agrega/quita) en vez
-// de cerrar el modal al elegir, y se puede seguir marcando más.
+// Paso 2: elegir el/los destino(s). sourceItemId es null/'' si se vincula
+// la tarea completa, o el id de uno de sus propios ítems de checklist.
+// Pedido: SOLO se puede vincular hacia una tarea de período SUPERIOR — nunca
+// del mismo rango (una diaria jamás puede vincularse a otra diaria, etc.) —
+// por eso candidatePeriods arranca en idx+1, sin incluir el propio período.
+// Se puede elegir VARIAS tareas destino a la vez (todas las superiores que
+// quieras, en simultáneo) — cada fila alterna (agrega/quita).
+// Pedido: la lista de destinos arranca toda PLEGADA por período — semana,
+// mes, semestre, año — y se despliega la que quieras tocándola, sin volver
+// a dibujar la página de fondo (ver toggleLinkGroup). Pedido también: en
+// cada vínculo se puede elegir si suma 1 a 1 o si el origen completo
+// equivale recién a 1 al terminarlo (ver el selector de modo más abajo).
 function openLinkTargetPicker(taskId, sourceItemId){
   var t = S.tasks.find(function(x){return x.id===taskId;});
   if(!t) return;
+  LINK_PICK_TASK_ID = taskId;
+  LINK_PICK_SOURCE_ITEM = sourceItemId || null;
   var idx = PERIODS.indexOf(t.period);
-  var candidatePeriods = PERIODS.slice(idx); // desde su propio período hacia arriba
+  var candidatePeriods = PERIODS.slice(idx+1).filter(isPeriodEnabled); // SOLO períodos estrictamente superiores y activos
   var groups = candidatePeriods.map(function(p){
     return {period:p, tasks:S.tasks.filter(function(h){return h.period===p && h.id!==taskId;})};
   }).filter(function(g){return g.tasks.length;});
@@ -6472,39 +6639,88 @@ function openLinkTargetPicker(taskId, sourceItemId){
   var currentLinkVal = sourceItemId ? ((t.checklist||[]).find(function(i){return i.id===sourceItemId;})||{}).linkUp : t.clLinkUp;
   var currentLinks = normalizeLinks(currentLinkVal);
   var body;
-  if(!groups.length){
-    body = '<div style="font-size:13px;color:var(--muted);line-height:1.6;text-align:center;padding:10px 0;">Todavía no tienes otras tareas de '+candidatePeriods.map(function(p){return PL[p];}).join(', ')+' para vincular.</div>';
+  if(!candidatePeriods.length){
+    body = '<div style="font-size:13px;color:var(--muted);line-height:1.6;text-align:center;padding:10px 0;">"'+PL[t.period]+'" ya es el período más amplio — no hay nada superior para vincular.</div>';
+  } else if(!groups.length){
+    body = '<div style="font-size:13px;color:var(--muted);line-height:1.6;text-align:center;padding:10px 0;">Todavía no tienes tareas de '+candidatePeriods.map(function(p){return PL[p];}).join(', ')+' para vincular.</div>';
   } else {
     body = groups.map(function(g){
-      return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px;">'+PL[g.period]+'</div>'+
-        g.tasks.map(function(h){
-          if(h.checklist && h.checklist.length){
-            return h.checklist.map(function(it){
-              var already = currentLinks.some(function(l){return l.taskId===h.id && l.itemId===it.id;});
-              return linkRowButton(taskId, sourceItemId, h.id, it.id, esc(h.text)+' <span style="color:var(--muted);">· '+esc(it.text||'(sin nombre)')+'</span>', already);
-            }).join('');
-          }
-          var already = currentLinks.some(function(l){return l.taskId===h.id && !l.itemId;});
-          return linkRowButton(taskId, sourceItemId, h.id, '', esc(h.text)+' <span style="color:var(--muted);">· (tarea completa)</span>', already);
-        }).join('');
+      var linksInGroup = currentLinks.filter(function(l){
+        var ht=S.tasks.find(function(x){return x.id===l.taskId;});
+        return ht && ht.period===g.period;
+      }).length;
+      var rowsHTML = g.tasks.map(function(h){
+        if(h.checklist && h.checklist.length){
+          return h.checklist.map(function(it){
+            var linkObj = currentLinks.find(function(l){return l.taskId===h.id && l.itemId===it.id;});
+            return linkRowButton(taskId, sourceItemId, h.id, it.id, esc(h.text)+' <span style="color:var(--muted);">· '+esc(it.text||'(sin nombre)')+'</span>', linkObj);
+          }).join('');
+        }
+        var linkObj2 = currentLinks.find(function(l){return l.taskId===h.id && !l.itemId;});
+        return linkRowButton(taskId, sourceItemId, h.id, '', esc(h.text)+' <span style="color:var(--muted);">· (tarea completa)</span>', linkObj2);
+      }).join('');
+      return '<div style="border:1px solid var(--line-soft);border-radius:10px;margin-bottom:8px;overflow:hidden;">'+
+        '<div onclick="toggleLinkGroup(\''+g.period+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg);">'+
+          '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex:1;">'+PL[g.period]+(linksInGroup?' · '+linksInGroup+' vinculada'+(linksInGroup===1?'':'s'):'')+'</span>'+
+          '<span style="font-size:11px;color:var(--muted);">'+g.tasks.length+'</span>'+
+          '<span id="lg-chev-'+g.period+'" style="transition:transform .15s;transform:rotate(-90deg);display:inline-flex;color:var(--muted);">'+
+            '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5 4 6 7.5 9.5 4"/></svg>'+
+          '</span>'+
+        '</div>'+
+        '<div id="lg-body-'+g.period+'" style="display:none;padding:8px;">'+rowsHTML+'</div>'+
+      '</div>';
     }).join('');
   }
   var summary = currentLinks.length
     ? '<div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:10px;">Vinculado a '+currentLinks.length+' tarea'+(currentLinks.length===1?'':'s')+' — toca de nuevo para quitar una.</div>'
     : '';
+  var modeBar = '<div style="display:flex;gap:6px;margin-bottom:6px;">'+
+    '<button onclick="setLinkPickMode(\'unit\')" style="flex:1;padding:8px 4px;border-radius:8px;border:1.5px solid '+(LINK_PICK_MODE==='unit'?'var(--accent)':'var(--line)')+';background:'+(LINK_PICK_MODE==='unit'?'var(--accent-bg)':'var(--paper)')+';color:'+(LINK_PICK_MODE==='unit'?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">1 a 1</button>'+
+    '<button onclick="setLinkPickMode(\'completion\')" style="flex:1;padding:8px 4px;border-radius:8px;border:1.5px solid '+(LINK_PICK_MODE==='completion'?'var(--accent)':'var(--line)')+';background:'+(LINK_PICK_MODE==='completion'?'var(--accent-bg)':'var(--paper)')+';color:'+(LINK_PICK_MODE==='completion'?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Todo = 1 al completar</button>'+
+  '</div>'+
+  '<div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;line-height:1.4;">Así sumará el próximo vínculo que marques abajo ('+(LINK_PICK_MODE==='unit'?'cada unidad de acá suma 1 unidad allá':'solo al completar esto al 100% se suma 1 allá')+'). Los vínculos que ya tenías no cambian solos — toca su etiqueta para cambiarles el modo.</div>';
   box.innerHTML='<div class="conf-inner" style="max-width:360px;max-height:80vh;overflow-y:auto;">'+
     '<div class="serif" style="font-weight:700;font-size:17px;margin-bottom:4px;">Vincular con…</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Al avanzar acá, avanzará automáticamente allá — puedes elegir varias a la vez y la meta de cada destino se recalcula sola.</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Al avanzar acá, avanzará automáticamente allá — puedes elegir varias tareas superiores a la vez y la meta de cada destino se recalcula sola.</div>'+
+    modeBar+
     summary+
     body+
-    '<button class="cbtn" style="margin-top:10px;" onclick="this.closest(\'.conf-box\').remove();">Listo</button>'+
+    '<button class="cbtn" style="margin-top:10px;" onclick="closeLinkPicker()">Listo</button>'+
   '</div>';
   document.body.appendChild(box);
 }
-function linkRowButton(taskId, sourceItemId, targetTaskId, targetItemId, labelHtml, already){
+// Pliega/despliega un grupo de período dentro del picker — pedido: sin
+// tocar render() ni reconstruir nada de la página de fondo, para que
+// desplegar "Semana" o "Mes" no se sienta como un refresh.
+function toggleLinkGroup(period){
+  var bodyEl=document.getElementById('lg-body-'+period), chev=document.getElementById('lg-chev-'+period);
+  if(!bodyEl) return;
+  var opening = bodyEl.style.display==='none';
+  bodyEl.style.display = opening?'block':'none';
+  if(chev) chev.style.transform = opening?'rotate(0deg)':'rotate(-90deg)';
+}
+// Cambia el modo que se usará para el PRÓXIMO vínculo nuevo — no toca los
+// que ya existen. Solo redibuja el modalito (no la página de fondo).
+function setLinkPickMode(m){
+  LINK_PICK_MODE = m;
+  if(LINK_PICK_TASK_ID) openLinkTargetPicker(LINK_PICK_TASK_ID, LINK_PICK_SOURCE_ITEM);
+}
+// Cierra el picker y recién ahí aplica, en un solo paso, el render() de
+// fondo si algo cambió mientras estuvo abierto (ver LINK_PICK_DIRTY) — así
+// cada click de plegar/marcar/cambiar-modo dentro del modal no refresca la
+// página de fondo; se sincroniza una sola vez al terminar.
+function closeLinkPicker(){
+  var b=document.getElementById('link-picker-box'); if(b) b.remove();
+  if(LINK_PICK_DIRTY){ LINK_PICK_DIRTY=false; render(); }
+}
+function linkRowButton(taskId, sourceItemId, targetTaskId, targetItemId, labelHtml, linkObj){
+  var already = !!linkObj;
+  var modeTag = already
+    ? '<span onclick="event.stopPropagation();cycleLinkMode(\''+taskId+'\',\''+(sourceItemId||'')+'\',\''+targetTaskId+'\',\''+targetItemId+'\')" title="Tocar para cambiar el modo de suma" style="font-size:9px;font-weight:800;letter-spacing:.02em;padding:3px 7px;border-radius:6px;background:var(--accent);color:white;flex-shrink:0;cursor:pointer;white-space:nowrap;">'+((linkObj.mode||'unit')==='completion'?'=1 AL COMPLETAR':'1 A 1')+'</span>'
+    : '';
   return '<button onclick="toggleTaskLink(\''+taskId+'\',\''+(sourceItemId||'')+'\',\''+targetTaskId+'\',\''+targetItemId+'\')" style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid '+(already?'var(--accent)':'var(--line)')+';background:'+(already?'var(--accent-bg)':'var(--paper)')+';border-radius:10px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;">'+
-    '<span style="font-size:13px;color:var(--ink);">'+labelHtml+'</span>'+
-    (already?'<span style="font-size:11px;color:var(--accent);font-weight:700;flex-shrink:0;">✓ vinculado</span>':'')+
+    '<span style="font-size:13px;color:var(--ink);flex:1;min-width:0;">'+labelHtml+'</span>'+
+    modeTag+
   '</button>';
 }
 // Agrega o quita (alterna) un vínculo hacia targetTaskId/targetItemId,
@@ -6512,6 +6728,10 @@ function linkRowButton(taskId, sourceItemId, targetTaskId, targetItemId, labelHt
 // viejo setTaskLink() (que reemplazaba el único vínculo posible), esto
 // permite mantener varios vínculos activos a la vez. targetItemId vacío
 // (con targetTaskId con valor) = vincular con la tarea destino completa.
+// Un vínculo NUEVO se crea con el modo elegido en LINK_PICK_MODE.
+// Pedido: no se refresca la página de fondo en cada click acá — solo se
+// guarda el dato y se redibuja el modalito; el render() de fondo queda
+// pendiente hasta cerrar el picker (ver closeLinkPicker/LINK_PICK_DIRTY).
 function toggleTaskLink(taskId, sourceItemId, targetTaskId, targetItemId){
   if(!targetTaskId || targetTaskId===taskId) return; // no auto-vínculo
   var t = S.tasks.find(function(x){return x.id===taskId;});
@@ -6524,20 +6744,44 @@ function toggleTaskLink(taskId, sourceItemId, targetTaskId, targetItemId){
     if(!it) return;
     arr = normalizeLinks(it.linkUp);
     removed = arr.some(isSame);
-    arr = removed ? arr.filter(function(l){return !isSame(l);}) : arr.concat([{taskId:targetTaskId, itemId:normItem}]);
+    arr = removed ? arr.filter(function(l){return !isSame(l);}) : arr.concat([{taskId:targetTaskId, itemId:normItem, mode:LINK_PICK_MODE}]);
     var nc = t.checklist.map(function(i){return i.id===sourceItemId?Object.assign({},i,{linkUp:arr}):i;});
     S.tasks = S.tasks.map(function(x){return x.id===taskId?Object.assign({},t,{checklist:nc}):x;});
   } else {
     arr = normalizeLinks(t.clLinkUp);
     removed = arr.some(isSame);
-    arr = removed ? arr.filter(function(l){return !isSame(l);}) : arr.concat([{taskId:targetTaskId, itemId:normItem}]);
+    arr = removed ? arr.filter(function(l){return !isSame(l);}) : arr.concat([{taskId:targetTaskId, itemId:normItem, mode:LINK_PICK_MODE}]);
     S.tasks = S.tasks.map(function(x){return x.id===taskId?Object.assign({},t,{clLinkUp:arr}):x;});
   }
   recalcParentItemQtyFromLinks(targetTaskId, normItem);
   saveState();
-  toast(removed?'Vínculo eliminado':'Vinculado ✓ (la meta se recalculó sola)');
-  render();
-  openLinkTargetPicker(taskId, sourceItemId); // refresca el mismo modal, sigue abierto
+  LINK_PICK_DIRTY = true;
+  toast(removed?'Vínculo eliminado':'Vinculado ✓ ('+(LINK_PICK_MODE==='completion'?'solo al completar':'1 a 1')+' — la meta se recalculó sola)');
+  openLinkTargetPicker(taskId, sourceItemId); // refresca el mismo modal, sigue abierto — sin tocar la página de fondo
+}
+// Cambia el modo de un vínculo YA existente (unit ↔ completion) sin
+// quitarlo, y recalcula la meta automática del destino porque el "peso"
+// del hijo puede cambiar según el modo (ver clChildContribution).
+function cycleLinkMode(taskId, sourceItemId, targetTaskId, targetItemId){
+  var t = S.tasks.find(function(x){return x.id===taskId;});
+  if(!t) return;
+  var normItem = targetItemId||null;
+  function isSame(l){ return l.taskId===targetTaskId && (l.itemId||null)===normItem; }
+  var list = sourceItemId ? normalizeLinks(((t.checklist||[]).find(function(i){return i.id===sourceItemId;})||{}).linkUp) : normalizeLinks(t.clLinkUp);
+  var link = list.find(isSame);
+  if(!link) return;
+  link.mode = (link.mode||'unit')==='unit' ? 'completion' : 'unit';
+  if(sourceItemId){
+    var nc = t.checklist.map(function(i){return i.id===sourceItemId?Object.assign({},i,{linkUp:list}):i;});
+    S.tasks = S.tasks.map(function(x){return x.id===taskId?Object.assign({},t,{checklist:nc}):x;});
+  } else {
+    S.tasks = S.tasks.map(function(x){return x.id===taskId?Object.assign({},t,{clLinkUp:list}):x;});
+  }
+  recalcParentItemQtyFromLinks(targetTaskId, normItem);
+  saveState();
+  LINK_PICK_DIRTY = true;
+  toast('Modo cambiado a "'+(link.mode==='completion'?'todo = 1 al completar':'1 a 1')+'"');
+  openLinkTargetPicker(taskId, sourceItemId);
 }
 
 function closeTaskMenu(){
@@ -6545,6 +6789,25 @@ function closeTaskMenu(){
   if(m) m.remove();
 }
 
+// Pedido: el plegado de categorías se puede personalizar desde Yo →
+// Personalización → Categorías, con 4 estrategias posibles:
+//  - 'always-collapsed'  : siempre todas plegadas.
+//  - 'smart'             : plegadas las que ya están 100% completas,
+//                          desplegadas las que tienen algo pendiente.
+//  - 'remember' (default): respeta lo último que el usuario dejó a mano
+//                          para cada categoría (comportamiento de siempre).
+//  - 'always-expanded'   : siempre todas desplegadas.
+// El toggle manual (toggleCatSection) sigue funcionando igual en cualquier
+// modo — sirve para "espiar" una categoría un momento; en el próximo
+// render completo vuelve a acomodarse según la estrategia elegida (salvo
+// en modo 'remember', donde ese toque manual s í queda guardado).
+function isCatCollapsed(catId, doneInCat, total){
+  var mode = S.catCollapseMode || 'remember';
+  if(mode==='always-collapsed') return true;
+  if(mode==='always-expanded') return false;
+  if(mode==='smart') return total>0 && doneInCat===total;
+  return !!(S.collapsedCats && S.collapsedCats[catId]);
+}
 function toggleCatSection(catId){
   if(!S.collapsedCats) S.collapsedCats = {};
   S.collapsedCats[catId] = !S.collapsedCats[catId];
@@ -7021,22 +7284,24 @@ function doPeriodReset(period){
 }
 
 function renderGoals(){
+  var availablePeriods = enabledGoalPeriods();
+  // Si el período que se estaba viendo se acaba de desactivar, cae a otro disponible.
+  if(availablePeriods.indexOf(S.period)===-1) S.period = availablePeriods[0] || 'semana';
   var sel=S.period;
   var mine=S.tasks.filter(function(t){return t.period===sel;});
   var doneN=mine.filter(isDone).length;
-  var ptabs=PERIODS.filter(function(p){return p!=='dia';}).map(function(p){
-    return '<button class="period-tab'+(sel===p?' active':'')+'" onclick="S.period=\''+p+'\';render()">'+PL[p]+'</button>';
+  var ptabs=availablePeriods.map(function(p){
+    return '<button class="period-tab-v2'+(sel===p?' active':'')+'" onclick="S.period=\''+p+'\';render()">'+
+      '<span class="ptab-ic">'+periodIconSVG(p,17,1.8)+'</span>'+
+      '<span class="ptab-lbl">'+PL[p]+'</span>'+
+    '</button>';
   }).join('');
   var progBar=mine.length?'<div style="margin-bottom:16px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px;"><span>Progreso</span><span>'+doneN+'/'+mine.length+'</span></div>'+mpHTML(doneN/mine.length,5)+'</div>':'';
-  var ICON_WEEK = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg>';
-  var ICON_MONTH = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/><circle cx="12" cy="15" r="2.4"/></svg>';
-  var ICON_SEM = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 16c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0"/><circle cx="12" cy="9" r="4"/></svg>';
-  var ICON_YEAR = '<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>';
   var emptyMsgs = {
-    semana:{icon:ICON_WEEK,msg:'Sin objetivos esta semana',sub:'¿Qué te gustaría lograr en los próximos 7 días?'},
-    mes:{icon:ICON_MONTH,msg:'Sin objetivos este mes',sub:'Piensa en algo importante para este mes.'},
-    semestre:{icon:ICON_SEM,msg:'Sin objetivos este semestre',sub:'Una meta a mediano plazo puede ayudarte a enfocarte.'},
-    "año":{icon:ICON_YEAR,msg:'Sin objetivos este año',sub:'¿Cuál es tu gran meta para este año?'}
+    semana:{icon:periodIconSVG('semana',36,1.5),msg:'Sin objetivos esta semana',sub:'¿Qué te gustaría lograr en los próximos 7 días?'},
+    mes:{icon:periodIconSVG('mes',36,1.5),msg:'Sin objetivos este mes',sub:'Piensa en algo importante para este mes.'},
+    semestre:{icon:periodIconSVG('semestre',36,1.5),msg:'Sin objetivos este semestre',sub:'Una meta a mediano plazo puede ayudarte a enfocarte.'},
+    "año":{icon:periodIconSVG('año',36,1.5),msg:'Sin objetivos este año',sub:'¿Cuál es tu gran meta para este año?'}
   };
   var em = emptyMsgs[sel] || emptyMsgs.semana;
   var tasksHTML=mine.length?mine.map(function(t){
@@ -7063,7 +7328,7 @@ function renderGoals(){
     '</div>'
   );
   return '<div class="serif" style="font-size:24px;font-weight:700;color:var(--ink);margin-bottom:14px;letter-spacing:-.02em;">Objetivos</div>'+
-    '<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap;">'+ptabs+'</div>'+
+    '<div class="period-tab-row">'+ptabs+'</div>'+
     progBar+tasksHTML+
     (mine.length?'<button class="addtbtn" onclick="openNew(\''+sel+'\')">+ Agregar tarea</button>':'');
 }
@@ -7269,6 +7534,12 @@ function renderCalendarioMensual(){
         dayLabels.map(function(l){return '<div style="text-align:center;font-size:11px;color:var(--muted-soft);font-weight:700;padding:4px 0;">'+l+'</div>';}).join('')+
       '</div>';
 
+  // Pedido: al deslizar, que se mueva SOLO la grilla de días (no el header
+  // con el nombre del mes, ni la agenda de abajo) — se envuelve acá en su
+  // propio contenedor recortado (overflow:hidden), así el mes que entra se
+  // ve "acercarse" desde el borde en vez de aparecer de golpe.
+  html += '<div id="cal-days-viewport" style="overflow:hidden;position:relative;">';
+
   if(!expanded){
     // ── Plegado: solo la semana del día seleccionado ──────────────────────
     var selD = parseLocalDate(S.calendarSelectedDay);
@@ -7345,6 +7616,7 @@ function renderCalendarioMensual(){
 
     html += '</div>';
   }
+  html += '</div>'; // cierre cal-days-viewport
 
   // Manija para plegar/desplegar — toque en vez de arrastre real (más
   // sólido), inspirada en el tirador de los calendarios de celular.
@@ -7501,7 +7773,9 @@ function openDayDetail(dateKey){
   var body='';
   var hist = (S.dailyHistory||{})[dateKey];
   if(!inCurrentWeek && hist){
-    var pct = hist.total ? Math.round((hist.completed/hist.total)*100) : 0;
+    // Pedido: este % ahora coincide con el que decide el umbral — incluye
+    // avance parcial de tareas con cantidad/checklist, no solo binario.
+    var pct = Math.round((hist.ratio||0)*100);
     body += '<div style="text-align:center;padding:6px 0 16px;border-bottom:1px solid var(--line-soft);margin-bottom:14px;">'+
       '<div style="font-size:26px;font-weight:800;color:'+(hist.streakReached?'var(--accent)':'var(--muted)')+';">'+hist.completed+'/'+hist.total+'</div>'+
       '<div style="font-size:11px;color:var(--muted);margin-top:2px;">tareas recurrentes completadas ese día ('+pct+'%)</div>'+
@@ -8587,13 +8861,17 @@ function tapTask(id){
   // Calcular cuánto avanzó (delta)
   var newProg = updated.prog || (updated.done?1:0);
   var delta = newProg - oldProg;
+  var justCompleted = !wasDone && isDone(updated);
+  var justUncompleted = wasDone && !isDone(updated);
   // Pedido: una tarea SIN checklist propio también puede ser el "hijo" de un
   // vínculo (t.clLinkUp) — se marca/avanza como cualquier tarea normal, y
   // ese avance empuja hacia el ítem de checklist al que está vinculada.
   // Se le pasa a propagateCLLink() como si fuera un "ítem" con .linkUp
-  // porque es justo el único campo que esa función necesita leer.
-  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, delta);
-  finishUpdate(updated, !wasDone && isDone(updated), delta);
+  // porque es justo el único campo que esa función necesita leer. Se pasan
+  // los dos deltas (1 a 1 y "al completar") — cada vínculo usa el que
+  // corresponda según su propio modo elegido al vincular.
+  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, delta, justCompleted?1:(justUncompleted?-1:0));
+  finishUpdate(updated, justCompleted, delta);
 }
 // Pedido: poder escribir el avance de una tarea con cantidad directo, en
 // vez de tener que tocar el círculo repetidas veces hasta llegar a la meta.
@@ -8606,8 +8884,10 @@ function setTaskProg(id, val){
   if(newProg===oldProg) return;
   var updated=Object.assign({},t,{prog:newProg,done:newProg>=t.qty});
   var delta = newProg - oldProg;
-  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, delta);
-  finishUpdate(updated, !wasDone && isDone(updated), delta);
+  var justCompletedQ = !wasDone && isDone(updated);
+  var justUncompletedQ = wasDone && !isDone(updated);
+  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, delta, justCompletedQ?1:(justUncompletedQ?-1:0));
+  finishUpdate(updated, justCompletedQ, delta);
 }
 function tapCL(taskId,itemId){
   var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
@@ -8623,11 +8903,18 @@ function tapCL(taskId,itemId){
   var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
   var delta = newDone - oldDone;
   var justCompleted = !wasDone && isDone(updated);
+  var justUncompleted = wasDone && !isDone(updated);
   if(!justCompleted) playSound('tick'); // ítem suelto: sonido discreto (el 'complete' llega solo si cierra toda la tarea)
   // Si este ítem está vinculado a un ítem de una tarea de período más
-  // amplio, empujar el cambio hacia arriba (±1, según si se marcó o
-  // desmarcó) antes de guardar/renderizar, para que quede todo en un solo paso.
-  if(toggledItem) propagateCLLink(toggledItem, toggledItem.done?1:-1);
+  // amplio, empujar el cambio hacia arriba (un check simple es atómico:
+  // el delta "1 a 1" y el de "al completar" coinciden siempre) antes de
+  // guardar/renderizar, para que quede todo en un solo paso.
+  if(toggledItem) propagateCLLink(toggledItem, toggledItem.done?1:-1, toggledItem.done?1:-1);
+  // Pedido: aunque esta tarea tenga checklist propio, TAMBIÉN puede estar
+  // vinculada como tarea completa (t.clLinkUp) — cada ítem que se completa
+  // acá cuenta como 1 unidad hacia ese destino (o 1 al llegar al 100%, si
+  // el vínculo usa el modo "completar").
+  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, delta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, delta);
 }
 // Sumar/restar de a 1 unidad en un ítem de checklist con cantidad, desde la
@@ -8636,6 +8923,7 @@ function stepCL(taskId,itemId,stepDelta){
   var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
   var wasDone=isDone(t);
   var oldDoneCount=t.checklist.filter(function(i){return i.done;}).length;
+  var oldItem=t.checklist.find(function(i){return i.id===itemId;});
   var targetItem=null;
   var newCL=t.checklist.map(function(i){
     if(i.id!==itemId) return i;
@@ -8649,8 +8937,13 @@ function stepCL(taskId,itemId,stepDelta){
   var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
   var taskLevelDelta = newDoneCount - oldDoneCount;
   var justCompleted = !wasDone && isDone(updated);
+  var justUncompleted = wasDone && !isDone(updated);
   if(!justCompleted) playSound('tick');
-  propagateCLLink(targetItem, stepDelta);
+  var itemJustCompleted = oldItem && !oldItem.done && targetItem.done;
+  var itemJustUncompleted = oldItem && oldItem.done && !targetItem.done;
+  propagateCLLink(targetItem, stepDelta, itemJustCompleted?1:(itemJustUncompleted?-1:0));
+  // Vínculo de tarea completa (clLinkUp), aunque esta tarea tenga checklist.
+  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, taskLevelDelta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, taskLevelDelta);
 }
 // Pedido: poder escribir el número de avance directo en la lista del día a
@@ -8659,6 +8952,7 @@ function setCLProg(taskId,itemId,val){
   var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
   var wasDone=isDone(t);
   var oldDoneCount=t.checklist.filter(function(i){return i.done;}).length;
+  var oldItem=t.checklist.find(function(i){return i.id===itemId;});
   var targetItem=null, delta=0;
   var newCL=t.checklist.map(function(i){
     if(i.id!==itemId) return i;
@@ -8673,8 +8967,12 @@ function setCLProg(taskId,itemId,val){
   var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
   var taskLevelDelta = newDoneCount - oldDoneCount;
   var justCompleted = !wasDone && isDone(updated);
+  var justUncompleted = wasDone && !isDone(updated);
   if(!justCompleted) playSound('tick');
-  propagateCLLink(targetItem, delta);
+  var itemJustCompleted = oldItem && !oldItem.done && targetItem.done;
+  var itemJustUncompleted = oldItem && oldItem.done && !targetItem.done;
+  propagateCLLink(targetItem, delta, itemJustCompleted?1:(itemJustUncompleted?-1:0));
+  if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, taskLevelDelta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, taskLevelDelta);
 }
 function expCL(id){
@@ -8682,6 +8980,13 @@ function expCL(id){
   var open=cl.style.display==='none'||cl.style.display==='';
   cl.style.display=open?'block':'none';
   if(exp)exp.style.transform=open?'rotate(180deg)':'none';
+  // BUGFIX: antes este estado solo vivía en el DOM — como cada tilde de un
+  // ítem dispara un render() completo (reconstruye todo el HTML de la
+  // pestaña), el checklist recién abierto se volvía a colapsar solo en
+  // cada toque, sintiéndose como un "refresh" no pedido. Ahora queda
+  // guardado acá y taskHTML() lo respeta al reconstruir.
+  if(!S._clOpen) S._clOpen={};
+  S._clOpen[id]=open;
 }
 function finishUpdate(updated, justCompleted, delta){
   S.tasks=S.tasks.map(function(t){return t.id===updated.id?updated:t;});
@@ -9535,11 +9840,15 @@ function clItemsHTML(){
     // los ítems con meta, igual estética que el resto de la app.
     var barHTML = isQtyItem ? '<div style="margin:2px 0 6px 38px;">'+mpHTML(q?( (item.prog||0)/q ):0, 4)+'</div>' : '';
     return '<div style="margin-bottom:'+(isQtyItem||qtyEditorOpen?4:14)+'px;">'+
-      '<div style="display:flex;align-items:center;gap:12px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
         controlHTML+
-        '<input value="'+esc(item.text)+'" placeholder="Ítem..." oninput="mUpdateCL(\''+item.id+'\',this.value)" style="flex:1;border:none;border-bottom:1px solid var(--line);outline:none;font-size:16px;background:transparent;padding:5px 0;font-family:Inter,sans-serif;color:'+(item.done&&!isQtyItem?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(item.done&&!isQtyItem?'line-through':'none')+';"/>'+
+        // BUGFIX: le faltaba min-width:0 — sin eso, un input con flex:1
+        // igual se resiste a achicarse más allá de cierto ancho mínimo del
+        // navegador, y en pantallas angostas eso empuja "META" y la "×"
+        // fuera del borde derecho de la pantalla (como en el pantallazo).
+        '<input value="'+esc(item.text)+'" placeholder="Ítem..." oninput="mUpdateCL(\''+item.id+'\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1px solid var(--line);outline:none;font-size:16px;background:transparent;padding:5px 0;font-family:Inter,sans-serif;color:'+(item.done&&!isQtyItem?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(item.done&&!isQtyItem?'line-through':'none')+';"/>'+
         qtyBtn+
-        '<button onclick="mRemoveCL(\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:20px;line-height:1;">×</button>'+
+        '<button onclick="mRemoveCL(\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:20px;line-height:1;flex-shrink:0;padding:0;">×</button>'+
       '</div>'+
       qtyEditorHTML+barHTML+
     '</div>';
@@ -9663,20 +9972,31 @@ function findCLChildren(taskId, itemId){
   var out=[];
   S.tasks.forEach(function(t){
     (t.checklist||[]).forEach(function(i){
-      if(normalizeLinks(i.linkUp).some(function(l){return l.taskId===taskId && (l.itemId||null)===norm;})) out.push({task:t,item:i});
+      var m = normalizeLinks(i.linkUp).filter(function(l){return l.taskId===taskId && (l.itemId||null)===norm;});
+      if(m.length) out.push({task:t,item:i,link:m[0]});
     });
-    if((!t.checklist||!t.checklist.length) && normalizeLinks(t.clLinkUp).some(function(l){return l.taskId===taskId && (l.itemId||null)===norm;})){
-      out.push({task:t,item:null});
-    }
+    // Pedido: la tarea COMPLETA puede vincularse hacia un objetivo aunque
+    // ella misma tenga checklist propio (antes clLinkUp solo existía en
+    // tareas sin checklist) — por eso ya no se excluye aquí según si tiene
+    // checklist o no.
+    var mt = normalizeLinks(t.clLinkUp).filter(function(l){return l.taskId===taskId && (l.itemId||null)===norm;});
+    if(mt.length) out.push({task:t,item:null,link:mt[0]});
   });
   return out;
 }
 // Cuánto "vale" un hijo para efectos de sumar la meta automática del padre
 // (ver recalcParentItemQtyFromLinks): su propia meta si es un ítem de
 // checklist, o su propia cantidad (o 1, si es un check simple) si es toda
-// una tarea.
+// una tarea — o su cantidad de ítems de checklist, si es una tarea completa
+// con checklist propio (cada ítem completado = 1 unidad). Pedido: si el
+// vínculo específico usa el modo "completar" (mode:'completion'), el hijo
+// solo vale 1 en total (recién se cuenta al completarse del todo), sin
+// importar su propia meta interna.
 function clChildContribution(child){
+  var mode = (child.link && child.link.mode) || 'unit';
+  if(mode === 'completion') return 1;
   if(child.item) return clItemQty(child.item);
+  if(child.task.checklist && child.task.checklist.length) return child.task.checklist.length;
   return Math.max(1, child.task.qty||1);
 }
 // Recalcula la meta del objetivo (ítem de checklist, o tarea completa si
@@ -9706,15 +10026,29 @@ function recalcParentItemQtyFromLinks(taskId, itemId){
     S.tasks = S.tasks.map(function(t){return t.id===taskId?updated2:t;});
   }
 }
-// Empuja `delta` unidades desde un ítem (o tarea) hijo hacia CADA uno de
-// sus objetivos vinculados (uno o varios ítems de checklist, o tareas
+// Empuja avance desde un ítem (o tarea) hijo hacia CADA uno de sus
+// objetivos vinculados (uno o varios ítems de checklist, o tareas
 // completas si itemId es null), y sigue subiendo recursivamente por cada
 // rama si ese objetivo a su vez está vinculado más arriba todavía (ej.
 // semana → mes → año, o hacia varios en simultáneo). `visited` evita
 // bucles infinitos si el usuario llegara a crear un vínculo circular
 // (ej. A vinculada a B y B vinculada de vuelta a A).
-function propagateCLLink(childItem, delta, visited){
-  if(!childItem || !delta) return;
+//
+// Pedido: en TODA vinculación se puede elegir el modo de suma (por eso cada
+// entrada de link ahora guarda .mode) — por eso acá se manejan DOS deltas:
+//   `delta`     — avance "1 a 1": cada unidad del hijo suma 1 unidad allá.
+//   `complDelta`— avance "solo al completar": +1 cuando el hijo pasa de no
+//                 completo a completo, -1 al revés, 0 mientras tanto — así
+//                 el destino recién recibe 1 unidad cuando el hijo llega al
+//                 100%, sin importar cuántas unidades tenga por dentro.
+// Cada vínculo usa el delta que corresponda según su propio .mode. Si se
+// omite complDelta (llamadas antiguas), se asume igual a delta — correcto
+// para los toggles atómicos (0↔1) donde ambos valores siempre coinciden.
+function propagateCLLink(childItem, delta, complDelta, visited){
+  if(!childItem) return;
+  if(complDelta===undefined || complDelta===null) complDelta = delta;
+  delta = delta||0; complDelta = complDelta||0;
+  if(!delta && !complDelta) return;
   var links = normalizeLinks(childItem.linkUp);
   if(!links.length) return;
   visited = visited || [];
@@ -9722,26 +10056,37 @@ function propagateCLLink(childItem, delta, visited){
     var key = link.taskId+':'+(link.itemId||'');
     if(visited.indexOf(key)!==-1) return; // vínculo circular — cortar acá
     var nextVisited = visited.concat([key]);
+    var mode = link.mode || 'unit';
+    var addAmount = mode==='completion' ? complDelta : delta;
+    if(!addAmount) return;
     var found = findCLItem(link.taskId, link.itemId);
     if(!found) return;
     var parentTask=found.task, parentItem=found.item;
     if(!parentItem){
-      // Objetivo = la tarea completa (sin checklist propio) — mismo cálculo
-      // que usa tapTask() para tareas con cantidad.
+      // Objetivo = la tarea completa — mismo cálculo que usa tapTask() para
+      // tareas con cantidad. (Puede tener checklist propio igual: si lo
+      // tiene, isDone()/tRatio() ya priorizan el checklist sobre prog/qty,
+      // así que este prog acumulado queda como dato informativo nada más.)
       var wasDone=isDone(parentTask);
-      var newProg=Math.max(0, Math.min((parentTask.prog||0)+delta, parentTask.qty||1));
+      var oldProg = parentTask.prog||0;
+      var newProg=Math.max(0, Math.min(oldProg+addAmount, parentTask.qty||1));
+      var appliedDelta = newProg-oldProg;
       var nowDone = newProg>=(parentTask.qty||1);
       var updatedTask=Object.assign({},parentTask,{prog:newProg,done:nowDone});
       S.tasks=S.tasks.map(function(t){return t.id===parentTask.id?updatedTask:t;});
       var justCompletedTask = !wasDone && nowDone;
+      var justUncompletedTask = wasDone && !nowDone;
       if(justCompletedTask && !S.rewardedTaskIds[parentTask.id]){S.rewardedTaskIds[parentTask.id]=true;addXP(PT[parentTask.period]||1);}
-      propagateCLLink({linkUp:updatedTask.clLinkUp}, delta, nextVisited); // seguir subiendo si esta tarea a su vez está vinculada
+      // seguir subiendo si esta tarea a su vez está vinculada más arriba
+      propagateCLLink({linkUp:updatedTask.clLinkUp}, appliedDelta, justCompletedTask?1:(justUncompletedTask?-1:0), nextVisited);
       return;
     }
     var wasTaskDone=isDone(parentTask);
     var oldDoneCount=parentTask.checklist.filter(function(i){return i.done;}).length;
     var q=clItemQty(parentItem);
-    var newProg=Math.max(0, Math.min((parentItem.prog||0)+delta, q));
+    var oldItemProg = parentItem.prog||0;
+    var newProg=Math.max(0, Math.min(oldItemProg+addAmount, q));
+    var appliedItemDelta = newProg-oldItemProg;
     var newDone = q>1 ? newProg>=q : newProg>0;
     var newChecklist=parentTask.checklist.map(function(i){return i.id===parentItem.id?Object.assign({},i,{prog:newProg,done:newDone}):i;});
     var newDoneCount=newChecklist.filter(function(i){return i.done;}).length;
@@ -9749,9 +10094,12 @@ function propagateCLLink(childItem, delta, visited){
     var updatedParentTask=Object.assign({},parentTask,{checklist:newChecklist, done: newChecklist.length? newChecklist.every(function(i){return i.done;}) : parentTask.done});
     S.tasks=S.tasks.map(function(t){return t.id===parentTask.id?updatedParentTask:t;});
     var justCompletedParent = !wasTaskDone && isDone(updatedParentTask);
+    var justUncompletedParent = wasTaskDone && !isDone(updatedParentTask);
     if(justCompletedParent && !S.rewardedTaskIds[parentTask.id]){S.rewardedTaskIds[parentTask.id]=true;addXP(PT[parentTask.period]||1);}
     var updatedParentItem=newChecklist.find(function(i){return i.id===parentItem.id;});
-    propagateCLLink(updatedParentItem, delta, nextVisited);
+    var itemJustCompleted = !parentItem.done && updatedParentItem.done;
+    var itemJustUncompleted = parentItem.done && !updatedParentItem.done;
+    propagateCLLink(updatedParentItem, appliedItemDelta, itemJustCompleted?1:(itemJustUncompleted?-1:0), nextVisited);
     propagate(updatedParentTask, justCompletedParent, taskDelta);
   });
 }
@@ -9799,23 +10147,43 @@ function mSave(){
   // El recordatorio solo tiene sentido si la tarea es diaria y tiene hora
   // definida; si se desactivó la hora, el recordatorio no se guarda activo.
   var notifSaved = (isDay && M.hora && M.notif && M.notif.on) ? {on:true, hh:M.notif.hh||0, mm:M.notif.mm!=null?M.notif.mm:15} : null;
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:cl.length?null:(M.task.clLinkUp||null)});
+  // Pedido: la tarea COMPLETA puede estar vinculada (clLinkUp) aunque tenga
+  // checklist propio — antes se borraba el vínculo acá apenas el checklist
+  // tenía algún ítem; ahora se conserva siempre tal cual estaba.
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null)});
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
-  // checklist tal como estaba cuando se abrió el editor.
+  // checklist tal como estaba cuando se abrió el editor. Se calculan los
+  // dos deltas (1 a 1 y "al completar") para que cada vínculo use el que
+  // corresponda según su propio modo.
   var oldCL = M.task.checklist || [];
   function _clEffProg(i){ return clItemQty(i)>1 ? (i.prog||0) : (i.done?1:0); }
+  function _clEffDone(i){ return clItemQty(i)>1 ? (i.prog||0)>=clItemQty(i) : !!i.done; }
   var clDeltas = [];
   oldCL.forEach(function(oi){
     if(!hasLinks(oi.linkUp)) return;
     var ni = cl.find(function(i){return i.id===oi.id;});
     var newP = ni ? _clEffProg(ni) : 0; // el ítem se borró: se retracta su aporte
     var d = newP - _clEffProg(oi);
-    if(d) clDeltas.push({item: ni||oi, delta: d});
+    var wasD = _clEffDone(oi), nowD = ni ? _clEffDone(ni) : false;
+    var cd = (!wasD && nowD) ? 1 : (wasD && !nowD ? -1 : 0);
+    if(d || cd) clDeltas.push({item: ni||oi, delta: d, compl: cd});
   });
+  // Igual, pero para el vínculo de la tarea COMPLETA (clLinkUp) — el avance
+  // que aporta es la cantidad de ítems completados (antes/después).
+  var wholeDelta=0, wholeCompl=0;
+  if(hasLinks(saved.clLinkUp)){
+    var oldDoneCountW = oldCL.filter(function(i){return i.done;}).length;
+    var newDoneCountW = cl.filter(function(i){return i.done;}).length;
+    wholeDelta = newDoneCountW - oldDoneCountW;
+    var wasDoneW = oldCL.length ? oldCL.every(function(i){return i.done;}) : !!M.task.done;
+    var nowDoneW = done_;
+    wholeCompl = (!wasDoneW && nowDoneW) ? 1 : (wasDoneW && !nowDoneW ? -1 : 0);
+  }
   if(M.isNew){S.tasks.push(saved);}else{S.tasks=S.tasks.map(function(t){return t.id===saved.id?saved:t;});}
-  clDeltas.forEach(function(d){ propagateCLLink(d.item, d.delta); });
+  clDeltas.forEach(function(d){ propagateCLLink(d.item, d.delta, d.compl); });
+  if(wholeDelta || wholeCompl) propagateCLLink({linkUp:saved.clLinkUp}, wholeDelta, wholeCompl);
   removeOverlay('task-modal');saveState();checkMedals();render();
   playSound(M.isNew?'add':'toggle');
 }
@@ -9862,13 +10230,19 @@ function isWithinGracePeriod(dateKey){
 // ninguna tarea asignada (dayTasks vacío) no generan entrada — no hay nada
 // que evaluar — y se dejan tal cual estaban (relevante para el borde
 // semana-anterior/semana-actual del último día de la semana).
-function evaluateDayHistory(dateKey){
+function evaluateDayHistory(dateKey, weekendSkipAllowed){
   var prev = (S.dailyHistory||{})[dateKey];
   if(prev && prev.finalized) return prev;
   var dow = parseLocalDate(dateKey).getDay(); // 0=domingo,6=sábado
   var isWknd = (dow===0||dow===6);
   if(!S.dailyHistory) S.dailyHistory={};
-  if(S.streakCfg && S.streakCfg.skipWeekends && isWknd){
+  // BUGFIX: el fin de semana libre solo puede EXTENDER una racha que ya
+  // viene viva (weekendSkipAllowed — reconcileStreak lo calcula mirando si
+  // S.streak.days>0 justo antes de este día) — nunca puede generar una
+  // racha nueva de la nada. Antes, cualquier sábado/domingo se daba por
+  // cumplido sin condición, así que una racha ya rota "revivía" sola en el
+  // fin de semana siguiente aunque no se hubiera hecho nada esos días.
+  if(S.streakCfg && S.streakCfg.skipWeekends && isWknd && weekendSkipAllowed){
     var wkEntry = {ratio:1, completed:prev?prev.completed:0, total:prev?prev.total:0, streakReached:true, threshold:S.streakCfg.threshold, weekendSkipped:true, finalized:false};
     S.dailyHistory[dateKey]=wkEntry;
     return wkEntry;
@@ -9877,8 +10251,14 @@ function evaluateDayHistory(dateKey){
   if(!dayTasks.length) return prev||null;
   var am=getActiveMode();
   var thr=am&&am.lowThresh?am.lowThresh:S.streakCfg.threshold;
-  var completed = dayTasks.filter(isDone).length;
-  var r = completed/dayTasks.length;
+  var completed = dayTasks.filter(isDone).length; // cuántas quedaron 100% completas — para mostrar "3/5"
+  // Pedido: el avance PARCIAL de una tarea con cantidad específica o con
+  // checklist también debe contar como porcentaje parcial hacia el umbral
+  // del día — antes una tarea a medias (ej. 7/10) sumaba 0 hasta llegar al
+  // 100%. tRatio() ya calcula justo esa fracción (checklist: ítems
+  // hechos/total; cantidad: prog/meta; check simple: 0 o 1).
+  var partialSum = dayTasks.reduce(function(s,tk){return s+tRatio(tk);},0);
+  var r = partialSum/dayTasks.length;
   var entry = {ratio:r, completed:completed, total:dayTasks.length, streakReached:r>=thr, threshold:thr, finalized:false};
   S.dailyHistory[dateKey]=entry;
   return entry;
@@ -9900,7 +10280,8 @@ function reconcileStreak(){
   while(cursor <= todayDate && guard<3660){
     guard++;
     var cKey = localDateStr(cursor);
-    var h = evaluateDayHistory(cKey);
+    var weekendSkipAllowed = S.streak.days>0; // ver BUGFIX en evaluateDayHistory
+    var h = evaluateDayHistory(cKey, weekendSkipAllowed);
     if(h && h.streakReached){
       h.finalized = true;
       if(!streakActive()){
@@ -10393,12 +10774,50 @@ function shareImage(days){
 // On load: if last activity was 2+ days ago, reset streak — salvo que se
 // haya activado "Libre los fines de semana" y el hueco sea puro sábado y
 // domingo, en cuyo caso esos días se auto-completan y la racha sigue viva.
+// Reparación única (bugfix): antes, un sábado/domingo con "fin de semana
+// libre" se daba por cumplido sin condición, así que una racha ya rota
+// podía "revivir" sola ese fin de semana sin haber hecho nada. Si la racha
+// guardada termina justo en un tramo de días "regalados" por el fin de
+// semana cuyo día anterior real NO estaba cumplido, se descuenta ese
+// tramo inflado — una sola vez, al cargar la app.
+function repairInflatedWeekendStreak(){
+  if(!S.streak || !S.dailyHistory || !S.streak.days || !S.streak.lastDate) return;
+  var cursor = parseLocalDate(S.streak.lastDate);
+  var weekendRunLength = 0;
+  var guard = 0;
+  while(guard<10){
+    guard++;
+    var key = localDateStr(cursor);
+    var entry = S.dailyHistory[key];
+    if(!entry || !entry.weekendSkipped) break;
+    weekendRunLength++;
+    cursor = addDaysLocal(cursor, -1);
+  }
+  if(weekendRunLength===0) return; // la racha actual no termina en un finde regalado
+  var beforeKey = localDateStr(cursor);
+  var beforeEntry = S.dailyHistory[beforeKey];
+  if(beforeEntry && beforeEntry.streakReached) return; // sí venía viva de antes — estaba bien
+
+  var newDays = Math.max(0, S.streak.days - weekendRunLength);
+  var newTotal = Math.max(0, (S.streak.total||0) - weekendRunLength);
+  S.streak = {days:newDays, lastDate:beforeKey, total:newTotal};
+  // Los días descontados quedan "sin finalizar" para volver a evaluarse
+  // más adelante con la lógica ya corregida, en vez de quedar congelados.
+  var rewalk = parseLocalDate(beforeKey);
+  for(var i=0;i<weekendRunLength;i++){
+    rewalk = addDaysLocal(rewalk, 1);
+    var k = localDateStr(rewalk);
+    if(S.dailyHistory[k]) S.dailyHistory[k].finalized = false;
+  }
+  saveState();
+}
 function checkStreakOnLoad(){
   // BUGFIX: new Date('YYYY-MM-DD') parsea como medianoche UTC; leer luego
   // .getDay() (local) sobre eso podía devolver el día de la semana
   // equivocado en husos con offset negativo como Chile. parseLocalDate
   // (usado dentro de reconcileStreak) arma la fecha con medianoche LOCAL,
   // que es lo que corresponde acá.
+  repairInflatedWeekendStreak();
   reconcileStreak();
 }
 
@@ -11146,18 +11565,28 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 
     // Pedido: dentro de Calendarios, deslizar mueve entre meses/semanas —
     // pero sin re-animar la pestaña Plan entera (subpestañas, toggle
-    // Semanal/Mensual, etc.), que se sentía como un refresh de golpe. Acá
-    // solo se anima el área interna del calendario (#calendarios-swipe-area);
-    // el contenedor grande (c) simplemente vuelve a su lugar sin arrastrar
-    // visualmente el resto de la pantalla con él.
+    // Semanal/Mensual, cabecera del mes, agenda de abajo...), que se sentía
+    // como un refresh de golpe. En Mensual, además, ahora es un deslizamiento
+    // de verdad (no un fundido): el mes se va entero hacia un lado mientras
+    // el que entra se ve "acercarse" desde el borde opuesto — para eso usa
+    // su propio recorte (#cal-days-viewport, con overflow:hidden). En
+    // Semanal se mantiene el fundido suave de siempre, acotado a la grilla.
     if(mode==='calendarios'){
       c.style.transition = 'transform .12s ease-out';
       c.style.transform = '';
-      var calAreaBefore = document.getElementById('calendarios-swipe-area');
+      var calSub = S.calendariosSubTab||'semanal';
+      var isMonthSlide = calSub==='mensual';
+      var targetId = isMonthSlide ? 'cal-days-viewport' : 'horario-scroll-wrap';
+      var calAreaBefore = document.getElementById(targetId);
       if(calAreaBefore){
-        calAreaBefore.style.transition = 'transform .14s ease-out, opacity .14s';
-        calAreaBefore.style.transform = 'translateX('+(goRight?'-8%':'8%')+')';
-        calAreaBefore.style.opacity = '0';
+        if(isMonthSlide){
+          calAreaBefore.style.transition = 'transform .16s ease-out';
+          calAreaBefore.style.transform = 'translateX('+(goRight?'100%':'-100%')+')';
+        } else {
+          calAreaBefore.style.transition = 'transform .14s ease-out, opacity .14s';
+          calAreaBefore.style.transform = 'translateX('+(goRight?'-8%':'8%')+')';
+          calAreaBefore.style.opacity = '0';
+        }
       }
       setTimeout(function(){
         var sub = S.calendariosSubTab||'semanal';
@@ -11167,20 +11596,31 @@ if(S.notifPermission === 'granted') scheduleNotifications();
         } else {
           weekNav(goRight?-1:1);
         }
-        var calAreaAfter = document.getElementById('calendarios-swipe-area');
+        var calAreaAfter = document.getElementById(targetId);
         if(calAreaAfter){
-          calAreaAfter.style.transition = 'none';
-          calAreaAfter.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
-          calAreaAfter.style.opacity = '0';
-          requestAnimationFrame(function(){
+          if(isMonthSlide){
+            calAreaAfter.style.transition = 'none';
+            calAreaAfter.style.transform = 'translateX('+(goRight?'-100%':'100%')+')';
             requestAnimationFrame(function(){
-              calAreaAfter.style.transition = 'transform .18s ease-out, opacity .16s';
-              calAreaAfter.style.transform = '';
-              calAreaAfter.style.opacity = '1';
+              requestAnimationFrame(function(){
+                calAreaAfter.style.transition = 'transform .22s cubic-bezier(.25,.46,.45,.94)';
+                calAreaAfter.style.transform = '';
+              });
             });
-          });
+          } else {
+            calAreaAfter.style.transition = 'none';
+            calAreaAfter.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
+            calAreaAfter.style.opacity = '0';
+            requestAnimationFrame(function(){
+              requestAnimationFrame(function(){
+                calAreaAfter.style.transition = 'transform .18s ease-out, opacity .16s';
+                calAreaAfter.style.transform = '';
+                calAreaAfter.style.opacity = '1';
+              });
+            });
+          }
         }
-      }, 130);
+      }, 160);
       axis = null;
       swipeMode = null;
       return;
