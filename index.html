@@ -151,8 +151,8 @@ body.theme-terracota [style*="background:var(--bad);color:white"]{
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 
-body{background:var(--bg);font-family:'Inter',sans-serif;min-height:100vh;display:flex;justify-content:center;color:var(--ink);}
-#app{width:100%;max-width:440px;min-height:100vh;background:var(--paper);display:flex;flex-direction:column;box-shadow:0 0 40px rgba(60,40,20,.08);}
+body{background:var(--bg);font-family:'Inter',sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;justify-content:center;color:var(--ink);}
+#app{width:100%;max-width:440px;height:100vh;height:100dvh;background:var(--paper);display:flex;flex-direction:column;box-shadow:0 0 40px rgba(60,40,20,.08);}
 button{font-family:'Inter',sans-serif;cursor:pointer;color:var(--ink);touch-action:manipulation;}
 button:disabled{opacity:.3;cursor:default;}
 input{font-family:'Inter',sans-serif;color:var(--ink);}
@@ -430,7 +430,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 <div id="toast"></div>
 <style>
 /* ── V2 App Shell ── */
-#app{display:flex;flex-direction:column;min-height:100vh;}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
 #app,#v2-header,#bottom-nav,body{transition:background-color .3s ease,color .3s ease,border-color .3s ease;}
 
 /* Header compacto siempre visible */
@@ -3016,6 +3016,81 @@ function renderAgendaSectionContent(activeSection, tab, today){
 }
 
 // ── V2 Tab: HOY ─────────────────────────────────────────────────────────
+// Pedido: separado de renderHoy() para poder refrescar SOLO esta sección
+// (lista de tareas del día) sin reconstruir toda la pestaña — así cambiar
+// de categoría (ver setCatFilter) no reinicia el scroll horizontal de la
+// barra de pestañas ni se siente como un refresh de toda la página.
+function renderHoyTasksSection(){
+  var am = getActiveMode();
+  var day = S.day;
+  var today = todayIdx();
+  var cats = S.categories || [];
+  if(!S.collapsedCats) S.collapsedCats = {};
+  var all = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===day;});
+  var filtered = (S.activeCatFilter==='__pending')
+    ? all.filter(function(t){return !isDone(t);})
+    : (S.activeCatFilter && S.activeCatFilter !== 'all')
+      ? all.filter(function(t){return t.categoryId === S.activeCatFilter;})
+      : all;
+  var onlyCrucial = am && am.onlyCrucial;
+  var crucial = filtered.filter(function(t){return t.crucial;});
+  var visible = S.showHidden ? filtered : (onlyCrucial ? crucial : filtered);
+  var hiddenCount = filtered.length - visible.length;
+
+  var html = '<div style="padding:12px 16px;">';
+
+  if(am){
+    html += '<div style="margin-bottom:8px;">'+
+      (hiddenCount>0&&!S.showHidden?'<button onclick="S.showHidden=true;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">👁 Mostrar '+hiddenCount+' tarea(s) ocultada(s)</button>':'')+
+      (S.showHidden?'<button onclick="S.showHidden=false;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">🙈 Ocultar tareas del modo</button>':'')+
+    '</div>';
+  }
+
+  // Pedido: agrupar también por categoría en "Pendientes" (antes solo se
+  // agrupaba en "Todas" — Pendientes siempre mostraba una lista plana).
+  var groupByCategory = (S.activeCatFilter==='all' || S.activeCatFilter==='__pending') && cats.length > 0;
+
+  if(!visible.length){
+    html += '<div style="padding:40px 16px;text-align:center;">'+
+        '<div style="font-size:38px;margin-bottom:10px;opacity:.35;">'+(S.activeCatFilter==='__pending'?'✅':S.activeCatFilter!=='all'?'🗂':(day===today?'🌱':'📋'))+'</div>'+
+        '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">'+(S.activeCatFilter==='__pending'?'¡Ya no queda nada pendiente!':S.activeCatFilter!=='all'?'Nada en esta categoría':(day===today?'Día en blanco':'Sin tareas este día'))+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">'+(S.activeCatFilter==='__pending'?'Todo lo de este día ya está completado.':day===today?'Agrega tu primera tarea del día':'Planifica este día agregando tareas')+'</div>'+
+        (S.activeCatFilter==='all'?'<button class="cbtn" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;font-weight:700;" onclick="openNew(\'dia\')">+ Agregar tarea</button>':'')+
+      '</div>';
+  } else if(groupByCategory){
+    var catGroups = {}, noCatTasks = [];
+    visible.forEach(function(t){
+      if(t.categoryId){if(!catGroups[t.categoryId])catGroups[t.categoryId]=[];catGroups[t.categoryId].push(t);}
+      else noCatTasks.push(t);
+    });
+    cats.forEach(function(cat){
+      var group = catGroups[cat.id];
+      if(!group||!group.length) return;
+      var doneInCat = group.filter(isDone).length;
+      var collapsed = isCatCollapsed(cat.id, doneInCat, group.length);
+      html += '<div id="cat-sec-'+cat.id+'">'+
+        '<div class="cat-sec-head" onclick="toggleCatSection(\''+cat.id+'\')">'+
+          '<div style="width:8px;height:8px;border-radius:50%;background:'+cat.color+';flex-shrink:0;"></div>'+
+          '<span style="font-size:11px;font-weight:700;color:'+cat.color+';text-transform:uppercase;letter-spacing:.06em;flex:1;">'+esc(cat.name)+'</span>'+
+          '<span style="font-size:11px;color:var(--muted);">'+doneInCat+'/'+group.length+'</span>'+
+          '<span class="cat-sec-chevron" style="transform:'+(collapsed?'rotate(-90deg)':'none')+';">'+
+            '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5 4 6 7.5 9.5 4"/></svg>'+
+          '</span>'+
+        '</div>'+
+        '<div id="cat-body-'+cat.id+'" style="display:'+(collapsed?'none':'block')+';">'+
+          group.map(function(t){return taskHTML(t);}).join('')+
+        '</div>'+
+      '</div>';
+    });
+    if(noCatTasks.length) html += noCatTasks.map(function(t){return taskHTML(t);}).join('');
+  } else {
+    html += visible.map(function(t){return taskHTML(t);}).join('');
+  }
+
+  html += '</div>';
+  return html;
+}
+
 function renderHoy(){
   var am = getActiveMode();
   var html = '';
@@ -3081,77 +3156,24 @@ function renderHoy(){
   var cats = S.categories || [];
   if(!S.activeCatFilter) S.activeCatFilter = 'all';
   html += '<div id="cat-tabs-bar">'+
-    '<button class="cat-tab-btn'+(S.activeCatFilter==='all'?' active':'')+'" onclick="setCatFilter(\'all\')">Todas</button>'+
-    '<button class="cat-tab-btn'+(S.activeCatFilter==='__pending'?' active':'')+'" onclick="setCatFilter(\'__pending\')">Pendientes</button>'+
+    '<button class="cat-tab-btn'+(S.activeCatFilter==='all'?' active':'')+'" data-cat-tab="all" onclick="setCatFilter(\'all\')">Todas</button>'+
+    '<button class="cat-tab-btn'+(S.activeCatFilter==='__pending'?' active':'')+'" data-cat-tab="__pending" onclick="setCatFilter(\'__pending\')">Pendientes</button>'+
     cats.map(function(c){
       var on = S.activeCatFilter===c.id;
-      return '<button class="cat-tab-btn'+(on?' active':'')+'" onclick="setCatFilter(\''+c.id+'\')" style="'+(on?'border-color:'+c.color+';color:'+c.color+';background:'+c.color+'22;':'')+'" >'+esc(c.name)+'</button>';
+      return '<button class="cat-tab-btn'+(on?' active':'')+'" data-cat-tab="'+c.id+'" data-cat-color="'+c.color+'" onclick="setCatFilter(\''+c.id+'\')" style="'+(on?'border-color:'+c.color+';color:'+c.color+';background:'+c.color+'22;':'')+'" >'+esc(c.name)+'</button>';
     }).join('')+
   '</div>';
 
-  // Tareas
-  if(!S.collapsedCats) S.collapsedCats = {};
-  var all = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===day;});
-  var filtered = (S.activeCatFilter==='__pending')
-    ? all.filter(function(t){return !isDone(t);})
-    : (S.activeCatFilter && S.activeCatFilter !== 'all')
-      ? all.filter(function(t){return t.categoryId === S.activeCatFilter;})
-      : all;
-  var onlyCrucial = am && am.onlyCrucial;
-  var crucial = filtered.filter(function(t){return t.crucial;});
-  var visible = S.showHidden ? filtered : (onlyCrucial ? crucial : filtered);
-  var hiddenCount = filtered.length - visible.length;
+  // Pedido: al tocar una categoría de la barra (sobre todo una que quedó
+  // más a la derecha, medio escondida al hacer scroll horizontal), que NO
+  // se refresque toda la página — antes setCatFilter() llamaba a render()
+  // completo, lo que reconstruía esta MISMA barra desde cero y le
+  // reiniciaba el scroll horizontal a 0, escondiendo de nuevo justo la
+  // categoría que se acababa de tocar. Ahora esta sección de tareas vive en
+  // su propio contenedor con id fijo, así setCatFilter() puede reemplazar
+  // solo esto (ver más abajo) sin tocar la barra de pestañas ni el resto.
+  html += '<div id="hoy-tasks-section">'+renderHoyTasksSection()+'</div>';
 
-  html += '<div style="padding:12px 16px;">';
-
-  if(am){
-    html += '<div style="margin-bottom:8px;">'+
-      (hiddenCount>0&&!S.showHidden?'<button onclick="S.showHidden=true;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">👁 Mostrar '+hiddenCount+' tarea(s) ocultada(s)</button>':'')+
-      (S.showHidden?'<button onclick="S.showHidden=false;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">🙈 Ocultar tareas del modo</button>':'')+
-    '</div>';
-  }
-
-  // Agrupar por categoría si no hay filtro activo
-  if(S.activeCatFilter==='all' && cats.length > 0){
-    var catGroups = {}, noCatTasks = [];
-    visible.forEach(function(t){
-      if(t.categoryId){if(!catGroups[t.categoryId])catGroups[t.categoryId]=[];catGroups[t.categoryId].push(t);}
-      else noCatTasks.push(t);
-    });
-    cats.forEach(function(cat){
-      var group = catGroups[cat.id];
-      if(!group||!group.length) return;
-      var doneInCat = group.filter(isDone).length;
-      var collapsed = isCatCollapsed(cat.id, doneInCat, group.length);
-      html += '<div id="cat-sec-'+cat.id+'">'+
-        '<div class="cat-sec-head" onclick="toggleCatSection(\''+cat.id+'\')">'+
-          '<div style="width:8px;height:8px;border-radius:50%;background:'+cat.color+';flex-shrink:0;"></div>'+
-          '<span style="font-size:11px;font-weight:700;color:'+cat.color+';text-transform:uppercase;letter-spacing:.06em;flex:1;">'+esc(cat.name)+'</span>'+
-          '<span style="font-size:11px;color:var(--muted);">'+doneInCat+'/'+group.length+'</span>'+
-          '<span class="cat-sec-chevron" style="transform:'+(collapsed?'rotate(-90deg)':'none')+';">'+
-            '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5 4 6 7.5 9.5 4"/></svg>'+
-          '</span>'+
-        '</div>'+
-        '<div id="cat-body-'+cat.id+'" style="display:'+(collapsed?'none':'block')+';">'+
-          group.map(function(t){return taskHTML(t);}).join('')+
-        '</div>'+
-      '</div>';
-    });
-    if(noCatTasks.length) html += noCatTasks.map(function(t){return taskHTML(t);}).join('');
-  } else {
-    html += visible.length
-      ? visible.map(function(t){return taskHTML(t);}).join('')
-      : '<div style="padding:40px 16px;text-align:center;">'+
-          '<div style="font-size:38px;margin-bottom:10px;opacity:.35;">'+(S.activeCatFilter==='__pending'?'✅':S.activeCatFilter!=='all'?'🗂':(day===today?'🌱':'📋'))+'</div>'+
-          '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">'+(S.activeCatFilter==='__pending'?'¡Ya no queda nada pendiente!':S.activeCatFilter!=='all'?'Nada en esta categoría':(day===today?'Día en blanco':'Sin tareas este día'))+'</div>'+
-          '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">'+(S.activeCatFilter==='__pending'?'Todo lo de este día ya está completado.':day===today?'Agrega tu primera tarea del día':'Planifica este día agregando tareas')+'</div>'+
-          (S.activeCatFilter==='all'?'<button class="cbtn" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;font-weight:700;" onclick="openNew(\'dia\')">+ Agregar tarea</button>':'')+
-        '</div>';
-  }
-
-  html += '</div>';
-
-  // Apoyo Baja Energía
   var ICON_SPARK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>';
   var ICON_HEART = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M12 20.5s-7.5-4.6-10-9.3C.5 8 2 4.5 5.5 4c2-.3 3.8.7 4.9 2.3l1.6 2.2 1.6-2.2C14.7 4.7 16.5 3.7 18.5 4c3.5.5 5 4 3.5 7.2-2.5 4.7-10 9.3-10 9.3z"/></svg>';
   var ICON_BELL = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M18 15.5V11a6 6 0 0 0-12 0v4.5L4 18h16l-2-2.5z"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>';
@@ -3177,7 +3199,34 @@ function renderHoy(){
   return html;
 }
 
-function setCatFilter(id){S.activeCatFilter = id;render();}
+// Pedido: tocar una pestaña de categoría (sobre todo una que quedó más a
+// la derecha, parcialmente escondida por el scroll horizontal de la
+// barra) ya no dispara un render() completo — eso reconstruía la barra
+// entera y le reiniciaba el scroll a 0, escondiendo de nuevo justo la
+// categoría recién tocada, y se sentía como un refresh de toda la
+// pantalla. Ahora solo se actualiza el estado activo/inactivo de los
+// botones ya existentes (sin tocar su scroll) y se reemplaza el contenido
+// de la sección de tareas (ver renderHoyTasksSection).
+function setCatFilter(id){
+  S.activeCatFilter = id;
+  var bar = document.getElementById('cat-tabs-bar');
+  if(bar){
+    Array.prototype.forEach.call(bar.querySelectorAll('button[data-cat-tab]'), function(btn){
+      var key = btn.getAttribute('data-cat-tab');
+      var isActive = (id === key);
+      btn.classList.toggle('active', isActive);
+      var color = btn.getAttribute('data-cat-color');
+      if(color){
+        btn.style.borderColor = isActive ? color : '';
+        btn.style.color = isActive ? color : '';
+        btn.style.background = isActive ? (color+'22') : '';
+      }
+    });
+  }
+  var sec = document.getElementById('hoy-tasks-section');
+  if(sec){ sec.innerHTML = renderHoyTasksSection(); }
+  else { render(); } // resguardo, por si esta sección no está montada por algún motivo
+}
 function toggleCtx(key){S._ctxOpen = S._ctxOpen||{};S._ctxOpen[key] = !S._ctxOpen[key];render();}
 
 // ── V2 Tab: PLAN ─────────────────────────────────────────────────────────
@@ -6538,7 +6587,6 @@ function openTaskMenu(id, event){
 }
 
 // ── Modal de vincular tarea ────────────────────────────────────────────────
-// Genera HTML de vínculos para un task dado (versión global, no depende de closures locales)
 // ── Vincular una tarea — punto de entrada único ─────────────────────────
 // Pedido: antes esto vivía repartido en varios lugares — un modal acá
 // afuera para "vincular tarea completa" (con elegir período + modo
@@ -6547,6 +6595,17 @@ function openTaskMenu(id, event){
 // botón (el de al lado del lápiz ✎, sin abrir el editor), sea que se
 // quiera vincular la tarea completa o uno de sus propios ítems de
 // checklist con una tarea superior (tenga o no checklist ella misma).
+//
+// Pedido: se ve como "ventanillas distintas" al vincular — antes este picker
+// usaba un popup chico centrado (.conf-box) que se destruía y se volvía a
+// crear desde cero cada vez que cambiabas de paso o de tarea destino, sin
+// animación al cerrar (desaparecía de golpe). Ahora usa el MISMO tipo de
+// hoja deslizante (.overlay/.sheet) que el resto de los modales de la app:
+// un solo overlay que se abre una vez por sesión, y navegar entre "elegir
+// qué vincular" y "elegir con qué" solo reemplaza el contenido de esa misma
+// hoja (sin abrir/cerrar nada), con un botón "‹" para volver. Recién al
+// tocar "Listo" se cierra con su animación y ahí se sincroniza la página de
+// fondo si hubo cambios.
 //
 // Estado del "picker" de vínculos — vive acá afuera (no en S) porque es
 // pura UI de un modal flotante, no datos a guardar:
@@ -6572,11 +6631,32 @@ function openLinkModal(id){
   if(!t) return;
   LINK_PICK_MODE = 'unit'; // nueva sesión de vinculación — arranca en modo por defecto
   LINK_PICK_DIRTY = false;
+  linkPickerSheet(); // crea (o reutiliza) la hoja una sola vez por sesión
   if(t.checklist && t.checklist.length){
     openCLSourcePicker(id); // elegir cuál de sus ítems vincular (o la tarea completa)
   } else {
     openLinkTargetPicker(id, null); // vincular la tarea completa
   }
+}
+// Crea el overlay/hoja una sola vez (si ya existe, lo reutiliza) — evita el
+// parpadeo de abrir/cerrar un modal nuevo cada vez que se navega de paso.
+function linkPickerSheet(){
+  var existing = document.getElementById('link-picker-overlay');
+  if(existing) return document.getElementById('link-picker-sheet');
+  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='link-picker-overlay';
+  overlay.addEventListener('click',function(e){if(e.target===overlay) closeLinkPicker();});
+  overlay.innerHTML = '<div class="sheet" id="link-picker-sheet" style="max-height:85vh;overflow-y:auto;"></div>';
+  document.body.appendChild(overlay);
+  return document.getElementById('link-picker-sheet');
+}
+// Cierra el picker (con su animación) y recién ahí aplica, en un solo paso,
+// el render() de fondo si algo cambió mientras estuvo abierto (ver
+// LINK_PICK_DIRTY) — así cada click de plegar/marcar/cambiar-modo/navegar
+// entre pasos dentro del modal no refresca la página de fondo; se
+// sincroniza una sola vez al terminar.
+function closeLinkPicker(){
+  removeOverlay('link-picker-overlay');
+  if(LINK_PICK_DIRTY){ LINK_PICK_DIRTY=false; render(); }
 }
 // Paso 1 (solo si la tarea tiene checklist propio): elegir qué ítem
 // vincular — o, pedido, vincular la TAREA COMPLETA igual, aunque tenga
@@ -6585,8 +6665,7 @@ function openLinkModal(id){
 function openCLSourcePicker(taskId){
   var t = S.tasks.find(function(x){return x.id===taskId;});
   if(!t) return;
-  var old=document.getElementById('link-picker-box');if(old)old.remove();
-  var box=document.createElement('div');box.className='conf-box';box.id='link-picker-box';
+  var sheet = linkPickerSheet();
   var wholeLinks = normalizeLinks(t.clLinkUp).map(function(l){return findCLItem(l.taskId,l.itemId);}).filter(Boolean);
   var wholeLabel = wholeLinks.length ? wholeLinks.map(function(linked){return esc(linked.task.text)+(linked.item?(' · '+esc(linked.item.text||'ítem')):' (tarea completa)');}).join(', ') : null;
   var wholeRow = '<button onclick="openLinkTargetPicker(\''+taskId+'\',null)" style="width:100%;text-align:left;padding:10px 12px;border:1.5px solid '+(wholeLinks.length?'var(--accent)':'var(--line)')+';background:'+(wholeLinks.length?'var(--accent-bg)':'var(--paper)')+';border-radius:10px;margin-bottom:10px;cursor:pointer;font-family:Inter,sans-serif;">'+
@@ -6603,14 +6682,14 @@ function openCLSourcePicker(taskId){
       (label?'<div style="font-size:11px;color:var(--accent);margin-top:2px;">⬆ '+label+'</div>':'<div style="font-size:11px;color:var(--muted);margin-top:2px;">sin vincular</div>')+
     '</button>';
   }).join('');
-  box.innerHTML='<div class="conf-inner" style="max-width:360px;max-height:80vh;overflow-y:auto;">'+
-    '<div class="serif" style="font-weight:700;font-size:17px;margin-bottom:4px;">Vincular</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes elegir más de una tarea destino para cada uno).</div>'+
+  sheet.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+      '<span class="serif" style="font-weight:700;font-size:19px;">Vincular</span>'+
+      '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes ir y volver para vincular varios, sin cerrar esta hoja).</div>'+
     wholeRow+
     rows+
-    '<button class="cbtn" style="margin-top:6px;" onclick="this.closest(\'.conf-box\').remove();if(LINK_PICK_DIRTY){LINK_PICK_DIRTY=false;render();}">Cerrar</button>'+
-  '</div>';
-  document.body.appendChild(box);
+    '<button class="cbtn" style="width:100%;margin-top:6px;" onclick="closeLinkPicker()">Cerrar</button>';
 }
 // Paso 2: elegir el/los destino(s). sourceItemId es null/'' si se vincula
 // la tarea completa, o el id de uno de sus propios ítems de checklist.
@@ -6618,7 +6697,9 @@ function openCLSourcePicker(taskId){
 // del mismo rango (una diaria jamás puede vincularse a otra diaria, etc.) —
 // por eso candidatePeriods arranca en idx+1, sin incluir el propio período.
 // Se puede elegir VARIAS tareas destino a la vez (todas las superiores que
-// quieras, en simultáneo) — cada fila alterna (agrega/quita).
+// quieras, en simultáneo) — cada fila alterna (agrega/quita), y desde acá
+// se puede volver ("‹") a elegir OTRO ítem propio para vincular también,
+// sin cerrar esta hoja — pedido: vincular varias cosas de un tirón.
 // Pedido: la lista de destinos arranca toda PLEGADA por período — semana,
 // mes, semestre, año — y se despliega la que quieras tocándola, sin volver
 // a dibujar la página de fondo (ver toggleLinkGroup). Pedido también: en
@@ -6634,8 +6715,7 @@ function openLinkTargetPicker(taskId, sourceItemId){
   var groups = candidatePeriods.map(function(p){
     return {period:p, tasks:S.tasks.filter(function(h){return h.period===p && h.id!==taskId;})};
   }).filter(function(g){return g.tasks.length;});
-  var old=document.getElementById('link-picker-box');if(old)old.remove();
-  var box=document.createElement('div');box.className='conf-box';box.id='link-picker-box';
+  var sheet = linkPickerSheet();
   var currentLinkVal = sourceItemId ? ((t.checklist||[]).find(function(i){return i.id===sourceItemId;})||{}).linkUp : t.clLinkUp;
   var currentLinks = normalizeLinks(currentLinkVal);
   var body;
@@ -6650,14 +6730,21 @@ function openLinkTargetPicker(taskId, sourceItemId){
         return ht && ht.period===g.period;
       }).length;
       var rowsHTML = g.tasks.map(function(h){
+        // Pedido/bugfix: SIEMPRE se ofrece "toda la tarea" como destino,
+        // tenga o no checklist propio el destino — antes, si el destino
+        // tenía checklist, solo se listaban sus ítems y un vínculo previo
+        // hacia "toda la tarea h" quedaba invisible (y por lo tanto
+        // imposible de desvincular) apenas h ganaba un checklist.
+        var wholeLinkObj = currentLinks.find(function(l){return l.taskId===h.id && !l.itemId;});
+        var wholeRow = linkRowButton(taskId, sourceItemId, h.id, '', esc(h.text)+' <span style="color:var(--muted);">· (tarea completa)</span>', wholeLinkObj);
         if(h.checklist && h.checklist.length){
-          return h.checklist.map(function(it){
+          var itemRows = h.checklist.map(function(it){
             var linkObj = currentLinks.find(function(l){return l.taskId===h.id && l.itemId===it.id;});
             return linkRowButton(taskId, sourceItemId, h.id, it.id, esc(h.text)+' <span style="color:var(--muted);">· '+esc(it.text||'(sin nombre)')+'</span>', linkObj);
           }).join('');
+          return wholeRow + itemRows;
         }
-        var linkObj2 = currentLinks.find(function(l){return l.taskId===h.id && !l.itemId;});
-        return linkRowButton(taskId, sourceItemId, h.id, '', esc(h.text)+' <span style="color:var(--muted);">· (tarea completa)</span>', linkObj2);
+        return wholeRow;
       }).join('');
       return '<div style="border:1px solid var(--line-soft);border-radius:10px;margin-bottom:8px;overflow:hidden;">'+
         '<div onclick="toggleLinkGroup(\''+g.period+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg);">'+
@@ -6679,15 +6766,19 @@ function openLinkTargetPicker(taskId, sourceItemId){
     '<button onclick="setLinkPickMode(\'completion\')" style="flex:1;padding:8px 4px;border-radius:8px;border:1.5px solid '+(LINK_PICK_MODE==='completion'?'var(--accent)':'var(--line)')+';background:'+(LINK_PICK_MODE==='completion'?'var(--accent-bg)':'var(--paper)')+';color:'+(LINK_PICK_MODE==='completion'?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Todo = 1 al completar</button>'+
   '</div>'+
   '<div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;line-height:1.4;">Así sumará el próximo vínculo que marques abajo ('+(LINK_PICK_MODE==='unit'?'cada unidad de acá suma 1 unidad allá':'solo al completar esto al 100% se suma 1 allá')+'). Los vínculos que ya tenías no cambian solos — toca su etiqueta para cambiarles el modo.</div>';
-  box.innerHTML='<div class="conf-inner" style="max-width:360px;max-height:80vh;overflow-y:auto;">'+
-    '<div class="serif" style="font-weight:700;font-size:17px;margin-bottom:4px;">Vincular con…</div>'+
+  // El botón "‹ volver" solo tiene sentido si esta tarea tiene checklist
+  // propio (hay un paso 1 al cual volver) — si no, este ES el primer paso.
+  var hasBack = t.checklist && t.checklist.length;
+  sheet.innerHTML='<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">'+
+      (hasBack?'<button onclick="openCLSourcePicker(\''+taskId+'\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:0 6px 0 0;line-height:1;">‹</button>':'')+
+      '<span class="serif" style="font-weight:700;font-size:19px;flex:1;">Vincular con…</span>'+
+      '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Al avanzar acá, avanzará automáticamente allá — puedes elegir varias tareas superiores a la vez y la meta de cada destino se recalcula sola.</div>'+
     modeBar+
     summary+
     body+
-    '<button class="cbtn" style="margin-top:10px;" onclick="closeLinkPicker()">Listo</button>'+
-  '</div>';
-  document.body.appendChild(box);
+    '<button class="cbtn" style="width:100%;margin-top:10px;" onclick="closeLinkPicker()">Listo</button>';
 }
 // Pliega/despliega un grupo de período dentro del picker — pedido: sin
 // tocar render() ni reconstruir nada de la página de fondo, para que
@@ -6700,18 +6791,10 @@ function toggleLinkGroup(period){
   if(chev) chev.style.transform = opening?'rotate(0deg)':'rotate(-90deg)';
 }
 // Cambia el modo que se usará para el PRÓXIMO vínculo nuevo — no toca los
-// que ya existen. Solo redibuja el modalito (no la página de fondo).
+// que ya existen. Solo redibuja el contenido de la hoja (no la página de fondo).
 function setLinkPickMode(m){
   LINK_PICK_MODE = m;
   if(LINK_PICK_TASK_ID) openLinkTargetPicker(LINK_PICK_TASK_ID, LINK_PICK_SOURCE_ITEM);
-}
-// Cierra el picker y recién ahí aplica, en un solo paso, el render() de
-// fondo si algo cambió mientras estuvo abierto (ver LINK_PICK_DIRTY) — así
-// cada click de plegar/marcar/cambiar-modo dentro del modal no refresca la
-// página de fondo; se sincroniza una sola vez al terminar.
-function closeLinkPicker(){
-  var b=document.getElementById('link-picker-box'); if(b) b.remove();
-  if(LINK_PICK_DIRTY){ LINK_PICK_DIRTY=false; render(); }
 }
 function linkRowButton(taskId, sourceItemId, targetTaskId, targetItemId, labelHtml, linkObj){
   var already = !!linkObj;
@@ -6720,6 +6803,7 @@ function linkRowButton(taskId, sourceItemId, targetTaskId, targetItemId, labelHt
     : '';
   return '<button onclick="toggleTaskLink(\''+taskId+'\',\''+(sourceItemId||'')+'\',\''+targetTaskId+'\',\''+targetItemId+'\')" style="width:100%;text-align:left;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid '+(already?'var(--accent)':'var(--line)')+';background:'+(already?'var(--accent-bg)':'var(--paper)')+';border-radius:10px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;">'+
     '<span style="font-size:13px;color:var(--ink);flex:1;min-width:0;">'+labelHtml+'</span>'+
+    (already?'<span style="font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0;">✕ quitar</span>':'')+
     modeTag+
   '</button>';
 }
@@ -6728,9 +6812,10 @@ function linkRowButton(taskId, sourceItemId, targetTaskId, targetItemId, labelHt
 // viejo setTaskLink() (que reemplazaba el único vínculo posible), esto
 // permite mantener varios vínculos activos a la vez. targetItemId vacío
 // (con targetTaskId con valor) = vincular con la tarea destino completa.
-// Un vínculo NUEVO se crea con el modo elegido en LINK_PICK_MODE.
+// Un vínculo NUEVO se crea con el modo elegido en LINK_PICK_MODE. Si el
+// vínculo YA existía, este mismo botón lo QUITA (desvincula).
 // Pedido: no se refresca la página de fondo en cada click acá — solo se
-// guarda el dato y se redibuja el modalito; el render() de fondo queda
+// guarda el dato y se redibuja la hoja; el render() de fondo queda
 // pendiente hasta cerrar el picker (ver closeLinkPicker/LINK_PICK_DIRTY).
 function toggleTaskLink(taskId, sourceItemId, targetTaskId, targetItemId){
   if(!targetTaskId || targetTaskId===taskId) return; // no auto-vínculo
@@ -6805,27 +6890,41 @@ function isCatCollapsed(catId, doneInCat, total){
   var mode = S.catCollapseMode || 'remember';
   if(mode==='always-collapsed') return true;
   if(mode==='always-expanded') return false;
-  if(mode==='smart') return total>0 && doneInCat===total;
+  if(mode==='smart'){
+    // Pedido: si esta categoría se acaba de completar recién ahora, no la
+    // pliegues en este mismo render — dale un respiro (ver finishUpdate) para
+    // que se alcance a ver el ✓ antes de que la sección desaparezca de golpe.
+    if(catId===S._delayedCollapseCatId) return false;
+    return total>0 && doneInCat===total;
+  }
   return !!(S.collapsedCats && S.collapsedCats[catId]);
 }
 function toggleCatSection(catId){
   if(!S.collapsedCats) S.collapsedCats = {};
-  S.collapsedCats[catId] = !S.collapsedCats[catId];
+  var body = document.getElementById('cat-body-'+catId);
+  var sec = document.getElementById('cat-sec-'+catId);
+  // BUGFIX: antes esto alternaba S.collapsedCats[catId] a ciegas, sin mirar
+  // cómo se veía la categoría en pantalla. En los modos "siempre
+  // plegadas/desplegadas" o "plegar las completas" (ver isCatCollapsed), lo
+  // que se ve en pantalla no tiene por qué coincidir con lo último guardado
+  // acá — así que a veces el primer click solo "confirmaba" un estado que
+  // ya estaba aplicado y no cambiaba nada visualmente, obligando a tocar
+  // dos veces para que recién el segundo click sí se notara. Ahora se mira
+  // el DOM real para decidir qué hay que invertir.
+  var currentlyCollapsed = body ? (body.style.display === 'none') : !!S.collapsedCats[catId];
+  var nowCollapsed = !currentlyCollapsed;
+  S.collapsedCats[catId] = nowCollapsed;
   // BUGFIX: esto nunca llamaba a saveState(), así que el plegado/desplegado
   // de categorías vivía solo en memoria — al cerrar y volver a abrir la app,
   // S.collapsedCats no se cargaba de ningún lado y todo volvía a mostrarse
   // desplegado, aunque el usuario lo hubiera dejado plegado.
   saveState();
   // Toggle rápido sin re-render completo
-  var body = document.getElementById('cat-body-'+catId);
-  var sec = document.getElementById('cat-sec-'+catId);
-  if(body){
-    body.style.display = S.collapsedCats[catId] ? 'none' : 'block';
-  }
+  if(body) body.style.display = nowCollapsed ? 'none' : 'block';
   // Rotar flecha
   if(sec){
     var arrow = sec.querySelector('div[style*="rotate"]');
-    if(arrow) arrow.style.transform = S.collapsedCats[catId]?'rotate(-90deg)':'rotate(0)';
+    if(arrow) arrow.style.transform = nowCollapsed ? 'rotate(-90deg)' : 'rotate(0)';
   }
 }
 
@@ -7284,8 +7383,17 @@ function doPeriodReset(period){
 }
 
 function renderGoals(){
+  // Pedido: se quitó el título "Objetivos" de acá (ya está la pestaña de
+  // arriba) y se separó el contenido de abajo en su propio contenedor con
+  // id fijo (objetivos-swipe-area), para poder deslizar entre semana/mes/
+  // semestre/año sin animar ni reconstruir las 3 pestañas de Plan de arriba
+  // (ver renderObjetivosSwipeArea y el gesto de swipe más abajo).
+  return '<div id="objetivos-swipe-area" style="overflow:hidden;position:relative;">'+renderObjetivosSwipeArea()+'</div>';
+}
+// Contenido que se anima/reemplaza al deslizar entre períodos dentro de
+// Objetivos — separado de renderGoals() para poder refrescar SOLO esto.
+function renderObjetivosSwipeArea(){
   var availablePeriods = enabledGoalPeriods();
-  // Si el período que se estaba viendo se acaba de desactivar, cae a otro disponible.
   if(availablePeriods.indexOf(S.period)===-1) S.period = availablePeriods[0] || 'semana';
   var sel=S.period;
   var mine=S.tasks.filter(function(t){return t.period===sel;});
@@ -7327,8 +7435,7 @@ function renderGoals(){
       '<button class="cbtn" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;font-weight:700;" onclick="openNew(\''+sel+'\')">+ Agregar tarea</button>'+
     '</div>'
   );
-  return '<div class="serif" style="font-size:24px;font-weight:700;color:var(--ink);margin-bottom:14px;letter-spacing:-.02em;">Objetivos</div>'+
-    '<div class="period-tab-row">'+ptabs+'</div>'+
+  return '<div class="period-tab-row">'+ptabs+'</div>'+
     progBar+tasksHTML+
     (mine.length?'<button class="addtbtn" onclick="openNew(\''+sel+'\')">+ Agregar tarea</button>':'');
 }
@@ -7363,7 +7470,8 @@ function renderProgress(){
   var html = '';
   
   // Encabezado
-  html += '<div class="serif" style="font-size:26px;font-weight:800;color:var(--ink);margin-bottom:18px;letter-spacing:-.02em;">Progreso</div>';
+  // Pedido: se quitó el título "Progreso" de acá — ya está la pestaña de
+  // arriba, repetirlo era redundante.
   
   // ── Hero card: Nivel + Racha ─────────────────────────────────────────────
   html += '<div id="hero-progress-card" style="background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:24px 16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);">'+
@@ -8634,7 +8742,10 @@ function renderTemplates(){
   
   // Botón nueva plantilla
   var canCreate = isPremium() || list.length < FREE_LIMITS.templates;
-  html+='<button onclick="newTemplate()" '+(canCreate?'':'disabled')+' style="width:100%;background:'+(canCreate?'var(--accent-bg)':'var(--line)')+';border:1.5px dashed var(--accent);color:var(--accent);border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:'+(canCreate?'pointer':'default')+';margin-top:12px;font-family:Inter,sans-serif;">+ Nueva plantilla</button>';
+  // Pedido: además de armar una plantilla desde cero, poder capturar la
+  // semana tal como está configurada ahora mismo (tareas diarias actuales).
+  html+='<button onclick="openSaveWeekAsTemplateModal()" '+(canCreate?'':'disabled')+' style="width:100%;background:'+(canCreate?'var(--paper)':'var(--line)')+';border:1.5px solid var(--line);color:'+(canCreate?'var(--ink)':'var(--muted)')+';border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:'+(canCreate?'pointer':'default')+';margin-top:12px;font-family:Inter,sans-serif;">📸 Guardar semana actual como plantilla</button>';
+  html+='<button onclick="newTemplate()" '+(canCreate?'':'disabled')+' style="width:100%;background:'+(canCreate?'var(--accent-bg)':'var(--line)')+';border:1.5px dashed var(--accent);color:var(--accent);border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:'+(canCreate?'pointer':'default')+';margin-top:8px;font-family:Inter,sans-serif;">+ Nueva plantilla desde cero</button>';
   if(!isPremium() && list.length >= FREE_LIMITS.templates){
     html+='<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;">Plan gratuito: máx '+FREE_LIMITS.templates+' plantillas.</div>';
   }
@@ -8685,6 +8796,184 @@ function setWeekTemplate(weekKey, tplId){
   toast(tplId?'✓ Plantilla programada':'Programación quitada');
 }
 
+// ── Guardar la semana actual como plantilla ─────────────────────────────
+// Pedido: además de armar una plantilla desde cero (a mano), poder
+// capturar tal cual las tareas diarias que el usuario tiene configuradas
+// ahora mismo, preguntando: ¿solo cruciales?, ¿solo recurrentes?, ¿incluir
+// vinculaciones? — SWT guarda esas 3 opciones mientras el diálogo está abierto.
+var SWT = null;
+function openSaveWeekAsTemplateModal(){
+  if(!isPremium() && (S.templates||[]).length >= FREE_LIMITS.templates){
+    showInfoModal('Límite alcanzado','En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas.','Entendido');
+    return;
+  }
+  SWT = {onlyCrucial:false, onlyRecurring:true, includeLinks:false, name:'Semana actual'};
+  renderSaveWeekAsTemplateSheet();
+}
+function closeSaveWeekAsTemplateModal(){ removeOverlay('swt-overlay'); SWT=null; }
+// Qué tareas calzan con los filtros elegidos — se recalcula en vivo cada
+// vez que se toca un toggle, para mostrar cuántas se van a guardar.
+function captureCurrentWeekTasks(opts){
+  return S.tasks.filter(function(t){
+    if(t.period !== 'dia') return false;
+    if(opts.onlyCrucial && !t.crucial) return false;
+    // "Recurrente" = sin fecha específica (se repite cada semana en su día);
+    // una tarea con fecha puntual es de un solo día y no una rutina fija.
+    if(opts.onlyRecurring && t.date) return false;
+    return true;
+  });
+}
+function swtToggle(key){
+  if(!SWT) return;
+  SWT[key] = !SWT[key];
+  renderSaveWeekAsTemplateSheet();
+}
+function renderSaveWeekAsTemplateSheet(){
+  if(!SWT) return;
+  var overlay = document.getElementById('swt-overlay');
+  if(!overlay){
+    overlay=document.createElement('div');overlay.className='overlay';overlay.id='swt-overlay';
+    overlay.addEventListener('click',function(e){if(e.target===overlay) closeSaveWeekAsTemplateModal();});
+    overlay.innerHTML = '<div class="sheet" id="swt-sheet"></div>';
+    document.body.appendChild(overlay);
+  }
+  var matched = captureCurrentWeekTasks(SWT);
+  function toggleRow(key, title, sub){
+    var on = !!SWT[key];
+    return '<button onclick="swtToggle(\''+key+'\')" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:12px 0;border:none;background:none;border-bottom:1px solid var(--line-soft);cursor:pointer;font-family:Inter,sans-serif;">'+
+      '<div><div style="font-weight:700;font-size:13.5px;color:var(--ink);">'+title+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4;">'+sub+'</div></div>'+
+      '<span class="tog" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;pointer-events:none;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></span>'+
+    '</button>';
+  }
+  var linkWarning = SWT.includeLinks ? (
+    '<div style="font-size:11px;color:var(--muted);background:var(--bg);border-radius:8px;padding:10px;margin-top:8px;line-height:1.5;">'+
+      '⚠️ Al aplicar esta plantilla más adelante: si la tarea de período superior a la que estaba vinculada todavía existe (mismo nombre y período), se reconecta sola. Si no existe, se intentará crear de nuevo — pero solo si hay espacio disponible en ese período según tu plan; si no hay espacio, ese vínculo puntual no se recreará.'+
+    '</div>'
+  ) : '';
+  document.getElementById('swt-sheet').innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'+
+      '<span class="serif" style="font-weight:700;font-size:19px;">Guardar semana como plantilla</span>'+
+      '<button onclick="closeSaveWeekAsTemplateModal()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Captura tus tareas diarias tal como las tienes ahora, para poder reaplicarlas después.</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Nombre</label>'+
+      '<input id="swt-name-input" class="finp" type="text" value="'+esc(SWT.name)+'" oninput="SWT.name=this.value;" style="width:100%;margin-top:4px;padding:8px 0;font-size:15px;border:none;border-bottom:1.5px solid var(--line);background:none;color:var(--ink);font-family:Inter,sans-serif;">'+
+    '</div>'+
+    toggleRow('onlyCrucial','Solo tareas cruciales ⭐','Deja afuera las tareas que no marcaste como cruciales.')+
+    toggleRow('onlyRecurring','Solo tareas recurrentes','No incluye tareas de un día específico (con fecha puntual), solo las que se repiten cada semana en su día.')+
+    toggleRow('includeLinks','Incluir vinculaciones','Guarda también con qué tarea de período superior estaba vinculada cada una.')+
+    linkWarning+
+    '<div style="font-size:12px;color:var(--muted);text-align:center;margin:14px 0 4px;">Se guardarán <b style="color:var(--ink);">'+matched.length+'</b> tarea'+(matched.length===1?'':'s')+'.</div>'+
+    '<button class="cbtn" style="width:100%;margin-top:10px;" '+(matched.length?'':'disabled')+' onclick="saveWeekAsTemplateConfirm()">Guardar plantilla</button>';
+}
+// Convierte un vínculo real (por id) en una "receta" portátil, por nombre +
+// período — los ids no sobreviven de una plantilla a otra, pero un nombre
+// de tarea sí es reconocible más adelante.
+function linkSpecFromLink(l){
+  var found = findCLItem(l.taskId, l.itemId);
+  if(!found) return null;
+  return {period: found.task.period, targetText: found.task.text, itemText: found.item ? (found.item.text||null) : null, mode: l.mode||'unit'};
+}
+function buildTemplateTaskFromReal(t, includeLinks){
+  var tt = {
+    id: uid(), text: t.text, qty: t.qty||1, prog: 0, crucial: !!t.crucial, done: false,
+    period: 'dia', day: t.day||0,
+    checklist: (t.checklist||[]).map(function(it){
+      var nc = {id: uid(), text: it.text, done:false};
+      if(it.qty && it.qty>1) nc.qty = it.qty;
+      if(includeLinks && hasLinks(it.linkUp)){
+        var specs = normalizeLinks(it.linkUp).map(linkSpecFromLink).filter(Boolean);
+        if(specs.length) nc.linkSpec = specs;
+      }
+      return nc;
+    }),
+    links: {} // campo viejo, no se usa para crear vínculos nuevos
+  };
+  if(includeLinks && hasLinks(t.clLinkUp)){
+    var wholeSpecs = normalizeLinks(t.clLinkUp).map(linkSpecFromLink).filter(Boolean);
+    if(wholeSpecs.length) tt.clLinkSpec = wholeSpecs;
+  }
+  return tt;
+}
+function saveWeekAsTemplateConfirm(){
+  if(!SWT) return;
+  var nameEl = document.getElementById('swt-name-input');
+  var name = (nameEl?nameEl.value:SWT.name||'').trim() || ('Plantilla '+((S.templates||[]).length+1));
+  var matched = captureCurrentWeekTasks(SWT);
+  if(!matched.length){ toast('No hay tareas que coincidan con esos filtros'); return; }
+  var tasks = matched.map(function(t){ return buildTemplateTaskFromReal(t, SWT.includeLinks); });
+  if(!S.templates) S.templates = [];
+  S.templates.push({id:uid(), name:name, tasks:tasks});
+  saveState();
+  closeSaveWeekAsTemplateModal();
+  toast('Plantilla guardada ✓ ('+tasks.length+' tarea'+(tasks.length===1?'':'s')+')');
+  render();
+}
+// Al aplicar una plantilla que guardó vinculaciones (ver arriba), intenta
+// reconectarlas: busca una tarea existente del mismo período y nombre; si
+// no existe, la crea — pero solo si queda espacio en ese período según el
+// límite del plan del usuario. Si no hay espacio, o si el vínculo apuntaba
+// a un ítem de checklist puntual que ya no existe, ese vínculo puntual
+// queda sin recrear (no se inventan ítems de checklist).
+function resolveOrCreateLinkTarget(spec){
+  var period = spec.period;
+  var norm = (spec.targetText||'').trim().toLowerCase();
+  var targetTask = S.tasks.find(function(x){return x.period===period && (x.text||'').trim().toLowerCase()===norm;});
+  if(!targetTask){
+    var limit = (currentTaskLimits()[period]) || 999;
+    var countInPeriod = S.tasks.filter(function(x){return x.period===period;}).length;
+    if(countInPeriod >= limit) return null; // sin espacio — no se recrea
+    targetTask = {id:uid(), text:spec.targetText, period:period, done:false, prog:0, qty:1, checklist:[], crucial:false, categoryId:null, clLinkUp:null};
+    S.tasks.push(targetTask);
+  }
+  if(spec.itemText){
+    var normItem = spec.itemText.trim().toLowerCase();
+    var item = (targetTask.checklist||[]).find(function(i){return (i.text||'').trim().toLowerCase()===normItem;});
+    if(!item) return null; // no se recrean ítems de checklist puntuales, solo se vincula si ya existe
+    return {taskId:targetTask.id, itemId:item.id};
+  }
+  return {taskId:targetTask.id, itemId:null};
+}
+function recreateTemplateLinks(tpl, newDayTasks){
+  var restored = 0, skipped = 0;
+  (tpl.tasks||[]).forEach(function(tt, idx){
+    var newTask = newDayTasks[idx];
+    if(!newTask) return;
+    if(tt.clLinkSpec && tt.clLinkSpec.length){
+      var arr = [];
+      tt.clLinkSpec.forEach(function(spec){
+        var res = resolveOrCreateLinkTarget(spec);
+        if(res){ arr.push({taskId:res.taskId, itemId:res.itemId, mode:spec.mode||'unit'}); restored++; }
+        else skipped++;
+      });
+      if(arr.length){
+        newTask.clLinkUp = arr;
+        arr.forEach(function(l){ recalcParentItemQtyFromLinks(l.taskId, l.itemId); });
+      }
+    }
+    delete newTask.clLinkSpec;
+    (tt.checklist||[]).forEach(function(ti, ii){
+      var newItem = (newTask.checklist||[])[ii];
+      if(!newItem) return;
+      if(ti.linkSpec && ti.linkSpec.length){
+        var arr2 = [];
+        ti.linkSpec.forEach(function(spec){
+          var res = resolveOrCreateLinkTarget(spec);
+          if(res){ arr2.push({taskId:res.taskId, itemId:res.itemId, mode:spec.mode||'unit'}); restored++; }
+          else skipped++;
+        });
+        if(arr2.length){
+          newItem.linkUp = arr2;
+          arr2.forEach(function(l){ recalcParentItemQtyFromLinks(l.taskId, l.itemId); });
+        }
+      }
+      delete newItem.linkSpec;
+    });
+  });
+  return {restored:restored, skipped:skipped};
+}
+
 function applyTemplateNow(tplId){
   var tpl = (S.templates||[]).find(function(t){return t.id===tplId;});
   if(!tpl) return;
@@ -8716,10 +9005,22 @@ function _applyTemplate(tplId){
     });
   });
   S.tasks = nonDay.concat(newDayTasks);
+  // Pedido: si la plantilla guardó vinculaciones, intentar reconectarlas
+  // (o recrear la tarea superior si hay espacio) — ver recreateTemplateLinks.
+  var linkResult = {restored:0, skipped:0};
+  var hasAnyLinkSpec = (tpl.tasks||[]).some(function(t){
+    return (t.clLinkSpec&&t.clLinkSpec.length) || (t.checklist||[]).some(function(i){return i.linkSpec&&i.linkSpec.length;});
+  });
+  if(hasAnyLinkSpec) linkResult = recreateTemplateLinks(tpl, newDayTasks);
   S.activeTemplate = tplId;
   S.weekSchedule[getWeekKey()] = tplId;
   saveState();render();
-  toast('✓ Plantilla aplicada');
+  var msg = '✓ Plantilla aplicada';
+  if(linkResult.restored || linkResult.skipped){
+    msg += ' — ' + linkResult.restored + ' vínculo'+(linkResult.restored===1?'':'s')+' recreado'+(linkResult.restored===1?'':'s');
+    if(linkResult.skipped) msg += ', ' + linkResult.skipped + ' sin recrear (sin objetivo u espacio)';
+  }
+  toast(msg);
 }
 
 function clearActiveTemplate(){
@@ -8991,9 +9292,30 @@ function expCL(id){
 function finishUpdate(updated, justCompleted, delta){
   S.tasks=S.tasks.map(function(t){return t.id===updated.id?updated:t;});
   S._justCompletedId = justCompleted ? updated.id : null;
+  // Pedido: si esto completa a toda la categoría del check y el modo de
+  // plegado es "smart", no se pliega en este mismo render (ver
+  // isCatCollapsed) — se marca para plegarse recién un rato después, ya con
+  // el ✓ visible, en vez de desaparecer de golpe apenas se completa.
+  if(justCompleted && updated.categoryId && (S.catCollapseMode==='smart')){
+    S._delayedCollapseCatId = updated.categoryId;
+  }
   saveState();
   render();
   S._justCompletedId = null; // limpiar para que el pop no se repita en próximos renders
+  if(S._delayedCollapseCatId){
+    (function(catId){
+      setTimeout(function(){
+        // Si nada más volvió a completar esta misma categoría mientras
+        // tanto (lo que habría corrido este mismo setTimeout de nuevo con
+        // un catId más nuevo), recién ahí se pliega — sin volver a
+        // renderizar toda la página, solo esta sección.
+        if(S._delayedCollapseCatId===catId){
+          S._delayedCollapseCatId = null;
+          softCollapseCatSection(catId);
+        }
+      }, 900);
+    })(S._delayedCollapseCatId);
+  }
   if(justCompleted){
     playSound('complete');
     vibrate(30);
@@ -9006,6 +9328,24 @@ function finishUpdate(updated, justCompleted, delta){
   // Propagar según el modo de vinculación
   propagate(updated, justCompleted, delta||0);
   if(justCompleted) checkStreakNow();
+}
+// Pliega una categoría sin pasar por render() completo — usado por el
+// respiro de "smart" (ver finishUpdate/isCatCollapsed) para que el plegado
+// automático se vea como una transición suave y no como otro refresh.
+function softCollapseCatSection(catId){
+  var body = document.getElementById('cat-body-'+catId);
+  var sec = document.getElementById('cat-sec-'+catId);
+  if(body){
+    body.style.transition = 'opacity .35s ease';
+    body.style.opacity = '0';
+    setTimeout(function(){
+      if(body){ body.style.display = 'none'; body.style.opacity=''; body.style.transition=''; }
+    }, 350);
+  }
+  if(sec){
+    var arrow = sec.querySelector('div[style*="rotate"]');
+    if(arrow) arrow.style.transform = 'rotate(-90deg)';
+  }
 }
 // Propaga a las tareas vinculadas según el linkMode:
 //   'unit' (default): cada unidad de la hija suma 1 unidad al padre
@@ -11435,6 +11775,13 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   var sx=0, sy=0, startTime=0;
   var dragging=false, axis=null; // null | 'x' | 'y'
   var swipeMode=null; // null | 'hoy' | 'plan' | 'energia' — se fija en touchstart
+  // Pedido: que deslizar ENCIMA de la grilla semanal (no solo del título de
+  // la fecha) también pueda cambiar de semana. La grilla también scrollea
+  // horizontalmente sola cuando no entran todas las columnas, así que si el
+  // gesto arrancó ahí dejamos que ese scroll nativo ocurra normal (no lo
+  // seguimos con nuestra animación) y solo si el arrastre total termina
+  // siendo GRANDE lo tomamos como "cambiar de semana" al soltar el dedo.
+  var weekGridDrag=false;
 
   // Overlay de feedback visual durante el drag
   var ghost = document.createElement('div');
@@ -11452,6 +11799,11 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     if(!isDefaultLayout()) return null;
     if(S.tab==='hoy'||S.tab==='dia') return 'hoy';
     if(S.tab==='horario') return 'calendarios';
+    // Pedido: dentro de Plan → Objetivos, deslizar mueve entre semana/mes/
+    // semestre/año — pero OJO, esto no debe dispararse en Progreso ni en
+    // Calendarios (que ya tienen su propio significado para el swipe), así
+    // que se agrega como modo aparte, distinto de 'calendarios'.
+    if(S.tab==='plan'||S.tab==='objetivos') return 'objetivos';
     if(S.tab==='energia'||S.tab==='modos'||S.tab==='plantillas') return 'energia';
     return null;
   }
@@ -11480,11 +11832,10 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   c.addEventListener('touchstart', function(e){
     swipeMode = currentSwipeMode();
     if(!swipeMode) return;
+    weekGridDrag = false;
     if(swipeMode==='calendarios' && (S.calendariosSubTab||'semanal')==='semanal' && startedOnHorarioScroll(e.target)){
-      swipeMode = null; // dejar que la grilla scrollee normalmente
-      return;
-    }
-    if(swipeMode==='hoy' && startedOnCatTabsScroll(e.target)){
+      weekGridDrag = true; // se sigue registrando el gesto, pero sin el efecto de "seguir el dedo" (ver touchmove/touchend)
+    } else if(swipeMode==='hoy' && startedOnCatTabsScroll(e.target)){
       swipeMode = null; // dejar que la barra de categorías scrollee normalmente
       return;
     }
@@ -11509,6 +11860,10 @@ if(S.notifPermission === 'granted') scheduleNotifications();
       return;
     }
     if(axis !== 'x') return;
+    // Si el gesto empezó sobre la grilla semanal, se deja que scrollee sola
+    // (no se sigue el dedo con nuestra traslación) — recién se decide si
+    // fue "cambiar de semana" al soltar, según qué tan largo fue en total.
+    if(weekGridDrag) return;
 
     // Seguir el dedo con traslación suave
     c.style.transform = 'translateX('+dx*0.35+'px)';
@@ -11526,20 +11881,28 @@ if(S.notifPermission === 'granted') scheduleNotifications();
       c.style.transform = '';
       axis = null;
       swipeMode = null;
+      weekGridDrag = false;
       return;
     }
 
     var dx = e.changedTouches[0].clientX - sx;
     var dy = e.changedTouches[0].clientY - sy;
     var elapsed = Date.now() - startTime;
-    var threshold = elapsed < 250 ? 30 : 60; // swipe rápido = menos recorrido requerido
+    // Pedido: si el gesto arrancó sobre la grilla semanal (que también
+    // scrollea sola), se pide un arrastre bastante más largo ("deslizar
+    // harto") antes de tomarlo como "cambiar de semana", para no
+    // pelearse con el scroll corto y normal de la grilla.
+    var threshold = weekGridDrag ? 110 : (elapsed < 250 ? 30 : 60); // swipe rápido = menos recorrido requerido
 
     if(Math.abs(dx) < threshold || Math.abs(dy) > Math.abs(dx)*0.9){
-      // Cancelar — volver al lugar con rebote
+      // Cancelar — volver al lugar con rebote (si fue un drag de grilla,
+      // la transformación de #content nunca se tocó, así que este reset
+      // es inofensivo de todas formas)
       c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
       c.style.transform = '';
       axis = null;
       swipeMode = null;
+      weekGridDrag = false;
       return;
     }
 
@@ -11556,7 +11919,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
       if(subtabs.length<2){ // nada a donde ir — cancelar con rebote
         c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
         c.style.transform = '';
-        axis = null; swipeMode = null;
+        axis = null; swipeMode = null; weekGridDrag = false;
         return;
       }
       var nextIdx = goRight ? (idx===0?subtabs.length-1:idx-1) : (idx===subtabs.length-1?0:idx+1);
@@ -11623,6 +11986,53 @@ if(S.notifPermission === 'granted') scheduleNotifications();
       }, 160);
       axis = null;
       swipeMode = null;
+      weekGridDrag = false;
+      return;
+    }
+
+    // Pedido: dentro de Objetivos, deslizar cambia de período (semana → mes
+    // → semestre → año) de forma fluida — pero solo en esa área
+    // (period-tab-row + lista de tareas), sin re-animar ni reconstruir las
+    // 3 pestañas de Plan de arriba ni nada más. Mismo tipo de deslizamiento
+    // "de verdad" que usa el mes en Calendarios (un lado se va, el otro
+    // entra desde el borde opuesto), acotado a #objetivos-swipe-area.
+    if(mode==='objetivos'){
+      c.style.transition = 'transform .12s ease-out';
+      c.style.transform = '';
+      var periods = enabledGoalPeriods();
+      var curIdx = periods.indexOf(S.period);
+      if(curIdx<0) curIdx = 0;
+      if(periods.length<2){ // nada a donde ir — cancelar con rebote
+        c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
+        c.style.transform = '';
+        axis = null; swipeMode = null; weekGridDrag = false;
+        return;
+      }
+      // dedo hacia la derecha (goRight) = período anterior, igual que el resto de los gestos
+      var nextPeriodIdx = goRight ? (curIdx===0?periods.length-1:curIdx-1) : (curIdx===periods.length-1?0:curIdx+1);
+      var objArea = document.getElementById('objetivos-swipe-area');
+      if(objArea){
+        objArea.style.transition = 'transform .16s ease-out';
+        objArea.style.transform = 'translateX('+(goRight?'100%':'-100%')+')';
+      }
+      setTimeout(function(){
+        S.period = periods[nextPeriodIdx];
+        var objAreaAfter = document.getElementById('objetivos-swipe-area');
+        if(objAreaAfter){
+          objAreaAfter.innerHTML = renderObjetivosSwipeArea();
+          objAreaAfter.style.transition = 'none';
+          objAreaAfter.style.transform = 'translateX('+(goRight?'-100%':'100%')+')';
+          requestAnimationFrame(function(){
+            requestAnimationFrame(function(){
+              objAreaAfter.style.transition = 'transform .22s cubic-bezier(.25,.46,.45,.94)';
+              objAreaAfter.style.transform = '';
+            });
+          });
+        }
+      }, 160);
+      axis = null;
+      swipeMode = null;
+      weekGridDrag = false;
       return;
     }
 
@@ -11662,6 +12072,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 
     axis = null;
     swipeMode = null;
+    weekGridDrag = false;
   }, {passive:true});
 
   // Limpiar si se cancela el touch
@@ -11669,6 +12080,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     dragging = false;
     axis = null;
     swipeMode = null;
+    weekGridDrag = false;
     ghost.style.opacity = '0';
     c.style.transition = 'transform .2s ease';
     c.style.transform = '';
