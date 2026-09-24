@@ -1620,6 +1620,7 @@ var S = {
   // Personalizaciones visuales avanzadas
   bgColorOverride:'default',
   showModeTips:true, // consejos y tareas sugeridas de los modos predeterminados
+  showWeeklyMessage:true, // franja de "recordatorio/intención de la semana" en Hoy
   interfaceLayout:'default', // 'default' | 'compact' | 'agenda'
   _compactSection:'dia',
   _agendaSection:'semana', // 'default' | 'white' | 'black'
@@ -1840,8 +1841,23 @@ function isDone(t){
   if((t.qty||1)>1)return(t.prog||0)>=t.qty;
   return!!t.done;
 }
+// Pedido: si un ítem del checklist tiene su propia cantidad (ej. "leer 3
+// páginas" llevando 1 de 3), ese avance a medias también debe pesar en el
+// progreso total de la tarea — antes un ítem con cantidad solo sumaba algo
+// cuando llegaba a su 100% (ej. recién al llegar a 3/3), y hasta entonces
+// contaba como 0 aunque ya llevara la mitad. clItemQty se usa antes de estar
+// declarada más abajo en el archivo, pero como es function declaration
+// (hoisted) ya existe para cuando esto realmente se ejecuta.
+function clItemRatio(item){
+  var q = clItemQty(item);
+  if(q>1) return Math.min((item.prog||0)/q, 1);
+  return item.done ? 1 : 0;
+}
 function tRatio(t){
-  if(t.checklist&&t.checklist.length)return t.checklist.filter(function(i){return i.done;}).length/t.checklist.length;
+  if(t.checklist&&t.checklist.length){
+    var sum = t.checklist.reduce(function(s,i){return s+clItemRatio(i);},0);
+    return sum/t.checklist.length;
+  }
   if((t.qty||1)>1)return Math.min((t.prog||0)/t.qty,1);
   return t.done?1:0;
 }
@@ -1864,6 +1880,7 @@ function loadState(){
     var th=localStorage.getItem('og6-theme');if(th)S.theme=th;
     var tc=localStorage.getItem('og6-bgcolor');if(tc)S.bgColorOverride=tc;
     var smt=localStorage.getItem('og6-showmodetips');if(smt!==null)S.showModeTips=smt==='1';
+    var swm=localStorage.getItem('og6-showweeklymessage');if(swm!==null)S.showWeeklyMessage=swm==='1';
     var cc=localStorage.getItem('og6-collapsedcats');if(cc)S.collapsedCats=JSON.parse(cc);
     var sndOn=localStorage.getItem('og6-soundon');if(sndOn!==null)S.soundOn=sndOn==='1';
     var il=localStorage.getItem('og6-layout');if(il)S.interfaceLayout=il;
@@ -1948,6 +1965,7 @@ function saveState(){
     localStorage.setItem('og6-theme',S.theme);
     localStorage.setItem('og6-bgcolor',S.bgColorOverride||'default');
     localStorage.setItem('og6-showmodetips',S.showModeTips===false?'0':'1');
+    localStorage.setItem('og6-showweeklymessage',S.showWeeklyMessage===false?'0':'1');
     localStorage.setItem('og6-collapsedcats',JSON.stringify(S.collapsedCats||{}));
     localStorage.setItem('og6-soundon',S.soundOn===false?'0':'1');
     localStorage.setItem('og6-layout',S.interfaceLayout||'default');
@@ -3113,25 +3131,30 @@ function renderHoy(){
     }
   }
 
-  var wk = getWeekKey();
-  var wMsg = S.weeklyMessages ? S.weeklyMessages[wk] : null;
-  if(wMsg && wMsg.text){
-    var weekOpen = !!S._ctxOpen.week;
-    var preview = wMsg.text.length>44 ? wMsg.text.slice(0,44)+'…' : wMsg.text;
-    html += '<div class="ctx-strip" onclick="toggleCtx(\'week\')">'+
-      '<span style="font-size:15px;flex-shrink:0;">'+(wMsg.emoji||'💬')+'</span>'+
-      '<span style="font-size:12.5px;color:var(--ink-soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(weekOpen?wMsg.text:preview)+'</span>'+
-      '<span class="ctx-strip-chevron" style="transform:'+(weekOpen?'rotate(180deg)':'none')+';">▾</span>'+
-    '</div>';
-    if(weekOpen){
-      html += '<div style="padding:2px 16px 10px;display:flex;justify-content:flex-end;border-bottom:1px solid var(--line-soft);">'+
-        '<button onclick="event.stopPropagation();openWeeklyMessageEditor()" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Editar</button>'+
+  // Pedido: se puede apagar esta franja entera desde Personalización →
+  // Preferencias (S.showWeeklyMessage) — tapa tanto el mensaje ya escrito
+  // como el aviso para agregarlo.
+  if(S.showWeeklyMessage!==false){
+    var wk = getWeekKey();
+    var wMsg = S.weeklyMessages ? S.weeklyMessages[wk] : null;
+    if(wMsg && wMsg.text){
+      var weekOpen = !!S._ctxOpen.week;
+      var preview = wMsg.text.length>44 ? wMsg.text.slice(0,44)+'…' : wMsg.text;
+      html += '<div class="ctx-strip" onclick="toggleCtx(\'week\')">'+
+        '<span style="font-size:15px;flex-shrink:0;">'+(wMsg.emoji||'💬')+'</span>'+
+        '<span style="font-size:12.5px;color:var(--ink-soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(weekOpen?wMsg.text:preview)+'</span>'+
+        '<span class="ctx-strip-chevron" style="transform:'+(weekOpen?'rotate(180deg)':'none')+';">▾</span>'+
+      '</div>';
+      if(weekOpen){
+        html += '<div style="padding:2px 16px 10px;display:flex;justify-content:flex-end;border-bottom:1px solid var(--line-soft);">'+
+          '<button onclick="event.stopPropagation();openWeeklyMessageEditor()" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Editar</button>'+
+        '</div>';
+      }
+    } else {
+      html += '<div class="ctx-strip" style="color:var(--muted);" onclick="openWeeklyMessageEditor()">'+
+        '<span style="font-size:14px;flex-shrink:0;">💬</span><span style="font-size:12px;">Agregar recordatorio o intención de la semana</span>'+
       '</div>';
     }
-  } else {
-    html += '<div class="ctx-strip" style="color:var(--muted);" onclick="openWeeklyMessageEditor()">'+
-      '<span style="font-size:14px;flex-shrink:0;">💬</span><span style="font-size:12px;">Agregar recordatorio o intención de la semana</span>'+
-    '</div>';
   }
 
   // Selector de día — simple, sin puntitos
@@ -3242,7 +3265,7 @@ function renderPlan(){
   // Pedido: orden Objetivos, Calendarios (antes "Horario"), Progreso.
   var html = '<div style="display:flex;padding:0 16px;background:var(--paper);position:sticky;top:0;z-index:10;border-bottom:1px solid var(--line-soft);">'+
     '<button onclick="setTab(\'objetivos\')" style="'+tabStyle(subTab==='objetivos')+'">Objetivos</button>'+
-    '<button onclick="setTab(\'horario\')" style="'+tabStyle(subTab==='horario')+'">Calendarios</button>'+
+    '<button onclick="setTab(\'horario\')" style="'+tabStyle(subTab==='horario')+'">Calendario</button>'+
     (S.simpleMode?'':'<button onclick="setTab(\'progreso\')" style="'+tabStyle(subTab==='progreso')+'">Progreso</button>')+
   '</div>';
   html += subTab==='objetivos'
@@ -3993,10 +4016,20 @@ function renderYoPreferenciasScreen(){
     '</div>'+
   '</div>';
 
+  html += '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">💬 Recordatorio de la semana</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">La franja de arriba en Hoy para escribir una frase o intención de la semana (o el aviso para agregarla si aún no tienes una).</div>'+
+      '</div>'+
+      '<button class="tog" onclick="toggleShowWeeklyMessage()" style="background:'+(S.showWeeklyMessage!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(S.showWeeklyMessage!==false?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+  '</div>';
+
   return html;
 }
-
-// ── Yo → Tema visual ─────────────────────────────────────────────────────
 function renderYoTemaScreen(){
   var FREE_THEMES = ['light','dark','bosque'];  // Disponibles sin pagar
   var themes=[
@@ -5996,6 +6029,15 @@ function toggleShowModeTips(){
   render();
   playSound('toggle');
 }
+// Pedido: poder quitar del todo la franja de "Agregar recordatorio o
+// intención de la semana" en Hoy (tanto el aviso para agregarla como la
+// franja ya escrita, si prefieres no verla).
+function toggleShowWeeklyMessage(){
+  S.showWeeklyMessage = S.showWeeklyMessage===false ? true : false;
+  saveState();
+  render();
+  playSound('toggle');
+}
 function askToggleSimpleMode(){
   if(S.simpleMode){
     S.simpleMode = false;
@@ -7628,10 +7670,13 @@ function renderCalendarioMensual(){
   var navPrev = expanded ? 'calNav(-1)' : 'calNavWeek(-1)';
   var navNext = expanded ? 'calNav(1)' : 'calNavWeek(1)';
   var html = '<div style="padding:0 16px;" id="streak-calendar-card">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'+
-      '<div style="font-weight:800;font-size:17px;color:var(--ink);">📅 Calendario</div>'+
-      (offset!==0 ? '<button onclick="calGoToday()" style="background:var(--accent-bg);color:var(--accent);border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Hoy</button>' : '')+
-    '</div>'+
+    // Pedido: se quitó el título "📅 Calendario" de acá — ya está la
+    // pestaña de arriba (ahora renombrada a "Calendario", sin plural),
+    // repetirlo era redundante. Se conserva el botón "Hoy" para volver
+    // rápido al mes actual cuando se está viendo otro.
+    (offset!==0 ? '<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">'+
+      '<button onclick="calGoToday()" style="background:var(--accent-bg);color:var(--accent);border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Hoy</button>'+
+    '</div>' : '')+
     '<div style="background:var(--bg);border-radius:16px;padding:14px 10px 4px;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'+
         '<button onclick="'+navPrev+'" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;padding:4px 14px;line-height:1;">‹</button>'+
