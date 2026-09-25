@@ -4,6 +4,18 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Gramifica</title>
+<!-- Manifest PWA: sin esto, "Agregar a pantalla de inicio" abre la app
+     dentro de una pestaña normal (con toda la barra del navegador) en vez
+     de a pantalla completa. También es lo que Bubblewrap lee para armar el
+     empaquetado de Android (nombre, ícono, color, modo standalone). -->
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#c97842"/>
+<!-- Safari (iOS) no lee el manifest para esto — necesita sus propias
+     etiquetas para abrir en modo standalone (sin barra) al agregarla a la
+     pantalla de inicio. -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Gramifica"/>
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png"/>
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
@@ -1685,7 +1697,9 @@ var S = {
   notifAskedDate:null,
   // Recordatorio diario opcional (Yo → Notificaciones): avisa a una hora
   // fija cada día a revisar las tareas y tickear las que ya estén listas.
-  dailyReviewReminder: { on:false, hh:20, mm:0 },
+  dailyReviewReminder: { on:false, hh:20, mm:0, days:[0,1,2,3,4,5,6] }, // days: índices tipo DAYS (0=Lunes…6=Domingo); todos activos por defecto
+  quietHours: { on:false, startHH:22, startMM:0, endHH:8, endMM:0 }, // horario de silencio — pospone avisos hasta que termine
+  streakRisk: { on:false, hh:21, mm:0 }, // aviso si a esa hora aún no se llega al umbral del día
   // Versión del esquema de datos — se incrementa cuando cambia la estructura
   // para aplicar migraciones seguras y evitar que datos viejos rompan la app.
   dataVersion:1,
@@ -1915,7 +1929,9 @@ function loadState(){
     var up=localStorage.getItem('og6-userphrase');if(up)S.userPhrase=up;
     var np=localStorage.getItem('og6-notifperm');if(np)S.notifPermission=np;
     var na=localStorage.getItem('og6-notifasked');if(na)S.notifAskedDate=na;
-    var drr=localStorage.getItem('og6-dailyreviewreminder');if(drr)S.dailyReviewReminder=Object.assign({on:false,hh:20,mm:0},JSON.parse(drr));
+    var drr=localStorage.getItem('og6-dailyreviewreminder');if(drr)S.dailyReviewReminder=Object.assign({on:false,hh:20,mm:0,days:[0,1,2,3,4,5,6]},JSON.parse(drr));
+    var qh=localStorage.getItem('og6-quiethours');if(qh)S.quietHours=Object.assign({on:false,startHH:22,startMM:0,endHH:8,endMM:0},JSON.parse(qh));
+    var sr=localStorage.getItem('og6-streakrisk');if(sr)S.streakRisk=Object.assign({on:false,hh:21,mm:0},JSON.parse(sr));
     var sm=localStorage.getItem('og6-simplemode');if(sm!==null)S.simpleMode=sm==='1';
     var smfr=localStorage.getItem('og6-simplemodefabreset');if(smfr!==null)S.simpleModeFabReset=smfr==='1';
     var cst=localStorage.getItem('og6-calsubtab');if(cst)S.calendariosSubTab=cst;
@@ -2008,7 +2024,9 @@ function saveState(){
     if(S.userAvatar) localStorage.setItem('og6-useravatar',S.userAvatar);
     else localStorage.removeItem('og6-useravatar'); // BUGFIX: si se quita la foto, antes quedaba huérfana y volvía a aparecer al recargar
     localStorage.setItem('og6-notiftiming',JSON.stringify(S.notifTiming||{hh:0,mm:15}));
-    localStorage.setItem('og6-dailyreviewreminder',JSON.stringify(S.dailyReviewReminder||{on:false,hh:20,mm:0}));
+    localStorage.setItem('og6-dailyreviewreminder',JSON.stringify(S.dailyReviewReminder||{on:false,hh:20,mm:0,days:[0,1,2,3,4,5,6]}));
+    localStorage.setItem('og6-quiethours',JSON.stringify(S.quietHours||{on:false,startHH:22,startMM:0,endHH:8,endMM:0}));
+    localStorage.setItem('og6-streakrisk',JSON.stringify(S.streakRisk||{on:false,hh:21,mm:0}));
     localStorage.setItem('og6-projecttourseen',S.projectTourSeen?'1':'0');
     localStorage.setItem('og6-leveltipseen',S.levelTipSeen?'1':'0');
     localStorage.setItem('og6-medaltipseen',S.medalTipSeen?'1':'0');
@@ -3800,7 +3818,10 @@ function renderYoMain(){
   // ── Cuenta ────────────────────────────────────────────────────────────
   var plan = getPlan();
   var isDonante = plan === 'donante';
-  html += yoSectionHTML('Cuenta', yoRowHTML('plan','🎟️','Nivel de acceso', isDonante?'Donante':'Gratuito', true));
+  html += yoSectionHTML('Cuenta',
+    yoRowHTML('plan','🎟️','Nivel de acceso', isDonante?'Donante':'Gratuito', false)+
+    yoRowHTML('estadisticas','📊','Estadísticas', 'Resúmenes semanales y mensuales', true)
+  );
 
   // ── Personalización ───────────────────────────────────────────────────
   var prefSub = S.simpleMode ? 'Modo simplificado activo' : 'Modo de uso, sonido, sugerencias';
@@ -3850,11 +3871,13 @@ function renderYoScreenWrap(screen){
   var titles = {
     perfil:'Perfil', plan:'Nivel de acceso', preferencias:'Preferencias',
     tema:'Tema visual', categorias:'Categorías', periodos:'Períodos', notificaciones:'Notificaciones', calendario:'Google Calendar',
+    estadisticas:'Estadísticas',
     ayuda:'Ayuda', datos:'Datos y privacidad'
   };
   var renderers = {
     perfil:renderYoPerfilScreen, plan:renderYoPlanScreen, preferencias:renderYoPreferenciasScreen,
     tema:renderYoTemaScreen, categorias:renderYoCategoriasScreen, periodos:renderYoPeriodosScreen, notificaciones:renderYoNotificacionesScreen, calendario:renderYoCalendarioScreen,
+    estadisticas:renderYoEstadisticasScreen,
     ayuda:renderYoAyudaScreen, datos:renderYoDatosScreen
   };
   if(!renderers[screen]){ S.yoScreen=null; return renderYoMain(); }
@@ -4144,81 +4167,127 @@ function togglePeriodEnabled(period){
 
 function renderYoNotificacionesScreen(){
   var notifOn = S.notifPermission === 'granted';
-  var nt = S.notifTiming || {type:'exact', value:15};
+  var nt = S.notifTiming || {hh:0, mm:15};
+  var drr = S.dailyReviewReminder || {on:false, hh:20, mm:0, days:[0,1,2,3,4,5,6]};
+  var qh = S.quietHours || {on:false, startHH:22, startMM:0, endHH:8, endMM:0};
+  var sr = S.streakRisk || {on:false, hh:21, mm:0};
+  var drrDays = drr.days || [0,1,2,3,4,5,6];
+  var DAY_ABBR = ['L','M','M','J','V','S','D'];
+
+  // 1) Permiso maestro
   var html = '<div class="card" style="margin-bottom:10px;">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(notifOn?14:0)+'px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);">Permiso de notificaciones</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Necesario para poder recibir avisos. Luego elige qué tareas quieres que te recuerden desde "🔔 Recordatorio" en cada tarea con horario — no se avisa para todas por defecto.</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">🔔 Permiso de notificaciones</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">'+(notifOn?'Activo — elige abajo cuáles quieres recibir.':'Actívalo para poder usar cualquiera de los avisos de abajo. Puedes revisar cómo quedarían configurados igual, sin activarlos todavía.')+'</div>'+
       '</div>'+
       (notifOn
         ? '<button onclick="revokeNotif()" class="cbtn" style="font-size:11px;padding:7px 12px;flex-shrink:0;">Desactivar</button>'
         : '<button onclick="grantNotif()" class="sbtn" style="font-size:13px;flex-shrink:0;padding:9px 14px;">Activar</button>'
       )+
     '</div>'+
-    (notifOn ? (
-      // Selector de timing — un solo control tipo reloj "HH:MM" en vez de
-      // tres opciones separadas (puntual / minutos / horas). 00:00 = aviso
-      // justo a la hora de la tarea; 00:15 = 15 min antes; 01:05 = 1h 5min antes.
-      // Este valor es solo el PREDETERMINADO al activar un recordatorio nuevo
-      // en una tarea — cada tarea puede después ajustar el suyo propio.
+  '</div>';
+
+  // 2) Centro de notificaciones — agenda en vivo de lo que queda de hoy
+  if(notifOn){
+    var agenda = buildNotificationAgenda();
+    html += '<div class="card" style="margin-bottom:10px;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:2px;">📬 Centro de notificaciones</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:'+(agenda.length?12:0)+'px;line-height:1.5;">Lo que está programado para lo que queda de hoy, en orden.</div>'+
+      (agenda.length ? agenda.map(function(it){
+        var hh = String(it.time.getHours()).padStart(2,'0'), mm = String(it.time.getMinutes()).padStart(2,'0');
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line-soft);">'+
+          '<div style="width:30px;height:30px;border-radius:9px;background:'+it.color+'22;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">'+it.icon+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(it.label)+'</div>'+
+            '<div style="font-size:10.5px;color:var(--muted);">'+esc(it.sub)+'</div>'+
+          '</div>'+
+          '<div style="font-size:13px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;flex-shrink:0;">'+hh+':'+mm+'</div>'+
+        '</div>';
+      }).join('') : '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0;">Nada programado por ahora para lo que queda del día.</div>')+
+    '</div>';
+  }
+
+  // 3) Recordatorio de tareas (timing por defecto)
+  html += '<div class="card" style="margin-bottom:10px;'+(notifOn?'':'opacity:.55;')+'">'+
+    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:2px;">🔔 Recordatorio de tareas</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Valor por defecto al activar "🔔 Recordatorio" en una tarea con horario — cada tarea puede después ajustar el suyo propio.</div>'+
+    '<div id="notif-default-body">'+notifDefaultBodyHTML()+'</div>'+
+  '</div>';
+
+  // 4) Recordatorio diario de revisión — hora nativa + días de la semana
+  html += '<div class="card" style="margin-bottom:10px;'+(notifOn?'':'opacity:.55;')+'">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(drr.on?14:0)+'px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">📋 Revisión diaria</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Un aviso a la hora que elijas, en los días que elijas, para revisar tus tareas y tickear las que ya tengas listas.</div>'+
+      '</div>'+
+      '<button class="tog" onclick="toggleDailyReviewReminder()" style="background:'+(drr.on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(drr.on?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+    (drr.on ? (
       '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
-        '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px;">¿Cuánto antes avisar? (valor por defecto)</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">00:00 avisa justo a la hora de la tarea. Cada tarea puede ajustar este valor por su cuenta.</div>'+
-        '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;">'+
-          '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-            '<button onclick="nudgeNotifHH(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
-            '<span id="notif-hh-val" style="font-size:22px;font-weight:800;color:var(--ink);min-width:40px;text-align:center;font-variant-numeric:tabular-nums;">'+String(nt.hh||0).padStart(2,'0')+'</span>'+
-            '<button onclick="nudgeNotifHH(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
-            '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">horas</span>'+
-          '</div>'+
-          '<span style="font-size:22px;font-weight:800;color:var(--muted-soft);">:</span>'+
-          '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-            '<button onclick="nudgeNotifMM(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
-            '<span id="notif-mm-val" style="font-size:22px;font-weight:800;color:var(--ink);min-width:40px;text-align:center;font-variant-numeric:tabular-nums;">'+String(nt.mm||0).padStart(2,'0')+'</span>'+
-            '<button onclick="nudgeNotifMM(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
-            '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
-          '</div>'+
+        '<div style="display:flex;justify-content:center;margin-bottom:12px;">'+
+          '<input type="time" value="'+String(drr.hh||0).padStart(2,'0')+':'+String(drr.mm||0).padStart(2,'0')+'" onchange="setDRRTime(this.value)" style="font-size:20px;font-weight:800;color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:8px 14px;background:var(--bg);font-family:Inter,sans-serif;">'+
         '</div>'+
+        '<div style="display:flex;gap:4px;justify-content:center;margin-bottom:10px;">'+
+          DAY_ABBR.map(function(ab,i){
+            var on = drrDays.indexOf(i)!==-1;
+            return '<button onclick="toggleDRRDay('+i+')" style="width:32px;height:32px;border-radius:50%;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+ab+'</button>';
+          }).join('')+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--accent);text-align:center;font-style:italic;">“Es hora de revisar tus tareas de hoy ✓”'+(drrDays.length===7?'':' · solo '+drrDays.map(function(i){return DAY_ABBR[i];}).join('')) +'</div>'+
       '</div>'
     ) : '')+
   '</div>';
 
-  // ── Recordatorio diario de revisión ─────────────────────────────────
-  if(notifOn){
-    var drr = S.dailyReviewReminder || {on:false, hh:20, mm:0};
-    html += '<div class="card" style="margin-bottom:10px;">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(drr.on?14:0)+'px;">'+
-        '<div style="flex:1;">'+
-          '<div style="font-weight:700;font-size:14px;color:var(--ink);">Recordatorio diario de revisión</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Un aviso a la hora que elijas, todos los días, para revisar tus tareas y tickear las que ya tengas listas.</div>'+
-        '</div>'+
-        '<button class="tog" onclick="toggleDailyReviewReminder()" style="background:'+(drr.on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
-          '<span class="tok" style="left:'+(drr.on?22:2)+'px;"></span>'+
-        '</button>'+
+  // 5) Racha en riesgo
+  html += '<div class="card" style="margin-bottom:10px;'+(notifOn?'':'opacity:.55;')+'">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(sr.on?14:0)+'px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">🔥 Racha en riesgo</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Si a esta hora todavía no llegas al umbral del día, te avisa para que alcances a reaccionar.</div>'+
       '</div>'+
-      (drr.on ? (
-        '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
-          '<div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:12px;">¿A qué hora?</div>'+
-          '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;">'+
-            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-              '<button onclick="nudgeDRRHH(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
-              '<span id="drr-hh-val" style="font-size:22px;font-weight:800;color:var(--ink);min-width:40px;text-align:center;font-variant-numeric:tabular-nums;">'+String(drr.hh||0).padStart(2,'0')+'</span>'+
-              '<button onclick="nudgeDRRHH(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
-              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">hora</span>'+
-            '</div>'+
-            '<span style="font-size:22px;font-weight:800;color:var(--muted-soft);">:</span>'+
-            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-              '<button onclick="nudgeDRRMM(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
-              '<span id="drr-mm-val" style="font-size:22px;font-weight:800;color:var(--ink);min-width:40px;text-align:center;font-variant-numeric:tabular-nums;">'+String(drr.mm||0).padStart(2,'0')+'</span>'+
-              '<button onclick="nudgeDRRMM(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
-              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
-            '</div>'+
-          '</div>'+
-        '</div>'
-      ) : '')+
-    '</div>';
-  }
+      '<button class="tog" onclick="toggleStreakRisk()" style="background:'+(sr.on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(sr.on?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+    (sr.on ? (
+      '<div style="border-top:1px solid var(--line-soft);padding-top:14px;">'+
+        '<div style="display:flex;justify-content:center;margin-bottom:10px;">'+
+          '<input type="time" value="'+String(sr.hh!=null?sr.hh:21).padStart(2,'0')+':'+String(sr.mm||0).padStart(2,'0')+'" onchange="setStreakRiskTime(this.value)" style="font-size:20px;font-weight:800;color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:8px 14px;background:var(--bg);font-family:Inter,sans-serif;">'+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--accent);text-align:center;font-style:italic;">“🔥 Tu racha está en riesgo — todavía puedes lograrlo”</div>'+
+      '</div>'
+    ) : '')+
+  '</div>';
+
+  // 6) Horario de silencio
+  html += '<div class="card" style="margin-bottom:10px;'+(notifOn?'':'opacity:.55;')+'">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(qh.on?14:0)+'px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">🌙 Horario de silencio</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Ningún aviso interrumpe en este rango — no se cancela, se pospone hasta que termine.</div>'+
+      '</div>'+
+      '<button class="tog" onclick="toggleQuietHours()" style="background:'+(qh.on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(qh.on?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+    (qh.on ? (
+      '<div style="border-top:1px solid var(--line-soft);padding-top:14px;display:flex;align-items:center;justify-content:center;gap:12px;">'+
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'+
+          '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Desde</span>'+
+          '<input type="time" value="'+String(qh.startHH||0).padStart(2,'0')+':'+String(qh.startMM||0).padStart(2,'0')+'" onchange="setQuietHoursStart(this.value)" style="font-size:17px;font-weight:800;color:var(--ink);border:1.5px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--bg);font-family:Inter,sans-serif;">'+
+        '</div>'+
+        '<span style="font-size:16px;color:var(--muted-soft);margin-top:14px;">→</span>'+
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">'+
+          '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Hasta</span>'+
+          '<input type="time" value="'+String(qh.endHH||0).padStart(2,'0')+':'+String(qh.endMM||0).padStart(2,'0')+'" onchange="setQuietHoursEnd(this.value)" style="font-size:17px;font-weight:800;color:var(--ink);border:1.5px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--bg);font-family:Inter,sans-serif;">'+
+        '</div>'+
+      '</div>'
+    ) : '')+
+  '</div>';
 
   return html;
 }
@@ -4272,6 +4341,120 @@ function renderYoCalendarioScreen(){
 }
 
 // ── Yo → Ayuda ───────────────────────────────────────────────────────────
+// ── Yo → Estadísticas ────────────────────────────────────────────────────
+// Pedido: un lugar aparte para ver resúmenes (semanal, mensual) en vez de
+// mandarlos como notificación — acá se consultan cuando el usuario quiera.
+function computeRollingAvg(startOffsetDays, lengthDays){
+  var sum=0, count=0;
+  for(var i=0;i<lengthDays;i++){
+    var key = localDateStr(addDaysLocal(new Date(), -(startOffsetDays+i)));
+    var h = S.dailyHistory ? S.dailyHistory[key] : null;
+    if(h && h.total>0){ sum += h.ratio; count++; }
+  }
+  return count ? sum/count : null;
+}
+function computeMonthAvg(year, month){
+  var sum=0, count=0;
+  var d = new Date(year, month, 1);
+  while(d.getMonth()===month){
+    var h = S.dailyHistory ? S.dailyHistory[localDateStr(d)] : null;
+    if(h && h.total>0){ sum+=h.ratio; count++; }
+    d.setDate(d.getDate()+1);
+  }
+  return count ? sum/count : null;
+}
+function render7DayBarChart(){
+  var DAY1 = ['L','M','M','J','V','S','D'];
+  var bars = [];
+  for(var i=6;i>=0;i--){
+    var d = addDaysLocal(new Date(), -i);
+    var h = S.dailyHistory ? S.dailyHistory[localDateStr(d)] : null;
+    bars.push({label:DAY1[appDayOfWeek(d)], ratio:h?h.ratio:0, reached:h?!!h.streakReached:false, isToday:i===0, hasData:!!(h&&h.total>0)});
+  }
+  var barW=28, gap=10, w=bars.length*(barW+gap), maxH=60;
+  var svg = '<svg width="100%" height="90" viewBox="0 0 '+w+' 90" style="display:block;">';
+  bars.forEach(function(b,i){
+    var x = i*(barW+gap)+gap/2;
+    var barH = b.hasData ? Math.max(3, b.ratio*maxH) : 2;
+    var y = maxH-barH+14;
+    var color = !b.hasData ? '#e5e0d5' : (b.reached ? 'var(--accent)' : '#d8c9a8');
+    svg += '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+barH+'" rx="4" fill="'+color+'"'+(b.isToday?' stroke="var(--ink)" stroke-width="1.5"':'')+'/>';
+    svg += '<text x="'+(x+barW/2)+'" y="86" text-anchor="middle" font-size="10" fill="var(--muted)">'+b.label+'</text>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+function renderTodayByCategory(){
+  var day = S.day;
+  var todayTasks = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===day;});
+  var cats = S.categories||[];
+  var rows = cats.map(function(cat){
+    var group = todayTasks.filter(function(t){return t.categoryId===cat.id;});
+    if(!group.length) return null;
+    var sum = group.reduce(function(s,t){return s+tRatio(t);},0);
+    return {cat:cat, pct:sum/group.length};
+  }).filter(Boolean);
+  if(!rows.length) return '<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0;">Sin categorías con tareas hoy.</div>';
+  rows.sort(function(a,b){return b.pct-a.pct;});
+  return rows.map(function(r){
+    var pctInt = Math.round(r.pct*100);
+    return '<div style="margin-bottom:10px;">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">'+
+        '<span style="color:'+r.cat.color+';font-weight:700;">'+esc(r.cat.name)+'</span>'+
+        '<span style="color:var(--muted);">'+pctInt+'%</span>'+
+      '</div>'+
+      '<div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden;"><div style="height:100%;width:'+pctInt+'%;background:'+r.cat.color+';"></div></div>'+
+    '</div>';
+  }).join('');
+}
+function renderYoEstadisticasScreen(){
+  var thisWeek = computeRollingAvg(0,7);
+  var lastWeek = computeRollingAvg(7,7);
+  var now = new Date();
+  var thisMonth = computeMonthAvg(now.getFullYear(), now.getMonth());
+  var lm = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  var lastMonth = computeMonthAvg(lm.getFullYear(), lm.getMonth());
+
+  function trendBadge(cur, prev){
+    if(cur==null || prev==null) return '';
+    var diff = Math.round((cur-prev)*100);
+    if(diff===0) return '<span style="font-size:11px;color:var(--muted);">= que antes</span>';
+    var up = diff>0;
+    return '<span style="font-size:11px;font-weight:700;color:'+(up?'#5a8c4a':'#c0503a')+';">'+(up?'▲':'▼')+' '+Math.abs(diff)+' pts vs. período anterior</span>';
+  }
+
+  var html = '<div class="card" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">'+
+    '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Racha actual</div><div style="font-size:24px;font-weight:800;color:var(--ink);">🔥 '+(S.streak?S.streak.days:0)+'</div></div>'+
+    '<div style="text-align:right;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Días totales</div><div style="font-size:24px;font-weight:800;color:var(--ink);">'+(S.streak?S.streak.total:0)+'</div></div>'+
+  '</div>';
+
+  html += '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:4px;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);">📅 Esta semana</div>'+
+      trendBadge(thisWeek,lastWeek)+
+    '</div>'+
+    '<div style="font-size:28px;font-weight:800;color:var(--ink);margin-bottom:10px;">'+(thisWeek!=null?Math.round(thisWeek*100)+'%':'—')+'</div>'+
+    render7DayBarChart()+
+    '<div style="font-size:10.5px;color:var(--muted);margin-top:6px;text-align:center;">Últimos 7 días, incluido hoy. La barra oscura marca el umbral cumplido.</div>'+
+  '</div>';
+
+  html += '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;flex-wrap:wrap;gap:4px;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);">🗓️ Este mes</div>'+
+      trendBadge(thisMonth,lastMonth)+
+    '</div>'+
+    '<div style="font-size:28px;font-weight:800;color:var(--ink);">'+(thisMonth!=null?Math.round(thisMonth*100)+'%':'—')+'</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px;">Promedio diario de cumplimiento del mes.</div>'+
+  '</div>';
+
+  html += '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:10px;">🗂️ Hoy por categoría</div>'+
+    renderTodayByCategory()+
+  '</div>';
+
+  return html;
+}
+
 function renderYoAyudaScreen(){
   var html = '';
   [
@@ -9765,22 +9948,7 @@ function showTaskModal(){
           '</button>'+
         '</div>'+
         '<div id="m-notif-area" style="display:'+(M.notif&&M.notif.on?'block':'none')+';">'+
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">00:00 avisa justo a la hora de la tarea. Requiere que hayas activado los permisos de notificación en Yo → Más ajustes.</div>'+
-          '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--paper);border-radius:12px;padding:12px;">'+
-            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-              '<button type="button" onclick="mNudgeNotifHH(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
-              '<span id="m-notif-hh-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String((M.notif&&M.notif.hh)||0).padStart(2,'0')+'</span>'+
-              '<button type="button" onclick="mNudgeNotifHH(-1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">−</button>'+
-              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">horas</span>'+
-            '</div>'+
-            '<span style="font-size:19px;font-weight:800;color:var(--muted-soft);">:</span>'+
-            '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-              '<button type="button" onclick="mNudgeNotifMM(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
-              '<span id="m-notif-mm-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String((M.notif&&M.notif.mm)!=null?M.notif.mm:15).padStart(2,'0')+'</span>'+
-              '<button type="button" onclick="mNudgeNotifMM(-1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">−</button>'+
-              '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
-            '</div>'+
-          '</div>'+
+          mNotifAreaHTML()+
         '</div>'+
       '</div>'+
       '<div style="height:1px;background:var(--line-soft);margin:14px 0;"></div>'+
@@ -10025,6 +10193,42 @@ function mSetDuracion(min){
   M.duracion = Math.max(5, Math.min(1440, min||60));
 }
 // ── Recordatorio por tarea (opt-in, no es global) ────────────────────────
+// Genera el contenido de "¿cuánto antes avisar?" dentro del editor de
+// tareas — chips rápidos + stepper fino + vista previa del texto real.
+// Separado en su propia función para poder refrescarlo entero (chips
+// resaltados, valores, vista previa) desde un solo lugar cada vez que
+// cambia, sin tener que actualizar cada pieza suelta por separado.
+function mNotifAreaHTML(){
+  var hh=(M.notif&&M.notif.hh)||0, mm=(M.notif&&M.notif.mm!=null)?M.notif.mm:15;
+  return '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Requiere que hayas activado los permisos de notificación en Yo → Notificaciones.</div>'+
+    notifPresetChips(hh, mm, 'mSetNotifPreset')+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--paper);border-radius:12px;padding:12px;margin-bottom:8px;">'+
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+        '<button type="button" onclick="mNudgeNotifHH(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
+        '<span id="m-notif-hh-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String(hh).padStart(2,'0')+'</span>'+
+        '<button type="button" onclick="mNudgeNotifHH(-1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">−</button>'+
+        '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">horas</span>'+
+      '</div>'+
+      '<span style="font-size:19px;font-weight:800;color:var(--muted-soft);">:</span>'+
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+        '<button type="button" onclick="mNudgeNotifMM(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
+        '<span id="m-notif-mm-val" style="font-size:19px;font-weight:800;color:var(--ink);min-width:36px;text-align:center;font-variant-numeric:tabular-nums;">'+String(mm).padStart(2,'0')+'</span>'+
+        '<button type="button" onclick="mNudgeNotifMM(-1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">−</button>'+
+        '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--accent);text-align:center;font-style:italic;">'+notifPreviewText(M.task&&M.task.text?M.task.text:'esta tarea', hh, mm)+'</div>';
+}
+function mRerenderNotifArea(){
+  var area = document.getElementById('m-notif-area');
+  if(area) area.innerHTML = mNotifAreaHTML();
+}
+function mSetNotifPreset(totalMin){
+  if(!M.notif) M.notif = {on:true, hh:0, mm:15};
+  M.notif.hh = Math.floor(totalMin/60);
+  M.notif.mm = totalMin%60;
+  mRerenderNotifArea();
+}
 function mToggleNotif(){
   var def = S.notifTiming || {hh:0, mm:15};
   if(!M.notif) M.notif = {on:false, hh:def.hh||0, mm:def.mm!=null?def.mm:15};
@@ -10034,20 +10238,18 @@ function mToggleNotif(){
   var tog = document.getElementById('m-notif-tog');
   var area = document.getElementById('m-notif-area');
   if(tog){ tog.style.background = M.notif.on?'var(--accent)':'var(--muted-soft)'; var k=tog.querySelector('.tok'); if(k)k.style.left=(M.notif.on?22:2)+'px'; }
-  if(area) area.style.display = M.notif.on?'block':'none';
+  if(area){ area.style.display = M.notif.on?'block':'none'; if(M.notif.on) area.innerHTML = mNotifAreaHTML(); }
   playSound('toggle');
 }
 function mNudgeNotifHH(delta){
   if(!M.notif) M.notif = {on:true, hh:0, mm:15};
   M.notif.hh = Math.min(23, Math.max(0, (M.notif.hh||0) + delta));
-  var el = document.getElementById('m-notif-hh-val');
-  if(el) el.textContent = String(M.notif.hh).padStart(2,'0');
+  mRerenderNotifArea();
 }
 function mNudgeNotifMM(delta){
   if(!M.notif) M.notif = {on:true, hh:0, mm:15};
   M.notif.mm = Math.min(59, Math.max(0, (M.notif.mm||0) + delta));
-  var el = document.getElementById('m-notif-mm-val');
-  if(el) el.textContent = String(M.notif.mm).padStart(2,'0');
+  mRerenderNotifArea();
 }
 function mToggleCrucial(){
   M.crucial=!M.crucial;
@@ -11555,21 +11757,36 @@ function denyNotif(){
   saveState();
   toast('Sin recordatorios. Puedes activarlos después desde Yo → Más ajustes.');
 }
+// Contenido de "Recordatorio de tareas" (timing por defecto) — separado en
+// su propia función para poder refrescarlo entero (chips resaltados +
+// valores + vista previa) sin tocar el resto de la pantalla.
+function notifDefaultBodyHTML(){
+  var nt = S.notifTiming || {hh:0, mm:15};
+  return notifPresetChips(nt.hh||0, nt.mm||0, 'setNotifPreset')+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;margin-bottom:10px;">'+
+      stepperColumn('nudgeNotifHH','notif-hh-val',nt.hh||0,'horas')+
+      '<span style="font-size:22px;font-weight:800;color:var(--muted-soft);">:</span>'+
+      stepperColumn('nudgeNotifMM','notif-mm-val',nt.mm||0,'min')+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--accent);text-align:center;font-style:italic;">'+notifPreviewText('Llamar al dentista', nt.hh||0, nt.mm||0)+'</div>';
+}
+function refreshNotifDefaultBody(){
+  var el = document.getElementById('notif-default-body');
+  if(el) el.innerHTML = notifDefaultBodyHTML();
+}
 function nudgeNotifHH(delta){
   if(!S.notifTiming) S.notifTiming = {hh:0, mm:15};
   S.notifTiming.hh = Math.min(23, Math.max(0, (S.notifTiming.hh||0) + delta));
   saveState();
-  var el = document.getElementById('notif-hh-val');
-  if(el) el.textContent = String(S.notifTiming.hh).padStart(2,'0');
   scheduleNotifications();
+  refreshNotifDefaultBody();
 }
 function nudgeNotifMM(delta){
   if(!S.notifTiming) S.notifTiming = {hh:0, mm:15};
   S.notifTiming.mm = Math.min(59, Math.max(0, (S.notifTiming.mm||0) + delta));
   saveState();
-  var el = document.getElementById('notif-mm-val');
-  if(el) el.textContent = String(S.notifTiming.mm).padStart(2,'0');
   scheduleNotifications();
+  refreshNotifDefaultBody();
 }
 
 // ── Recordatorio diario de revisión (Yo → Notificaciones) ─────────────────
@@ -11578,34 +11795,188 @@ function nudgeNotifMM(delta){
 // locales que el resto (ver scheduleNotifications) — se reprograma sola
 // para el día siguiente mientras la app siga abierta.
 function toggleDailyReviewReminder(){
-  if(!S.dailyReviewReminder) S.dailyReviewReminder = {on:false, hh:20, mm:0};
+  if(S.notifPermission!=='granted'){ toast('Activa el permiso de notificaciones arriba primero'); return; }
+  if(!S.dailyReviewReminder) S.dailyReviewReminder = {on:false, hh:20, mm:0, days:[0,1,2,3,4,5,6]};
   S.dailyReviewReminder.on = !S.dailyReviewReminder.on;
   saveState();
   render();
   scheduleNotifications();
   toast(S.dailyReviewReminder.on ? '🔔 Recordatorio diario activado' : 'Recordatorio diario desactivado');
 }
-function nudgeDRRHH(delta){
-  if(!S.dailyReviewReminder) S.dailyReviewReminder = {on:false, hh:20, mm:0};
-  S.dailyReviewReminder.hh = ((S.dailyReviewReminder.hh||0) + delta + 24) % 24;
+// Reemplaza los +/- de a 1 minuto por un input nativo type="time".
+function setDRRTime(val){
+  if(!val) return;
+  if(!S.dailyReviewReminder) S.dailyReviewReminder = {on:false, hh:20, mm:0, days:[0,1,2,3,4,5,6]};
+  var p = val.split(':');
+  S.dailyReviewReminder.hh = parseInt(p[0],10)||0;
+  S.dailyReviewReminder.mm = parseInt(p[1]||'0',10)||0;
   saveState();
-  var el = document.getElementById('drr-hh-val');
-  if(el) el.textContent = String(S.dailyReviewReminder.hh).padStart(2,'0');
   scheduleNotifications();
+  render();
 }
-function nudgeDRRMM(delta){
-  if(!S.dailyReviewReminder) S.dailyReviewReminder = {on:false, hh:20, mm:0};
-  S.dailyReviewReminder.mm = ((S.dailyReviewReminder.mm||0) + delta + 60) % 60;
+// Pedido: elegir en qué días de la semana quieres el recordatorio diario
+// (antes era todos los días sí o sí). dayIdx usa el índice de DAYS
+// (0=Lunes…6=Domingo), igual que el resto de la app.
+function toggleDRRDay(dayIdx){
+  if(S.notifPermission!=='granted'){ toast('Activa el permiso de notificaciones arriba primero'); return; }
+  if(!S.dailyReviewReminder) S.dailyReviewReminder = {on:false, hh:20, mm:0, days:[0,1,2,3,4,5,6]};
+  var days = S.dailyReviewReminder.days || [0,1,2,3,4,5,6];
+  var idx = days.indexOf(dayIdx);
+  if(idx===-1) days = days.concat([dayIdx]).sort(); else days = days.filter(function(d){return d!==dayIdx;});
+  S.dailyReviewReminder.days = days;
   saveState();
-  var el = document.getElementById('drr-mm-val');
-  if(el) el.textContent = String(S.dailyReviewReminder.mm).padStart(2,'0');
   scheduleNotifications();
+  render();
 }
+// ── Horario de silencio ──────────────────────────────────────────────────
+function toggleQuietHours(){
+  if(S.notifPermission!=='granted'){ toast('Activa el permiso de notificaciones arriba primero'); return; }
+  if(!S.quietHours) S.quietHours = {on:false, startHH:22, startMM:0, endHH:8, endMM:0};
+  S.quietHours.on = !S.quietHours.on;
+  saveState();
+  render();
+  scheduleNotifications();
+  toast(S.quietHours.on ? '🌙 Horario de silencio activado' : 'Horario de silencio desactivado');
+}
+function setQuietHoursStart(val){
+  if(!val) return;
+  if(!S.quietHours) S.quietHours = {on:false, startHH:22, startMM:0, endHH:8, endMM:0};
+  var p = val.split(':'); S.quietHours.startHH = parseInt(p[0],10)||0; S.quietHours.startMM = parseInt(p[1]||'0',10)||0;
+  saveState(); scheduleNotifications(); render();
+}
+function setQuietHoursEnd(val){
+  if(!val) return;
+  if(!S.quietHours) S.quietHours = {on:false, startHH:22, startMM:0, endHH:8, endMM:0};
+  var p = val.split(':'); S.quietHours.endHH = parseInt(p[0],10)||0; S.quietHours.endMM = parseInt(p[1]||'0',10)||0;
+  saveState(); scheduleNotifications(); render();
+}
+// ── Aviso de racha en riesgo ──────────────────────────────────────────────
+function toggleStreakRisk(){
+  if(S.notifPermission!=='granted'){ toast('Activa el permiso de notificaciones arriba primero'); return; }
+  if(!S.streakRisk) S.streakRisk = {on:false, hh:21, mm:0};
+  S.streakRisk.on = !S.streakRisk.on;
+  saveState();
+  render();
+  scheduleNotifications();
+  toast(S.streakRisk.on ? '🔥 Aviso de racha en riesgo activado' : 'Aviso de racha en riesgo desactivado');
+}
+function setStreakRiskTime(val){
+  if(!val) return;
+  if(!S.streakRisk) S.streakRisk = {on:false, hh:21, mm:0};
+  var p = val.split(':'); S.streakRisk.hh = parseInt(p[0],10)||0; S.streakRisk.mm = parseInt(p[1]||'0',10)||0;
+  saveState(); scheduleNotifications(); render();
+}
+// ── Chips rápidos del timing por defecto ─────────────────────────────────
+function setNotifPreset(totalMin){
+  if(S.notifPermission!=='granted'){ toast('Activa el permiso de notificaciones arriba primero'); return; }
+  if(!S.notifTiming) S.notifTiming = {hh:0, mm:15};
+  S.notifTiming.hh = Math.floor(totalMin/60);
+  S.notifTiming.mm = totalMin%60;
+  saveState();
+  scheduleNotifications();
+  refreshNotifDefaultBody();
+}
+// ── Centro de notificaciones ──────────────────────────────────────────────
+// Pedido: una lista en vivo de todo lo que está realmente programado para
+// lo que queda del día — recordatorios de tareas, independientes, revisión
+// diaria y aviso de racha — en vez de tener que adivinar entrando a cada
+// tarea. Se aplica el horario de silencio (ver pushPastQuietHours) para que
+// la hora mostrada sea la que de verdad va a sonar.
+function buildNotificationAgenda(){
+  var items = [];
+  var now = new Date();
+  (S.tasks||[]).filter(function(t){return isTaskToday(t) && t.hora && t.notif && t.notif.on && !isDone(t);}).forEach(function(t){
+    var nt = t.notif||{hh:0,mm:15};
+    var parts=(t.hora||'0:0').split(':');
+    var taskTime = new Date(); taskTime.setHours(parseInt(parts[0],10)||0, parseInt(parts[1]||'0',10)||0,0,0);
+    var alertTime = pushPastQuietHours(new Date(taskTime.getTime() - ((nt.hh||0)*60+(nt.mm||0))*60000));
+    items.push({time:alertTime, icon:'🔔', color:'#e8875a', label:t.text, sub:(!nt.hh&&!nt.mm)?'A la hora de la tarea':'Recordatorio de tarea'});
+  });
+  (S.tasks||[]).filter(function(t){return isTaskToday(t) && t.reminder && t.reminder.time && !isDone(t);}).forEach(function(t){
+    var parts=t.reminder.time.split(':');
+    var d=new Date(); d.setHours(parseInt(parts[0],10)||0,parseInt(parts[1]||'0',10)||0,0,0);
+    items.push({time:pushPastQuietHours(d), icon:'🔔', color:'#e8875a', label:t.text, sub:'Recordatorio independiente'});
+  });
+  if(S.dailyReviewReminder && S.dailyReviewReminder.on){
+    var days = S.dailyReviewReminder.days;
+    var todayEnabled = !days||!days.length||days.indexOf(todayIdx())!==-1;
+    if(todayEnabled){
+      var d2=new Date(); d2.setHours(S.dailyReviewReminder.hh||0,S.dailyReviewReminder.mm||0,0,0);
+      items.push({time:pushPastQuietHours(d2), icon:'📋', color:'#3a7c8c', label:'Revisión diaria', sub:'Revisar y marcar tareas de hoy'});
+    }
+  }
+  if(S.streakRisk && S.streakRisk.on){
+    var d3=new Date(); d3.setHours(S.streakRisk.hh!=null?S.streakRisk.hh:21, S.streakRisk.mm||0,0,0);
+    items.push({time:pushPastQuietHours(d3), icon:'🔥', color:'#c0503a', label:'Racha en riesgo', sub:'Solo si aún no llegas al umbral de hoy'});
+  }
+  items = items.filter(function(it){return it.time > now;});
+  items.sort(function(a,b){return a.time-b.time;});
+  return items;
+}
+
 // Programa el próximo aviso del recordatorio diario (hoy si no ha pasado
 // todavía la hora elegida, si no mañana a la misma hora) y, al dispararse,
 // se vuelve a programar sola para el día siguiente — así se mantiene
 // funcionando mientras la pestaña/app siga abierta, sin depender de que
 // el usuario reabra la app cada día.
+// ── Horario de silencio ──────────────────────────────────────────────────
+// Pedido: un rango horario (ej. 22:00–08:00) que ningún tipo de aviso
+// interrumpa — en vez de cancelarlo, se pospone hasta que termine el
+// silencio, para no perder el recordatorio del todo.
+function isInQuietHours(date){
+  var qh = S.quietHours;
+  if(!qh || !qh.on) return false;
+  var mins = date.getHours()*60+date.getMinutes();
+  var start = (qh.startHH||0)*60+(qh.startMM||0);
+  var end = (qh.endHH||0)*60+(qh.endMM||0);
+  if(start===end) return false; // rango vacío = no bloquea nada
+  if(start<end) return mins>=start && mins<end;
+  return mins>=start || mins<end; // cruza medianoche (ej. 22:00–08:00)
+}
+function pushPastQuietHours(date){
+  var qh = S.quietHours;
+  if(!qh || !qh.on || !isInQuietHours(date)) return date;
+  var end = new Date(date);
+  end.setHours(qh.endHH||0, qh.endMM||0, 0, 0);
+  if(end <= date) end.setDate(end.getDate()+1); // el fin del silencio cae "mañana"
+  return end;
+}
+// Convierte el día de una fecha JS (getDay(): 0=domingo) al índice que usa
+// el resto de la app para los días de la semana (DAYS[0]="Lunes"…6=Domingo).
+function appDayOfWeek(date){ var d=date.getDay(); return d===0?6:d-1; }
+// Chips rápidos para "¿cuánto antes avisar?" — cubren el 95% de los casos
+// (justo a la hora / 5 / 15 / 30 / 60 min antes) en un solo toque, en vez de
+// tener que ir sumando de a 1 minuto con los botones +/- de más abajo.
+// Columna reutilizable de un stepper +/- (horas o minutos) — usada como
+// ajuste fino de respaldo debajo de los chips rápidos.
+function stepperColumn(fnName, spanId, val, label){
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
+    '<button type="button" onclick="'+fnName+'(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
+    '<span id="'+spanId+'" style="font-size:20px;font-weight:800;color:var(--ink);min-width:38px;text-align:center;font-variant-numeric:tabular-nums;">'+String(val).padStart(2,'0')+'</span>'+
+    '<button type="button" onclick="'+fnName+'(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
+    '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+label+'</span>'+
+  '</div>';
+}
+var NOTIF_PRESETS = [0,5,15,30,60];
+function notifPresetChips(hh, mm, setFnName){
+  var totalMin = (hh||0)*60+(mm||0);
+  return '<div style="display:flex;gap:6px;margin-bottom:10px;">'+
+    NOTIF_PRESETS.map(function(p){
+      var active = totalMin===p;
+      var label = p===0?'A la hora':(p<60?p+' min':(p/60)+'h');
+      return '<button type="button" onclick="'+setFnName+'('+p+')" style="flex:1;padding:8px 2px;border-radius:9px;border:1.5px solid '+(active?'var(--accent)':'var(--line)')+';background:'+(active?'var(--accent-bg)':'var(--paper)')+';color:'+(active?'var(--accent)':'var(--muted)')+';font-size:10.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+label+'</button>';
+    }).join('')+
+  '</div>';
+}
+// Texto de vista previa — pedido: mostrar tal cual lo que va a decir el
+// aviso, en vez de solo los números de configuración.
+function notifPreviewText(taskName, hh, mm){
+  var isExact = !hh && !mm;
+  if(isExact) return '“Es la hora: '+taskName+'”';
+  var pre = (hh?hh+'h ':'') + (mm?mm+'min ':'');
+  return '“En '+pre.trim()+': '+taskName+'”';
+}
+
 function scheduleDailyReviewReminder(){
   if(!S.dailyReviewReminder || !S.dailyReviewReminder.on) return;
   if(S.notifPermission !== 'granted') return;
@@ -11614,10 +11985,51 @@ function scheduleDailyReviewReminder(){
   var target = new Date();
   target.setHours(S.dailyReviewReminder.hh||0, S.dailyReviewReminder.mm||0, 0, 0);
   if(target <= now) target.setDate(target.getDate()+1); // ya pasó hoy: programar para mañana
+  target = pushPastQuietHours(target);
   var msUntil = target - now;
   var timer = setTimeout(function(){
-    new Notification('Gramifica', {body:'Es hora de revisar tus tareas de hoy y marcar las que ya tengas listas ✓', icon:'/icon-192.png'});
+    // Pedido: elegir en qué días de la semana quieres este aviso — se
+    // revisa recién al momento de sonar (si hoy no está marcado, se salta
+    // en silencio y se reprograma para el día siguiente igual).
+    var days = S.dailyReviewReminder.days;
+    var todayEnabled = !days || !days.length || days.indexOf(appDayOfWeek(new Date()))!==-1;
+    if(todayEnabled){
+      new Notification('Gramifica', {body:'Es hora de revisar tus tareas de hoy y marcar las que ya tengas listas ✓', icon:'/icon-192.png'});
+    }
     scheduleDailyReviewReminder(); // se reprograma para el día siguiente
+  }, msUntil);
+  _notifTimers.push(timer);
+}
+// ── Aviso de racha en riesgo ─────────────────────────────────────────────
+// Pedido: a una hora fija de la tarde/noche, si todavía no se llega al
+// umbral del día (con el mismo cálculo de avance parcial que usa la racha),
+// avisa para que alcances a reaccionar antes de perderla.
+function scheduleStreakRiskWarning(){
+  if(!S.streakRisk || !S.streakRisk.on) return;
+  if(S.notifPermission !== 'granted') return;
+  if(typeof Notification === 'undefined') return;
+  var now = new Date();
+  var target = new Date();
+  target.setHours(S.streakRisk.hh!=null?S.streakRisk.hh:21, S.streakRisk.mm||0, 0, 0);
+  if(target <= now) target.setDate(target.getDate()+1);
+  target = pushPastQuietHours(target);
+  var msUntil = target - now;
+  var timer = setTimeout(function(){
+    try{
+      if(streakActive() && !(S.streakCfg&&S.streakCfg.skipWeekends&&isWeekend())){
+        var dayTasks = S.tasks.filter(function(t){return isTaskToday(t);});
+        if(dayTasks.length){
+          var partial = dayTasks.reduce(function(s,tk){return s+tRatio(tk);},0);
+          var ratio = partial/dayTasks.length;
+          var am = getActiveMode();
+          var thr = (am&&am.lowThresh) ? am.lowThresh : (S.streakCfg?S.streakCfg.threshold:0.7);
+          if(ratio < thr){
+            new Notification('Gramifica', {body:'🔥 Tu racha está en riesgo — llevas '+Math.round(ratio*100)+'% de '+Math.round(thr*100)+'% hoy. ¡Todavía puedes lograrlo!', icon:'/icon-192.png'});
+          }
+        }
+      }
+    }catch(e){}
+    scheduleStreakRiskWarning();
   }, msUntil);
   _notifTimers.push(timer);
 }
@@ -11647,21 +12059,10 @@ function renderReminderPopup(){
       '<button onclick="removeOverlay(\'reminder-modal\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Elige la hora a la que quieres recibir un aviso para "'+esc(t.text)+'". No es necesario que la tarea tenga un horario específico.</div>'+
-    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--bg);border-radius:12px;padding:14px;margin-bottom:16px;">'+
-      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-        '<button type="button" onclick="rmNudgeHH(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
-        '<span id="rm-hh-val" style="font-size:20px;font-weight:800;color:var(--ink);min-width:38px;text-align:center;font-variant-numeric:tabular-nums;">'+String(RM.hh).padStart(2,'0')+'</span>'+
-        '<button type="button" onclick="rmNudgeHH(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
-        '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">hora</span>'+
-      '</div>'+
-      '<span style="font-size:20px;font-weight:800;color:var(--muted-soft);">:</span>'+
-      '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
-        '<button type="button" onclick="rmNudgeMM(1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">+</button>'+
-        '<span id="rm-mm-val" style="font-size:20px;font-weight:800;color:var(--ink);min-width:38px;text-align:center;font-variant-numeric:tabular-nums;">'+String(RM.mm).padStart(2,'0')+'</span>'+
-        '<button type="button" onclick="rmNudgeMM(-1)" style="width:32px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:14px;cursor:pointer;color:var(--ink);">−</button>'+
-        '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">min</span>'+
-      '</div>'+
+    '<div style="display:flex;justify-content:center;margin-bottom:10px;">'+
+      '<input type="time" id="rm-time-input" value="'+String(RM.hh).padStart(2,'0')+':'+String(RM.mm).padStart(2,'0')+'" onchange="rmSetTime(this.value)" style="font-size:22px;font-weight:800;color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:10px 16px;background:var(--bg);font-family:Inter,sans-serif;">'+
     '</div>'+
+    '<div id="rm-preview" style="font-size:11px;color:var(--accent);text-align:center;font-style:italic;margin-bottom:16px;">“Recordatorio: '+esc(t.text)+'” a las '+String(RM.hh).padStart(2,'0')+':'+String(RM.mm).padStart(2,'0')+'</div>'+
     '<div style="display:flex;gap:8px;">'+
       '<button class="sbtn" onclick="saveReminder()">Guardar</button>'+
       (hasExisting?'<button class="cbtn" onclick="removeReminder()" style="color:var(--bad);">Quitar</button>':'<button class="cbtn" onclick="removeOverlay(\'reminder-modal\')">Cancelar</button>')+
@@ -11669,15 +12070,17 @@ function renderReminderPopup(){
   '</div>';
   document.body.appendChild(overlay);
 }
-function rmNudgeHH(delta){
-  if(!RM) return;
-  RM.hh = ((RM.hh + delta) % 24 + 24) % 24;
-  var el=document.getElementById('rm-hh-val'); if(el) el.textContent=String(RM.hh).padStart(2,'0');
-}
-function rmNudgeMM(delta){
-  if(!RM) return;
-  RM.mm = ((RM.mm + delta) % 60 + 60) % 60;
-  var el=document.getElementById('rm-mm-val'); if(el) el.textContent=String(RM.mm).padStart(2,'0');
+// Reemplaza los +/- de a 1 minuto: el input nativo type="time" ya trae su
+// propio selector (rueda en iOS, reloj en Android), mucho más rápido para
+// elegir una hora exacta que ir tocando de a un minuto.
+function rmSetTime(val){
+  if(!RM || !val) return;
+  var p = val.split(':');
+  RM.hh = parseInt(p[0],10)||0;
+  RM.mm = parseInt(p[1]||'0',10)||0;
+  var t = S.tasks.find(function(x){return x.id===RM.taskId;});
+  var prev = document.getElementById('rm-preview');
+  if(prev && t) prev.textContent = '“Recordatorio: '+t.text+'” a las '+String(RM.hh).padStart(2,'0')+':'+String(RM.mm).padStart(2,'0');
 }
 function saveReminder(){
   if(!RM) return;
@@ -11733,6 +12136,7 @@ function scheduleNotifications(){
     taskTime.setHours(h, m, 0, 0);
     // Restar el aviso anticipado según configuración de ESTA tarea (hh horas + mm minutos)
     var alertTime = new Date(taskTime.getTime() - ((nt.hh||0)*60 + (nt.mm||0))*60000);
+    alertTime = pushPastQuietHours(alertTime); // pedido: horario de silencio pospone, no cancela
     var msUntil = alertTime - now;
     if(msUntil < 0) return; // ya pasó hoy
     var taskName = t.text;
@@ -11758,6 +12162,7 @@ function scheduleNotifications(){
     var h = parseInt(parts[0],10), m = parseInt(parts[1]||'0',10);
     var alertTime = new Date();
     alertTime.setHours(h, m, 0, 0);
+    alertTime = pushPastQuietHours(alertTime);
     var msUntil = alertTime - now;
     if(msUntil < 0) return; // ya pasó hoy
     var taskName = t.text;
@@ -11766,9 +12171,11 @@ function scheduleNotifications(){
     }, msUntil);
     _notifTimers.push(timer);
   });
-  // Recordatorio diario de revisión (Yo → Notificaciones) — independiente
-  // de las tareas del día, se reprograma solo día a día (ver su función).
+  // Recordatorio diario de revisión y aviso de racha en riesgo (Yo →
+  // Notificaciones) — independientes de las tareas del día, se reprograman
+  // solos día a día (ver sus funciones).
   scheduleDailyReviewReminder();
+  scheduleStreakRiskWarning();
   if(_notifTimers.length) console.log('[Notif] '+_notifTimers.length+' recordatorio(s) programado(s) para hoy');
 }
 
@@ -12229,6 +12636,16 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   });
 })();
 loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
+// Registrar el service worker — necesario para que Android considere la
+// app instalable como PWA (modo standalone sin barra de navegador) y para
+// que Firebase Cloud Messaging pueda mostrar avisos con la app cerrada.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('firebase-messaging-sw.js').catch(function(e){
+      console.warn('No se pudo registrar el service worker:', e);
+    });
+  });
+}
 // BUGFIX: trackVisit() existía pero nunca se invocaba desde ningún lado, así
 // que S.visitHistory quedaba vacío para siempre y las medallas "Presente"
 // (7 días seguidos) y "Habitual" (30 días) eran imposibles de conseguir.
