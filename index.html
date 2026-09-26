@@ -536,6 +536,18 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
   cursor:pointer;transition:transform .15s;
 }
 .fab-secondary:active{transform:scale(.92);}
+/* Pedido: FAB de "Nuevo evento" al lado opuesto del "+" de tarea, para que
+   no compita por espacio ni se confunda con los FAB de apoyo (reinicio) que
+   ya se apilan arriba del "+". Mismo tratamiento visual que fab-wrap. */
+.fab-wrap-left{
+  position:fixed;bottom:74px;left:50%;transform:translateX(-50%);
+  width:100%;max-width:440px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:10px;justify-content:flex-end;
+  padding:0 16px;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  pointer-events:none;z-index:90;
+}
+.fab-wrap-left .fab-secondary{border-color:var(--accent);color:var(--accent);}
 /* Pedido: que se note bien cuando un reinicio SÍ está disponible — fondo
    de color (en vez del neutro de siempre) + un anillo que pulsa suave,
    para que llame la atención sin ser un elemento nuevo ni chillón. */
@@ -658,6 +670,15 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
     </button>
     <button class="fab" id="fab-add" onclick="openNew('dia')" title="Agregar tarea" aria-label="Agregar tarea">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+  <!-- Pedido: botón flotante aparte para crear un EVENTO (tarea con fecha y
+       hora puntuales, con o sin recurrencia cada N días) más rápido, sin
+       competir por espacio con el "+" de tarea normal — por eso va del otro
+       lado (izquierda) en vez de apilarse arriba del mismo. -->
+  <div class="fab-wrap-left" id="fab-wrap-left" style="display:none;">
+    <button class="fab-secondary" id="fab-event" onclick="openNewEvent()" title="Nuevo evento (fecha, hora y recurrencia)" aria-label="Nuevo evento">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M12 14v3M10.5 15.5h3"/></svg>
     </button>
   </div>
   <div id="sel-bar" style="display:none;position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1.5px solid var(--line);z-index:850;padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom));align-items:center;gap:8px;box-shadow:0 -4px 16px rgba(0,0,0,.1);"></div>
@@ -2753,6 +2774,10 @@ function render(){
   if(fabWrap) fabWrap.style.display = fabVisible ? 'flex' : 'none';
   var fabAdd = document.getElementById('fab-add');
   if(fabAdd) fabAdd.style.display = onHoy ? 'flex' : 'none';
+  // FAB de "Nuevo evento" — mismo criterio de visibilidad que fab-add (solo
+  // tiene sentido crear un evento con fecha/hora desde Hoy).
+  var fabWrapLeft = document.getElementById('fab-wrap-left');
+  if(fabWrapLeft) fabWrapLeft.style.display = onHoy ? 'flex' : 'none';
   // FAB secundario de reinicio de tareas de hoy. Pedido: en modo NO
   // simplificado aparece SIEMPRE (no es opcional); en modo simplificado
   // sigue respetando la preferencia de Yo → Personalización. Pedido:
@@ -2788,6 +2813,7 @@ function render(){
   if(SEL.active){
     if(bottomNav) bottomNav.style.display = 'none';
     if(fabWrap) fabWrap.style.display = 'none';
+    if(fabWrapLeft) fabWrapLeft.style.display = 'none';
   }
 
   // BUGFIX CRÍTICO: antes, si renderProyectosTab()/renderEnergiaV2()/renderYo()
@@ -3099,9 +3125,11 @@ function renderHoyTasksSection(){
       if(t.categoryId){if(!catGroups[t.categoryId])catGroups[t.categoryId]=[];catGroups[t.categoryId].push(t);}
       else noCatTasks.push(t);
     });
+    var anyCatSectionShown = false;
     cats.forEach(function(cat){
       var group = catGroups[cat.id];
       if(!group||!group.length) return;
+      anyCatSectionShown = true;
       var doneInCat = group.filter(isDone).length;
       var collapsed = isCatCollapsed(cat.id, doneInCat, group.length);
       html += '<div id="cat-sec-'+cat.id+'">'+
@@ -3118,7 +3146,33 @@ function renderHoyTasksSection(){
         '</div>'+
       '</div>';
     });
-    if(noCatTasks.length) html += noCatTasks.map(function(t){return taskHTML(t);}).join('');
+    // Pedido: cuando en el mismo día hay tareas con categoría Y tareas sin
+    // categoría, estas últimas antes se agregaban planas al final, pegadas
+    // justo debajo de la última sección — visualmente se confundían con esa
+    // categoría, como si fueran parte de ella. Ahora van en su propia
+    // sección "Sin categoría" (mismo look que las demás, en gris neutro y
+    // con borde punteado en el ícono para distinguirla a simple vista),
+    // separada con una línea divisoria, y se puede plegar/desplegar igual
+    // que cualquier otra categoría — reutiliza isCatCollapsed/
+    // toggleCatSection con un id especial ('__nocat') que nunca choca con
+    // un id real de categoría (esos son generados por uid()).
+    if(noCatTasks.length){
+      var doneNoCat = noCatTasks.filter(isDone).length;
+      var collapsedNoCat = isCatCollapsed('__nocat', doneNoCat, noCatTasks.length);
+      html += '<div id="cat-sec-__nocat" style="'+(anyCatSectionShown?'margin-top:16px;border-top:1px dashed var(--line);padding-top:10px;':'')+'">'+
+        '<div class="cat-sec-head" onclick="toggleCatSection(\'__nocat\')">'+
+          '<div style="width:8px;height:8px;border-radius:50%;border:1.5px dashed var(--muted-soft);flex-shrink:0;"></div>'+
+          '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;flex:1;">Sin categoría</span>'+
+          '<span style="font-size:11px;color:var(--muted);">'+doneNoCat+'/'+noCatTasks.length+'</span>'+
+          '<span class="cat-sec-chevron" style="transform:'+(collapsedNoCat?'rotate(-90deg)':'none')+';">'+
+            '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5 4 6 7.5 9.5 4"/></svg>'+
+          '</span>'+
+        '</div>'+
+        '<div id="cat-body-__nocat" style="display:'+(collapsedNoCat?'none':'block')+';">'+
+          noCatTasks.map(function(t){return taskHTML(t);}).join('')+
+        '</div>'+
+      '</div>';
+    }
   } else {
     html += visible.map(function(t){return taskHTML(t);}).join('');
   }
@@ -6694,7 +6748,7 @@ function taskHTML(t,showPeriod){
           // círculo repetidas veces) — útil cuando la meta es un número
           // grande, ej. una meta de 100.
           (hasQty?'<input type="number" inputmode="numeric" min="0" max="'+t.qty+'" value="'+(t.prog||0)+'" onclick="event.stopPropagation()" onchange="event.stopPropagation();setTaskProg(\''+t.id+'\',this.value)" style="width:22px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:11px;font-weight:700;color:var(--muted);font-family:Inter,sans-serif;padding:0;flex-shrink:0;"/><span style="font-size:11px;color:var(--muted);flex-shrink:0;">/'+t.qty+'</span>':'')+
-          (hasCL?'<span style="font-size:11px;color:var(--muted);flex-shrink:0;">'+clDone+'/'+t.checklist.length+'</span>':'')+
+          (hasCL?'<span onclick="event.stopPropagation();openCLSheet(\''+t.id+'\')" title="Abrir checklist" style="font-size:11px;color:var(--muted);flex-shrink:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">'+clDone+'/'+t.checklist.length+'</span>':'')+
         '</div>'+
         ((hasQty||hasCL)?mpHTML(r):'')+tagHTML+
       '</div>'+
@@ -7595,7 +7649,8 @@ function confirmReset(){
 function doPeriodReset(period){
   S.tasks = S.tasks.map(function(t){
     if(t.period===period){
-      return Object.assign({},t,{done:false,prog:0,checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false});})});
+      var clr = resetChecklistForCycle(t);
+      return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
     }
     return t;
   });
@@ -9517,6 +9572,86 @@ function expCL(id){
   if(!S._clOpen) S._clOpen={};
   S._clOpen[id]=open;
 }
+// ── Pedido: el checklist inline de la fila del día se sentía chico para
+// tocar, y no dejaba agregar ítems nuevos sin abrir el editor completo de
+// la tarea. Esta "ventanilla" (mismo estilo .sheet que el resto de los
+// modales, así que el botón "atrás" ya la cierra sola gracias al
+// mecanismo genérico de modales) da casillas/inputs grandes y permite
+// tildar, sumar avance y agregar ítems sin salir de la lista del día. Se
+// abre tocando el contador "2/5" de la fila (ver taskHTML). Reutiliza
+// tapCL/stepCL/setCLProg (mismos sonidos, rachas, XP y vínculos que la
+// vista rápida ya tenía) y solo refresca su propio contenido después,
+// porque esas funciones llaman a render() y eso no toca este overlay
+// (vive fuera de #content, igual que project-view o task-modal).
+function openCLSheet(taskId){
+  removeOverlay('cl-sheet');
+  var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
+  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='cl-sheet';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('cl-sheet');});
+  overlay.innerHTML='<div class="sheet">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
+      '<span class="serif" style="font-weight:700;font-size:18px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+
+      '<button onclick="removeOverlay(\'cl-sheet\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;flex-shrink:0;">×</button>'+
+    '</div>'+
+    '<div id="cl-sheet-items">'+clSheetItemsHTML(t)+'</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">'+
+      '<input id="cl-sheet-new" placeholder="Agregar ítem..." style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);outline:none;font-size:15px;background:transparent;padding:8px 0;font-family:Inter,sans-serif;color:var(--ink);" onkeydown="if(event.key===\'Enter\'){sheetAddCLItem(\''+taskId+'\');}"/>'+
+      '<button onclick="sheetAddCLItem(\''+taskId+'\')" style="background:var(--accent);color:white;border:none;border-radius:9px;width:36px;height:36px;font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;">+</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(overlay);
+}
+function clSheetItemsHTML(t){
+  if(!t.checklist||!t.checklist.length) return '<div style="padding:16px 0;text-align:center;font-size:13px;color:var(--muted);">Sin ítems todavía</div>';
+  return t.checklist.map(function(item){
+    var q=clItemQty(item), isQtyItem=q>1;
+    var controlHTML = isQtyItem?
+      ('<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">'+
+        '<button class="cl-step-btn" onclick="sheetStepCL(\''+t.id+'\',\''+item.id+'\',-1)">−</button>'+
+        '<input type="number" inputmode="numeric" min="0" max="'+q+'" value="'+(item.prog||0)+'" onchange="sheetSetCLProg(\''+t.id+'\',\''+item.id+'\',this.value)" style="width:38px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:14px;font-weight:700;color:'+(item.done?'var(--accent)':'var(--ink-soft)')+';font-family:Inter,sans-serif;padding:2px 0;"/>'+
+        '<span style="font-size:13px;font-weight:700;color:var(--muted);">/'+q+'</span>'+
+        '<button class="cl-step-btn" onclick="sheetStepCL(\''+t.id+'\',\''+item.id+'\',1)">+</button>'+
+      '</div>') :
+      ('<div style="width:28px;height:28px;border-radius:8px;border:'+(item.done?'2px solid var(--accent)':'2px solid var(--muted-soft)')+';background:'+(item.done?'var(--accent)':'var(--paper)')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="sheetToggleCL(\''+t.id+'\',\''+item.id+'\')">'+(item.done?miniChkSVG():'')+'</div>');
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);">'+
+      controlHTML+
+      '<span style="flex:1;min-width:0;font-size:15px;color:'+(item.done&&!isQtyItem?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(item.done&&!isQtyItem?'line-through':'none')+';word-break:break-word;">'+esc(item.text)+'</span>'+
+      '<button onclick="sheetRemoveCLItem(\''+t.id+'\',\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:20px;line-height:1;flex-shrink:0;">×</button>'+
+    '</div>';
+  }).join('');
+}
+function _refreshCLSheet(taskId){
+  var box=document.getElementById('cl-sheet-items');
+  var t=S.tasks.find(function(t){return t.id===taskId;});
+  if(box && t) box.innerHTML=clSheetItemsHTML(t);
+}
+function sheetToggleCL(taskId,itemId){ tapCL(taskId,itemId); _refreshCLSheet(taskId); }
+function sheetStepCL(taskId,itemId,delta){ stepCL(taskId,itemId,delta); _refreshCLSheet(taskId); }
+function sheetSetCLProg(taskId,itemId,val){ setCLProg(taskId,itemId,val); _refreshCLSheet(taskId); }
+function sheetRemoveCLItem(taskId,itemId){
+  var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
+  var updated=Object.assign({},t,{checklist:t.checklist.filter(function(i){return i.id!==itemId;})});
+  updated.done = updated.checklist.length ? updated.checklist.every(function(i){return i.done;}) : false;
+  S.tasks=S.tasks.map(function(x){return x.id===taskId?updated:x;});
+  saveState(); render(); _refreshCLSheet(taskId);
+}
+function sheetAddCLItem(taskId){
+  var inp=document.getElementById('cl-sheet-new'); if(!inp) return;
+  var text=inp.value.trim(); if(!text) return;
+  var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
+  if(!isPremium() && (t.checklist||[]).length>=MAX_CHECKLIST_ITEMS_FREE){
+    toast('Máximo '+MAX_CHECKLIST_ITEMS_FREE+' ítems en el plan gratuito');
+    openDonationInfo();
+    return;
+  }
+  var newItem={id:uid(),text:text,done:false,qty:1,prog:0};
+  var updated=Object.assign({},t,{checklist:(t.checklist||[]).concat([newItem]),done:false});
+  S.tasks=S.tasks.map(function(x){return x.id===taskId?updated:x;});
+  saveState(); render();
+  inp.value='';
+  _refreshCLSheet(taskId);
+  var box=document.getElementById('cl-sheet-items'); if(box) box.scrollTop=box.scrollHeight;
+}
 function finishUpdate(updated, justCompleted, delta){
   S.tasks=S.tasks.map(function(t){return t.id===updated.id?updated:t;});
   S._justCompletedId = justCompleted ? updated.id : null;
@@ -9680,11 +9815,66 @@ function confirmReset(){
     '</div></div>';
   document.body.appendChild(box);
 }
+// ── Checklist "único cada vez" (pedido) ────────────────────────────────────
+// Por defecto, al reiniciarse una tarea recurrente (nueva semana/mes/etc.)
+// el checklist interno solo desmarca los ítems pero conserva el mismo
+// texto — sirve para rutinas fijas ("Calentar, Pesas, Cardio"). Pero para
+// listas que cambian cada vez (ej. tarea "Abastecerse": qué comprar es
+// distinto cada semana), el usuario puede activar t.clFresh: en ese caso,
+// al reiniciarse, el checklist queda vacío (listo para escribir de nuevo)
+// en vez de repetir los mismos ítems, y lo último que había se guarda en
+// t.lastChecklist (solo texto+meta, sin marcas) para el botón "Recordar
+// último checklist" del editor.
+function resetChecklistForCycle(t){
+  var cl = t.checklist||[];
+  if(t.clFresh && cl.length){
+    var meaningful = cl.filter(function(i){return i.text && i.text.trim();});
+    return {
+      checklist: [{id:uid(),text:'',done:false,qty:1,prog:0}],
+      lastChecklist: meaningful.length ? meaningful.map(function(i){return {text:i.text, qty:(i.qty||1)};}) : (t.lastChecklist||null)
+    };
+  }
+  return {
+    checklist: cl.map(function(i){return Object.assign({},i,{done:false});}),
+    lastChecklist: t.lastChecklist||null
+  };
+}
+// ── Eventos con recurrencia "cada N días" (botón flotante "Nuevo evento") ──
+// En vez de representar infinitas ocurrencias futuras con UN solo objeto de
+// tarea (lo que obligaría a reescribir agenda semanal, calendario, racha y
+// vínculos para entender "muchas fechas"), cada evento recurrente sigue
+// siendo, en todo momento, una tarea puntual normal (period:'dia' + date)
+// con su propio done/checklist — igual que cualquier tarea con fecha
+// específica. Lo único distinto: al abrir la app, si su fecha ya pasó, esta
+// función la "empuja" sola a la próxima fecha que le toque (reiniciando
+// done/checklist con resetChecklistForCycle, igual que el checklist
+// "único cada vez" del punto anterior) en vez de quedar completada para
+// siempre o acumulando atraso silencioso. Así, todo lo que ya existía
+// (agenda del día, racha, vínculos) sigue funcionando sin cambios.
+function advanceRecurringEvents(){
+  var today = todayStr();
+  var changed = false;
+  S.tasks = S.tasks.map(function(t){
+    if(t.period!=='dia' || !t.date || !t.repeatEveryDays || t.repeatEveryDays<1) return t;
+    if(t.date >= today) return t;
+    var d = parseLocalDate(t.date);
+    var diffDays = Math.round((parseLocalDate(today) - d) / 86400000);
+    var steps = Math.ceil(diffDays / t.repeatEveryDays);
+    var next = new Date(d.getTime());
+    next.setDate(next.getDate() + steps*t.repeatEveryDays);
+    var newDate = localDateStr(next);
+    var clr = resetChecklistForCycle(t);
+    changed = true;
+    return Object.assign({},t,{date:newDate, day:dayIdxFromDate(next), done:false, prog:0, checklist:clr.checklist, lastChecklist:clr.lastChecklist});
+  });
+  if(changed) saveState();
+}
 function doReset(){
   // Reinicio de semana: solo tareas de tipo 'dia' y 'semana'
   S.tasks = S.tasks.map(function(t){
     if(t.period === 'dia' || t.period === 'semana'){
-      return Object.assign({},t,{done:false,prog:0,checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false});})});
+      var clr = resetChecklistForCycle(t);
+      return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
     }
     return t;
   });
@@ -9731,7 +9921,8 @@ function checkAutoReset(){
     // en el reinicio semanal.
     S.tasks=S.tasks.map(function(t){
       if(t.period==='dia' && t.date) return t;
-      return Object.assign({},t,{done:false,prog:0,checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false});})});
+      var clr = resetChecklistForCycle(t);
+      return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
     });
     S.rewardedTaskIds={};
     S.taskBlocks={};
@@ -9803,13 +9994,13 @@ function openNew(period){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,hasDate:false,repeatEvery:0,isEvent:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
   showTaskModal();
 }
 // Crear una tarea puntual (con fecha específica) para un día cualquiera —
 // pasado, hoy o futuro — sin importar si es la semana actual. Se usa desde
 // el detalle de día del calendario de racha.
-function openNewDatedTask(dateKey){
+function openNewDatedTask(dateKey, opts){
   var wIdx = dayIdxFromDate(new Date(dateKey+'T00:00:00'));
   // Mismo criterio que openNew(): el límite de tareas del día es por día de
   // la semana, así que se cuenta y bloquea contra ESE día en particular.
@@ -9829,12 +10020,28 @@ function openNewDatedTask(dateKey){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,hasDate:true,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:null,duracion:60,notif:null};
+  // opts: usado por openNewEvent() para preconfigurar el editor (hora por
+  // defecto, título "Nuevo evento") sin tener que llamar a showTaskModal()
+  // dos veces seguidas — eso dejaba, por un instante, DOS overlays #task-modal
+  // superpuestos en el DOM (uno cerrándose, uno abriéndose) con ids
+  // duplicados, y además hacía que el back-button quedara con dos entradas
+  // de historial apiladas para un solo modal.
+  opts = opts || {};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:opts.hora||null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,hasDate:true,repeatEvery:0,isEvent:!!opts.isEvent,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:opts.hora||null,duracion:60,notif:null};
   showTaskModal();
+}
+// ── Pedido: botón flotante aparte para crear un EVENTO (fecha + hora +
+// recurrencia opcional) de forma más directa que con "Nueva tarea". Es un
+// atajo sobre openNewDatedTask(): abre el mismo editor ya con "Fecha
+// específica" activada (para que el calendario grande de fecha quede a un
+// toque) y con un horario por defecto ya activado, porque en un evento la
+// hora suele importar (a diferencia de una tarea suelta).
+function openNewEvent(){
+  openNewDatedTask(todayStr(), {isEvent:true, hora:'09:00'});
 }
 function openEdit(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
-  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:(t.checklist||[]).length>0,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
+  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
   // BUGFIX: si la tarea venía de antes con Cantidad Y Checklist activos a
   // la vez (posible antes de esta regla), se normaliza acá al abrir el
   // editor en vez de esperar a que mSave() lo resuelva en silencio — así
@@ -9847,6 +10054,10 @@ function showTaskModal(){
   removeOverlay('task-modal');
   var t=M.task;
   var isDay=t.period==='dia';
+  // El checklist "único cada vez" (ver resetChecklistForCycle) solo tiene
+  // sentido si la tarea de verdad se repite — una tarea de día con fecha
+  // específica (M.hasDate) es de un solo uso, así que no aplica ahí.
+  var showFreshCL = !isDay || !M.hasDate || M.repeatEvery>0;
   var overlay=document.createElement('div');overlay.className='overlay';overlay.id='task-modal';
   overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('task-modal');});
   // clItemsHTML() y clAddButtonHTML() ahora son funciones globales (definidas
@@ -9856,7 +10067,7 @@ function showTaskModal(){
   // más chica e inconsistente.
   overlay.innerHTML='<div class="sheet">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
-      '<span class="serif" style="font-weight:700;font-size:20px;">'+(M.isNew?'Nueva tarea':'Editar tarea')+'</span>'+
+      '<span class="serif" style="font-weight:700;font-size:20px;">'+(M.isNew?(M.isEvent?'Nuevo evento':'Nueva tarea'):'Editar tarea')+'</span>'+
       '<button onclick="removeOverlay(\'task-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
     '<label class="flbl">Nombre</label>'+
@@ -9961,8 +10172,9 @@ function showTaskModal(){
         '</button>'+
       '</div>'+
       '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';">'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Esta tarea aparecerá solo ese día — no se repite todas las semanas.</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Esta tarea aparecerá ese día (y de ahí en más, según la recurrencia de abajo).</div>'+
         '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\',true)" style="cursor:pointer;" value="'+(M.task.date||'')+'"/>'+
+        mRepeatAreaHTML()+
       '</div>'+
       '<div style="height:1px;background:var(--line-soft);margin:14px 0;"></div>'+
       // Checklist interno
@@ -9973,6 +10185,7 @@ function showTaskModal(){
         '</button>'+
       '</div>'+
       '<div id="m-cl-area" style="display:'+(M.hasCL?'block':'none')+';">'+
+        (showFreshCL?clFreshAreaExtrasHTML():'')+
         '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
         '<div id="m-cl-addrow">'+clAddButtonHTML()+'</div>'+
       '</div>'+
@@ -10007,6 +10220,7 @@ function showTaskModal(){
           '</button>'+
         '</div>'+
         '<div id="m-cl-area" style="display:'+(M.hasCL?'block':'none')+';">'+
+          (showFreshCL?clFreshAreaExtrasHTML():'')+
           '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
           '<div id="m-cl-addrow">'+clAddButtonHTML()+'</div>'+
         '</div>'+
@@ -10038,6 +10252,63 @@ function mToggleDate(){
   if(tok) tok.style.left = M.hasDate?'22px':'2px';
   var inp=document.getElementById('m-date-input'); if(inp) inp.value = M.task.date||'';
   playSound('toggle');
+}
+// ── Recurrencia "cada N días" para tareas con fecha específica (pedido:
+// botón de "Nuevo evento"). Al guardar, se persiste en t.repeatEveryDays;
+// advanceRecurringEvents() (llamada al abrir la app) se encarga de ir
+// "empujando" t.date hacia la próxima fecha que corresponda una vez que la
+// actual ya pasó, reiniciando done/checklist con resetChecklistForCycle —
+// así la tarea sigue siendo, en todo momento, una tarea puntual normal
+// (mismo done/checklist propios, sin compartir estado con ocurrencias
+// pasadas o futuras), sin tener que tocar la agenda semanal ni el
+// calendario para "buscar" ocurrencias repetidas.
+function mRepeatChipHTML(label,val){
+  var active = M.repeatEvery===val;
+  return '<button type="button" onclick="mSetRepeat('+val+')" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(active?'var(--accent)':'var(--line)')+';background:'+(active?'var(--accent)':'var(--paper)')+';color:'+(active?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+label+'</button>';
+}
+function mRepeatAreaHTML(){
+  var isCustom = M.repeatEvery>0 && M.repeatEvery!==1 && M.repeatEvery!==7;
+  var showCustomInput = isCustom || M._repeatCustomOpen;
+  var html = '<div id="m-repeat-area" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-soft);">'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">¿Se repite?</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+      mRepeatChipHTML('No se repite',0)+
+      mRepeatChipHTML('Cada día',1)+
+      mRepeatChipHTML('Cada semana',7)+
+      '<button type="button" onclick="mToggleRepeatCustom()" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(isCustom?'var(--accent)':'var(--line)')+';background:'+(isCustom?'var(--accent)':'var(--paper)')+';color:'+(isCustom?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">Personalizado</button>'+
+    '</div>'+
+    (showCustomInput?(
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">'+
+        '<span style="font-size:12.5px;color:var(--ink-soft);">Cada</span>'+
+        '<input id="m-repeat-n" type="number" inputmode="numeric" min="1" max="365" value="'+(M.repeatEvery>0?M.repeatEvery:2)+'" onchange="mSetRepeatCustomVal(this.value)" style="width:56px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:14px;font-weight:700;color:var(--ink);font-family:Inter,sans-serif;padding:4px 0;"/>'+
+        '<span style="font-size:12.5px;color:var(--ink-soft);">día(s)</span>'+
+      '</div>'
+    ):'')+
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">'+(M.repeatEvery>0?'Al pasar la fecha, esta tarea salta sola a la próxima que le toque (con su propio checklist, si tiene uno "único cada vez").':'Solo para ese día — no vuelve a aparecer.')+'</div>'+
+  '</div>';
+  return html;
+}
+function mRerenderRepeatArea(){
+  var box=document.getElementById('m-repeat-area');
+  if(box) box.outerHTML = mRepeatAreaHTML();
+}
+function mSetRepeat(n){
+  M.repeatEvery = n;
+  M._repeatCustomOpen = false;
+  mRerenderRepeatArea();
+  playSound('toggle');
+}
+function mToggleRepeatCustom(){
+  M._repeatCustomOpen = true;
+  if(!(M.repeatEvery>0)) M.repeatEvery = 2;
+  mRerenderRepeatArea();
+}
+function mSetRepeatCustomVal(v){
+  var n = parseInt(v,10);
+  if(!n || n<1) n=1;
+  if(n>365) n=365;
+  M.repeatEvery = n;
+  mRerenderRepeatArea();
 }
 // ── Time picker helpers (desde / hasta) ──────────────────────────────────────────────────────────────
 function mHoraTo12(hora24){
@@ -10374,6 +10645,50 @@ function mToggleCLSection(){
     toast('Se desactivó "Definir cantidad" (no pueden estar los dos a la vez)');
   }
   playSound('toggle');
+}
+// Pedido: el checklist puede ser "único cada vez" — al reiniciarse la tarea
+// (nueva semana/mes/etc.) queda vacío en vez de repetir los mismos ítems
+// (ver resetChecklistForCycle). Útil para listas que cambian, como "qué
+// comprar" en la tarea "Abastecerse". Se guarda el último checklist usado
+// (solo texto+meta) para poder recuperarlo con un toque si sirve de
+// referencia, sin obligar a repetirlo tal cual.
+function mToggleCLFresh(){
+  M.clFresh = !M.clFresh;
+  var tog=document.getElementById('m-clfresh-tog');
+  if(tog){tog.style.background=M.clFresh?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(M.clFresh?22:2)+'px';}
+  playSound('toggle');
+}
+function clFreshAreaExtrasHTML(){
+  var last = (M.task && M.task.lastChecklist) || [];
+  var html = '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:2px;">Checklist único cada vez</div>'+
+        '<div style="font-size:11px;color:var(--muted);line-height:1.4;">Al reiniciarse, empieza vacío en vez de repetir los mismos ítems. Útil para listas que cambian, como "qué comprar".</div>'+
+      '</div>'+
+      '<button class="tog" id="m-clfresh-tog" onclick="mToggleCLFresh()" style="background:'+(M.clFresh?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(M.clFresh?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>';
+  if(last.length){
+    html += '<div id="m-cl-remember-row" style="margin-bottom:10px;">'+
+      '<button type="button" onclick="mRememberLastCL()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--bg);border:1.5px dashed var(--line);border-radius:9px;padding:9px;font-size:12px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">'+
+        '↺ Recordar último checklist ('+last.length+' ítem'+(last.length===1?'':'s')+')'+
+      '</button>'+
+    '</div>';
+  }
+  return html;
+}
+function mRememberLastCL(){
+  var last = (M.task && M.task.lastChecklist) || [];
+  if(!last.length) return;
+  // Si el checklist actual está vacío o solo tiene un ítem en blanco (recién
+  // activado), reemplaza; si ya hay ítems escritos, agrega a continuación
+  // en vez de pisarlos.
+  var onlyBlank = M.checklist.length===0 || (M.checklist.length===1 && !M.checklist[0].text.trim());
+  var restored = last.map(function(i){return {id:uid(), text:i.text, done:false, qty:i.qty||1, prog:0};});
+  M.checklist = onlyBlank ? restored : M.checklist.concat(restored);
+  mRerenderCL();
+  toast('✓ Checklist anterior restaurado');
 }
 // Ítems más grandes (checkbox 26px, texto 16px) para tener mejor control al
 // tocar en el celular. Función global: la usan tanto showTaskModal() (render
@@ -10737,7 +11052,7 @@ function mSave(){
   // Pedido: la tarea COMPLETA puede estar vinculada (clLinkUp) aunque tenga
   // checklist propio — antes se borraba el vínculo acá apenas el checklist
   // tenía algún ítem; ahora se conserva siempre tal cual estaba.
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null)});
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
@@ -11565,8 +11880,21 @@ function tourNext(){
 }
 function tourSkip(){ tourDone(); }
 function tourDone(){
+  // BUGFIX: antes esto solo OCULTABA el overlay (display:none) sin sacarlo
+  // del DOM. Como se agrega con document.body.appendChild(), el sistema que
+  // vincula el botón "atrás" con el historial lo detecta como un modal
+  // abierto y le reserva una entrada de historial — pero si nunca se
+  // elimina de verdad, esa entrada queda "fantasma" para siempre. Efecto:
+  // la primera vez que el usuario presiona "atrás" después de ver CUALQUIER
+  // tour (bienvenida, proyecto, subida de nivel...), el botón se gasta en
+  // cerrar este overlay fantasma en vez de navegar, y hay que presionarlo
+  // dos veces — la segunda además "salta" un paso de más porque el
+  // navegador ya había retrocedido una posición real durante el intento
+  // perdido. Eliminarlo de verdad deja que el mecanismo genérico de
+  // modales sincronice el historial correctamente, como con cualquier otro
+  // overlay que se cierra a mano.
   var ov = document.getElementById('sl-overlay');
-  if(ov){ ov.style.display='none'; ov.style.pointerEvents='none'; }
+  if(ov) ov.remove();
   _tourActive = false;
   if(_tourOnDone) _tourOnDone();
   _tourOnDone = null;
@@ -12601,7 +12929,19 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     var node = trackedModals[trackedModals.length-1];
     if(!node) return;
     handlingPop = true;
-    if(node.id){
+    if(node.id==='project-view'){
+      // BUGFIX: la vista de proyecto no es un overlay genérico — abrirla
+      // oculta a mano la barra de pestañas inferior (openProjectView) y solo
+      // closeProjectView() sabe restaurarla (además de limpiar
+      // S.activeProjectId y volver a renderizar). Si acá se usaba el mismo
+      // removeOverlay() genérico de cualquier modal, el nodo se borraba pero
+      // la barra inferior se quedaba oculta para siempre al volver con el
+      // botón "atrás" del celular. Iba de la mano de este mismo cierre
+      // "por atrás", que closeProjectView() no maneja: al llamarlo desde
+      // acá, su propio ov.remove() dispara este mismo observer, pero como
+      // handlingPop ya está en true no se vuelve a tocar el historial.
+      try{ closeProjectView(); }catch(e){ if(node.parentNode) node.remove(); }
+    } else if(node.id){
       // Reutiliza el mismo fade-out que ya usa el resto de la app para cerrar
       try{ removeOverlay(node.id); }catch(e){ if(node.parentNode) node.remove(); }
     } else if(node.parentNode){
@@ -12653,6 +12993,7 @@ trackVisit();          // Registrar la visita de hoy
 checkMedals();         // Revisar medallas al iniciar
 checkStreakOnLoad();
 checkAutoReset();      // Auto reset on Monday 4 AM
+advanceRecurringEvents(); // Adelantar eventos "cada N días" cuya fecha ya pasó
 render();
 setTimeout(function(){
   var sp=document.getElementById('splash');
