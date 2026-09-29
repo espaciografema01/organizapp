@@ -321,6 +321,16 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 .flbl{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
 .fsec{background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:12px;}
 .frow{display:flex;align-items:center;justify-content:space-between;}
+.sec-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 7px;display:flex;align-items:center;}
+.seg{display:flex;gap:2px;background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:3px;}
+.seg-b{flex:1;min-width:0;border:none;background:transparent;border-radius:8px;padding:8px 3px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;transition:background .15s,color .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.seg-b.on{background:var(--paper);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.12);}
+.faq summary{list-style:none;cursor:pointer;padding:13px 22px 13px 0;font-size:13.5px;font-weight:600;color:var(--ink);position:relative;}
+.faq summary::-webkit-details-marker{display:none;}
+.faq summary::after{content:'+';position:absolute;right:2px;top:11px;font-size:18px;color:var(--muted);font-weight:400;}
+.faq[open] summary::after{content:'−';}
+.faq-a{font-size:12.5px;color:var(--ink-soft);line-height:1.6;padding:0 4px 14px 0;}
+.ibtn{width:16px;height:16px;border-radius:50%;border:1.3px solid var(--muted-soft);color:var(--muted);font-size:10px;font-weight:700;font-style:italic;font-family:Georgia,serif;background:none;padding:0;line-height:1;margin-left:6px;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;text-transform:none;letter-spacing:0;}
 .tog{width:44px;height:24px;border-radius:12px;border:none;position:relative;cursor:pointer;flex-shrink:0;padding:0;transition:background .18s ease;}
 .tok{position:absolute;top:3px;width:18px;height:18px;border-radius:9px;background:white;transition:left .15s;display:block;box-shadow:0 1px 3px rgba(0,0,0,.15);}
 .qb{width:32px;height:32px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:18px;display:flex;align-items:center;justify-content:center;padding:0;color:var(--ink);}
@@ -492,6 +502,12 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 
 /* Content area */
 #content{flex:1;padding:0 0 80px;overflow-y:auto;}
+/* Pedido: mantener el dedo sobre un texto abría selección/menú de "navegador"
+   (copiar, buscar, compartir...) y distraía. Se desactiva en toda la app,
+   salvo en los campos donde sí se escribe. */
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;}
+input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default;}
+img,svg{-webkit-user-drag:none;}
 @keyframes contentFade{from{opacity:.35;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
 #content.fade-in{animation:contentFade .22s ease-out;}
 .v2-section{padding:0 16px;}
@@ -518,7 +534,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 }
 .fab{
   pointer-events:auto;
-  width:52px;height:52px;border-radius:16px;
+  width:58px;height:58px;border-radius:18px;
   background:var(--accent);color:#fff;border:none;
   box-shadow:0 6px 16px rgba(0,0,0,.18);
   display:flex;align-items:center;justify-content:center;
@@ -529,7 +545,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
    no debe competir visualmente con la acción primaria (agregar tarea). */
 .fab-secondary{
   pointer-events:auto;
-  width:44px;height:44px;border-radius:14px;
+  width:50px;height:50px;border-radius:16px;
   background:var(--paper);color:var(--ink-soft);border:1.5px solid var(--line);
   box-shadow:0 4px 14px rgba(0,0,0,.12);
   display:flex;align-items:center;justify-content:center;
@@ -548,6 +564,9 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
   pointer-events:none;z-index:90;
 }
 .fab-wrap-left .fab-secondary{border-color:var(--accent);color:var(--accent);}
+/* Pedido: el de "Nuevo evento" un poco más grande que el resto (mismo tamaño
+   que el "+" de tarea) y con borde más marcado, para que se vea y se alcance bien. */
+.fab-wrap-left .fab-event{width:58px;height:58px;border-radius:18px;border-width:2px;background:var(--accent-bg);}
 /* Pedido: que se note bien cuando un reinicio SÍ está disponible — fondo
    de color (en vez del neutro de siempre) + un anillo que pulsa suave,
    para que llame la atención sin ser un elemento nuevo ni chillón. */
@@ -663,13 +682,13 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
   </div>
   <div class="fab-wrap" id="fab-wrap" style="display:none;">
     <button class="fab-secondary" id="fab-reset" onclick="askResetToday()" title="Reiniciar tareas de hoy" aria-label="Reiniciar tareas de hoy" style="display:none;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20 4 20 9 15 9"/></svg>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20 4 20 9 15 9"/></svg>
     </button>
     <button class="fab-secondary" id="fab-period-reset" onclick="tapPeriodResetFab()" title="Reiniciar período de Plan" aria-label="Reiniciar período de Plan" style="display:none;">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20 4 20 9 15 9"/></svg>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20 4 20 9 15 9"/></svg>
     </button>
     <button class="fab" id="fab-add" onclick="openNew('dia')" title="Agregar tarea" aria-label="Agregar tarea">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </div>
   <!-- Pedido: botón flotante aparte para crear un EVENTO (tarea con fecha y
@@ -677,8 +696,8 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
        competir por espacio con el "+" de tarea normal — por eso va del otro
        lado (izquierda) en vez de apilarse arriba del mismo. -->
   <div class="fab-wrap-left" id="fab-wrap-left" style="display:none;">
-    <button class="fab-secondary" id="fab-event" onclick="openNewEvent()" title="Nuevo evento (fecha, hora y recurrencia)" aria-label="Nuevo evento">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M12 14v3M10.5 15.5h3"/></svg>
+    <button class="fab-secondary fab-event" id="fab-event" onclick="openNewEvent()" title="Nuevo evento (fecha, hora y recurrencia)" aria-label="Nuevo evento">
+      <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M12 14v3M10.5 15.5h3"/></svg>
     </button>
   </div>
   <div id="sel-bar" style="display:none;position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1.5px solid var(--line);z-index:850;padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom));align-items:center;gap:8px;box-shadow:0 -4px 16px rgba(0,0,0,.1);"></div>
@@ -867,8 +886,7 @@ function showGoogleSignInFallbackModal(){
   box.innerHTML = '<div class="conf-inner">'+
     '<div style="font-size:32px;text-align:center;margin-bottom:8px;">🔐</div>'+
     '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;text-align:center;">El login de Google no pudo completarse dentro de la app</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;">Esto pasa porque la app está en prueba cerrada y Android todavía no reconoce completamente la verificación del sitio web.<br><br>'+
-    '<b>Solución fácil:</b> abre <b>espaciografema01.github.io/organizapp</b> directo en Chrome, inicia sesión ahí, y luego vuelve a la app — la sesión quedará activa automáticamente.</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;"><b>Solución fácil:</b> abre <b>espaciografema01.github.io/organizapp</b> directo en Chrome, inicia sesión ahí, y luego vuelve a la app — la sesión quedará activa automáticamente.</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="sbtn" onclick="window.open(\'https://espaciografema01.github.io/organizapp\',\'_blank\');this.closest(\'.conf-box\').remove();">Abrir en Chrome</button>'+
       '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cerrar</button>'+
@@ -1070,6 +1088,14 @@ async function syncWithCloud(){
         activeMode: S.activeMode,
         streakCfg: S.streakCfg,
         taskBlocks: S.taskBlocks,
+        medals: S.medals||[],
+        levelTracks: S.levelTracks||[],
+        bonusTrackSlots: S.bonusTrackSlots||0,
+        bonusTaskLimit: S.bonusTaskLimit||0,
+        timerCfg: S.timerCfg||{},
+        autoReset: S.autoReset||{},
+        lastAutoReset: S.lastAutoReset||null,
+        periodAutoSeen: S.periodAutoSeen||{},
         lastSync: new Date().toISOString()
       }));
       localStorage.setItem('og6-lastSync', new Date().toISOString());
@@ -1105,8 +1131,43 @@ async function syncWithCloud(){
 // Aplica los datos de la nube (si corresponde) o mantiene los locales,
 // y siempre re-renderiza de forma segura para no dejar la app a medio
 // camino si algo en los datos de la nube resulta inesperado.
+// Fusiona los datos de "logros" (medallas, seguimientos de nivel y los cupos
+// bonus que otorgan algunas medallas) entre este dispositivo y la nube, sea
+// cual sea el botón que el usuario elija en el conflicto de sync — a
+// diferencia de tareas/racha (donde hay que "elegir un lado" porque son
+// datos que cambian todo el tiempo y no tiene sentido mezclar), un logro ya
+// desbloqueado en CUALQUIER dispositivo debería contar en todos, así que
+// combinarlos es siempre seguro y evita perder progreso sin querer.
+function mergeMedalsAndTracks(cloud){
+  cloud = cloud || {};
+  var localMedals = S.medals || [];
+  var cloudMedals = cloud.medals || [];
+  var medalMap = {};
+  localMedals.concat(cloudMedals).forEach(function(m){
+    if(!medalMap[m.id] || (m.dateUnlocked && medalMap[m.id].dateUnlocked && m.dateUnlocked < medalMap[m.id].dateUnlocked)){
+      medalMap[m.id] = m;
+    }
+  });
+  S.medals = Object.keys(medalMap).map(function(id){return medalMap[id];});
+
+  // Bonos permanentes de las medallas: nunca deberían bajar, así que se toma
+  // el mayor de los dos lados en vez de pisar uno con el otro.
+  S.bonusTrackSlots = Math.max(S.bonusTrackSlots||0, cloud.bonusTrackSlots||0);
+  S.bonusTaskLimit = Math.max(S.bonusTaskLimit||0, cloud.bonusTaskLimit||0);
+
+  // Seguimientos de nivel: se combinan por id; si el mismo seguimiento
+  // existe en ambos lados (se usó en más de un dispositivo), se queda con
+  // el que tenga más XP acumulado en vez de descartar uno de los dos.
+  var trackMap = {};
+  (S.levelTracks||[]).forEach(function(t){ trackMap[t.id]=t; });
+  (cloud.levelTracks||[]).forEach(function(t){
+    if(!trackMap[t.id] || (t.xp||0) > (trackMap[t.id].xp||0)) trackMap[t.id]=t;
+  });
+  S.levelTracks = Object.keys(trackMap).map(function(id){return trackMap[id];});
+}
 function applySyncResult(cloud, useCloud){
   try {
+    mergeMedalsAndTracks(cloud);
     if(useCloud){
       if(cloud.xp !== undefined) S.xp = Math.max(S.xp || 0, cloud.xp || 0);
       if(cloud.streak) S.streak = cloud.streak;
@@ -1117,6 +1178,13 @@ function applySyncResult(cloud, useCloud){
       if(Array.isArray(cloud.modes)) S.modes = cloud.modes;
       if(cloud.activeMode !== undefined) S.activeMode = cloud.activeMode;
       if(cloud.streakCfg) S.streakCfg = cloud.streakCfg;
+      if(cloud.timerCfg) S.timerCfg = Object.assign({}, S.timerCfg, cloud.timerCfg);
+      // Preferencia + marcadores de "hasta qué ciclo ya se reinició": viajan
+      // juntos con las tareas de la nube, para que otro dispositivo no vuelva
+      // a reiniciar (y borre avance) algo que este ya reinició.
+      if(cloud.autoReset) S.autoReset = Object.assign({}, S.autoReset, cloud.autoReset);
+      if(cloud.lastAutoReset) S.lastAutoReset = cloud.lastAutoReset;
+      if(cloud.periodAutoSeen) S.periodAutoSeen = cloud.periodAutoSeen;
       if(cloud.taskBlocks) S.taskBlocks = cloud.taskBlocks;
       document.body.className = 'theme-' + S.theme + ' task-size-medium';
       toast('✓ Datos descargados de la nube');
@@ -1141,6 +1209,8 @@ function showSyncConflictModal(cloud){
   var localStreak = S.streak ? S.streak.days||0 : 0;
   var cloudXP = cloud.xp||0;
   var localXP = S.xp||0;
+  var cloudMedals = (cloud.medals||[]).length;
+  var localMedals = (S.medals||[]).length;
   // Fecha de la última sincronización de la nube, formateada legible
   var cloudDate = cloud.lastSync
     ? new Date(cloud.lastSync).toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
@@ -1161,6 +1231,7 @@ function showSyncConflictModal(cloud){
         '<div style="font-size:13px;font-weight:700;color:var(--ink);">'+cloudCount+' tareas</div>'+
         '<div style="font-size:11px;color:var(--muted);">'+cloudStreak+' días racha</div>'+
         '<div style="font-size:11px;color:var(--muted);">'+cloudXP+' XP</div>'+
+        '<div style="font-size:10px;color:var(--muted-soft);">🏅 '+cloudMedals+'</div>'+
         '<div style="font-size:10px;color:var(--muted-soft);margin-top:4px;">última sync:<br>'+cloudDate+'</div>'+
       '</div>'+
       // Local
@@ -1170,11 +1241,12 @@ function showSyncConflictModal(cloud){
         '<div style="font-size:13px;font-weight:700;color:var(--ink);">'+localCount+' tareas</div>'+
         '<div style="font-size:11px;color:var(--muted);">'+localStreak+' días racha</div>'+
         '<div style="font-size:11px;color:var(--muted);">'+localXP+' XP</div>'+
+        '<div style="font-size:10px;color:var(--muted-soft);">🏅 '+localMedals+'</div>'+
         '<div style="font-size:10px;color:var(--accent);font-weight:600;margin-top:4px;">datos actuales</div>'+
       '</div>'+
     '</div>'+
 
-    '<div style="font-size:11px;color:var(--muted);background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:14px;line-height:1.5;">⚠️ La opción que no elijas se perderá. Si usaste la app en este dispositivo sin cuenta de Google, elige <b>"Conservar este dispositivo"</b>.</div>'+
+    '<div style="font-size:11px;color:var(--muted);background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:14px;line-height:1.5;">⚠️ La opción que no elijas se perderá (tareas, racha y XP). Medallas y seguimientos de nivel se combinan siempre, sin perder progreso, elijas la que elijas. Si usaste la app en este dispositivo sin cuenta de Google, elige <b>"Conservar este dispositivo"</b>.</div>'+
 
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="cbtn" onclick="resolveSyncConflict(\'local\')">📱 Conservar este dispositivo ('+localCount+' tareas)</button>'+
@@ -1224,6 +1296,14 @@ function pushToCloud(){
       activeMode: S.activeMode,
       streakCfg: S.streakCfg,
       taskBlocks: S.taskBlocks,
+      medals: S.medals||[],
+      levelTracks: S.levelTracks||[],
+      bonusTrackSlots: S.bonusTrackSlots||0,
+      bonusTaskLimit: S.bonusTaskLimit||0,
+      timerCfg: S.timerCfg||{},
+      autoReset: S.autoReset||{},
+      lastAutoReset: S.lastAutoReset||null,
+      periodAutoSeen: S.periodAutoSeen||{},
       lastSync: sync
     });
     // set(..., {merge:true}) en vez de update(): si el documento del usuario
@@ -1623,6 +1703,13 @@ var S = {
   },
   activeMode:null,
   xp:0,prevLvl:1,
+  // Seguimientos de nivel personalizados (ver awardTrackXP más abajo).
+  levelTracks:[],
+  bonusTrackSlots:0,
+  // Configuración global del temporizador de sets/descansos (pedido) — se
+  // aplica a TODAS las tareas con temporizador, no por tarea, porque son
+  // preferencias personales de sonido (ver openYoTimerScreen).
+  timerCfg:{countdownBeepSec:3, volume:1, sounds:{start:true,work:true,rest:true,countdown:true,finish:true}, keepScreenOn:true},
   streak:{days:0,lastDate:null,total:0},
   streakCfg:{threshold:0.8},
   // Pedido: se puede desactivar SOLO la racha (mantiene niveles/XP activos),
@@ -1636,6 +1723,10 @@ var S = {
   resetNotifShown:null,
   // Last auto-reset date
   lastAutoReset:null,
+  // Reinicio automático por período (Yo → Períodos). true = al vencer el plazo, la app reinicia sola ese período; false = no avanza hasta que el usuario lo reinicie a mano. Solo aplica fuera del modo simplificado.
+  autoReset:{semana:true,mes:true,semestre:true,'año':true},
+  periodAutoSeen:{},
+  periodResetUsed:{},
   // Tema visual — Blanco es el predeterminado (más neutro y minimalista)
   theme:'light',
   // Modo simplificado: sin niveles, racha ni XP. Para quien prefiere
@@ -1871,8 +1962,26 @@ function iconBadgeHTML(content, size){
   '</div>';
 }
 
+// ── Pedido: el checklist puede completarse con una regla más flexible que
+// "todos los ítems" — por ejemplo "con cualquiera de estos alcanza" (OR) o
+// "completar 3 de estos 5". t.clRule = {mode:'all'|'kofn', k:N}. En modo
+// 'kofn', la tarea se da por completa apenas K de los ítems actuales están
+// marcados (los que sean, no hace falta que sean siempre los mismos) — con
+// k=1 es un OR puro, con k=N es lo mismo que 'all'. Esta es la ÚNICA función
+// que decide esto; isDone(), tRatio(), mSave() y tapCL/stepCL/setCLProg
+// pasan siempre por acá para no duplicar la regla en cinco lugares.
+function checklistSatisfied(t){
+  var cl = t.checklist||[];
+  if(!cl.length) return null;
+  var doneCount = cl.filter(function(i){return i.done;}).length;
+  if(t.clRule && t.clRule.mode==='kofn'){
+    var k = Math.max(1, Math.min(t.clRule.k||1, cl.length));
+    return doneCount >= k;
+  }
+  return doneCount === cl.length;
+}
 function isDone(t){
-  if(t.checklist&&t.checklist.length)return t.checklist.every(function(i){return i.done;});
+  if(t.checklist&&t.checklist.length)return checklistSatisfied(t);
   if((t.qty||1)>1)return(t.prog||0)>=t.qty;
   return!!t.done;
 }
@@ -1890,6 +1999,11 @@ function clItemRatio(item){
 }
 function tRatio(t){
   if(t.checklist&&t.checklist.length){
+    if(t.clRule && t.clRule.mode==='kofn'){
+      var k = Math.max(1, Math.min(t.clRule.k||1, t.checklist.length));
+      var doneCount = t.checklist.filter(function(i){return i.done;}).length;
+      return Math.min(doneCount,k)/k;
+    }
     var sum = t.checklist.reduce(function(s,i){return s+clItemRatio(i);},0);
     return sum/t.checklist.length;
   }
@@ -1912,6 +2026,9 @@ function loadState(){
     var tb=localStorage.getItem('og6-blocks');if(tb)S.taskBlocks=JSON.parse(tb);
     var rn=localStorage.getItem('og6-resetnotif');if(rn)S.resetNotifShown=rn;
     var lr=localStorage.getItem('og6-lastauto');if(lr)S.lastAutoReset=lr;
+    try{var ar=localStorage.getItem('og6-autoreset');if(ar)S.autoReset=Object.assign({},S.autoReset,JSON.parse(ar));}catch(e){}
+    try{var pas=localStorage.getItem('og6-periodautoseen');if(pas)S.periodAutoSeen=JSON.parse(pas)||{};}catch(e){}
+    try{var pru=localStorage.getItem('og6-periodresetused');if(pru)S.periodResetUsed=JSON.parse(pru)||{};}catch(e){}
     var th=localStorage.getItem('og6-theme');if(th)S.theme=th;
     var tc=localStorage.getItem('og6-bgcolor');if(tc)S.bgColorOverride=tc;
     var smt=localStorage.getItem('og6-showmodetips');if(smt!==null)S.showModeTips=smt==='1';
@@ -1939,6 +2056,9 @@ function loadState(){
     var vc=localStorage.getItem('og6-vacaciones');if(vc)S.vacaciones=Object.assign({},S.vacaciones,JSON.parse(vc));
     var ac=localStorage.getItem('og6-achievements');if(ac)S.achievements=JSON.parse(ac);
     var md=localStorage.getItem('og6-medals');if(md)S.medals=JSON.parse(md);
+    var lt=localStorage.getItem('og6-leveltracks');if(lt)S.levelTracks=JSON.parse(lt);
+    var bts=localStorage.getItem('og6-bonustrackslots');if(bts)S.bonusTrackSlots=Number(bts)||0;
+    var tcfg=localStorage.getItem('og6-timercfg');if(tcfg){try{S.timerCfg=Object.assign({},S.timerCfg,JSON.parse(tcfg));}catch(e){}}
     var vh=localStorage.getItem('og6-visithistory');if(vh)S.visitHistory=JSON.parse(vh);
     var tu=localStorage.getItem('og6-themesused');if(tu)S.themesUsed=JSON.parse(tu);
     var bu=localStorage.getItem('og6-bajaused');if(bu)S.bajaUsedCount=Number(bu)||0;
@@ -2024,6 +2144,9 @@ function saveState(){
     localStorage.setItem('og6-vacaciones',JSON.stringify(S.vacaciones||{}));
     localStorage.setItem('og6-achievements',JSON.stringify(S.achievements||[]));
     localStorage.setItem('og6-medals',JSON.stringify(S.medals||[]));
+    localStorage.setItem('og6-leveltracks',JSON.stringify(S.levelTracks||[]));
+    localStorage.setItem('og6-bonustrackslots',String(S.bonusTrackSlots||0));
+    localStorage.setItem('og6-timercfg',JSON.stringify(S.timerCfg||{}));
     localStorage.setItem('og6-visithistory',JSON.stringify(S.visitHistory||{}));
     localStorage.setItem('og6-themesused',JSON.stringify(S.themesUsed||[]));
     localStorage.setItem('og6-bajaused',String(S.bajaUsedCount||0));
@@ -2038,6 +2161,9 @@ function saveState(){
     if(S.notifAskedDate)localStorage.setItem('og6-notifasked',S.notifAskedDate);
     if(S.resetNotifShown)localStorage.setItem('og6-resetnotif',S.resetNotifShown);
     if(S.lastAutoReset)localStorage.setItem('og6-lastauto',S.lastAutoReset);
+    localStorage.setItem('og6-autoreset',JSON.stringify(S.autoReset||{}));
+    localStorage.setItem('og6-periodautoseen',JSON.stringify(S.periodAutoSeen||{}));
+    localStorage.setItem('og6-periodresetused',JSON.stringify(S.periodResetUsed||{}));
     localStorage.setItem('og6-simplemode',S.simpleMode?'1':'0');
     localStorage.setItem('og6-simplemodefabreset',S.simpleModeFabReset===false?'0':'1');
     localStorage.setItem('og6-calsubtab',S.calendariosSubTab||'semanal');
@@ -2102,6 +2228,7 @@ function _sndTone(ctx, startAt, freq, dur, type, gainPeak){
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start(startAt);
   osc.stop(startAt + dur + 0.02);
+  return osc; // el temporizador (ver más abajo) guarda esta referencia para poder cancelarla si se sale antes o se salta de tramo
 }
 // type: 'complete' (tarea completada), 'crucial' (marcar como crucial),
 // 'achievement' (logro/medalla/nivel desbloqueado), 'streak' (racha del día
@@ -2213,7 +2340,61 @@ function flushXP(){
   }
 }
 
-// ── Animación de subida de nivel ──────────────────────────────────────────
+// ── Seguimientos de nivel personalizados (pedido) ───────────────────────────
+// Además del nivel general (S.xp), el usuario puede crear "seguimientos"
+// propios (ej. "Deporte") que suben de nivel con su PROPIO XP, ganado solo
+// por las tareas que él decida que cuenten para ese seguimiento — ya sea
+// todas las de una categoría, o una lista de tareas elegidas a mano.
+// Reutiliza la misma curva de niveles que el nivel general (getLevel/
+// lvlInfo ya reciben el xp como parámetro) para que se sientan como "la
+// misma mecánica, aplicada a otra cosa" en vez de un sistema paralelo.
+//
+// Cupos: 1 en plan gratuito, 3 en acceso completo — más hasta 2 extra para
+// cualquiera de los dos (nivel general 8, y la medalla "Cima constante").
+// Guardado solo local (og6-leveltracks), igual que las medallas (S.medals
+// tampoco viaja hoy a la nube — ver sync), así que no se sincroniza entre
+// dispositivos por ahora.
+function maxLevelTrackSlots(){
+  var base = isPremium() ? 3 : 1;
+  var lvlBonus = getLevel(S.xp||0) >= 8 ? 1 : 0;
+  var medalBonus = S.bonusTrackSlots || 0;
+  return base + lvlBonus + medalBonus;
+}
+function taskQualifiesForTrack(task, track){
+  if(!task || !track || !track.source) return false;
+  if(track.source.type==='category') return !!task.categoryId && task.categoryId===track.source.categoryId;
+  if(track.source.type==='manual') return (track.source.taskIds||[]).indexOf(task.id)!==-1;
+  return false;
+}
+// Única función que otorga el XP "de verdad" de completar una tarea — antes
+// esto vivía repetido en 4 lugares distintos (finishUpdate y las dos ramas
+// de propagación de vínculos), cada uno con su propio if/then; unificarlo
+// acá evita que un seguimiento personalizado se quede sin sumar XP en
+// alguno de esos caminos por quedar desactualizado.
+function awardTaskXP(task){
+  if(!task || S.rewardedTaskIds[task.id]) return;
+  S.rewardedTaskIds[task.id] = true;
+  var pts = PT[task.period]||1;
+  addXP(pts);
+  awardTrackXP(task, pts);
+  saveState();
+}
+function awardTrackXP(task, pts){
+  if(S.simpleMode) return; // Modo simplificado: sin niveles de ningún tipo
+  if(!S.levelTracks || !S.levelTracks.length) return;
+  S.levelTracks.forEach(function(track){
+    if(!taskQualifiesForTrack(task, track)) return;
+    var oldLvl = getLevel(track.xp||0);
+    track.xp = (track.xp||0) + pts;
+    var newLvl = getLevel(track.xp);
+    if(newLvl > oldLvl){
+      setTimeout(function(){
+        playSound('achievement');
+        showRewardToast('✦ '+esc(track.name)+' — ¡Nivel '+newLvl+'!', trackLevelName(track,newLvl));
+      }, 700);
+    }
+  });
+}
 function playLevelUpAnimation(){
   playSound('achievement');
   vibrate([20,30,20,30,40]);
@@ -2459,8 +2640,8 @@ function showHiperfocoWarning(){
   var box=document.createElement('div');box.className='conf-box';
   box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
     '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🎯</div>'+
-    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Hiperfoco</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para períodos cortos de enfoque máximo, cuando quieres ver todas tus tareas sin límite artificial.</div>'+
+    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Hiperfoco'+infoBtn('modohf')+'</div>'+
+    
     '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
       '<div>· Dura <b>'+HIPERFOCO_DAYS+' días</b></div>'+
       '<div>· Sube el límite a <b>hasta '+TASK_LIMITS_HIPERFOCO.dia+' tareas visibles</b> por período</div>'+
@@ -2505,6 +2686,7 @@ function currentTaskLimits(){
 
 // ── V2 NAVIGATION ─────────────────────────────────────────────────────────
 function setTab(t){
+  S._reorder = false;
   var prevTab = S.tab;
   S.tab = t;
   var routeToTab = {
@@ -2778,6 +2960,11 @@ function render(){
   // tiene sentido crear un evento con fecha/hora desde Hoy).
   var fabWrapLeft = document.getElementById('fab-wrap-left');
   if(fabWrapLeft) fabWrapLeft.style.display = onHoy ? 'flex' : 'none';
+  // Pedido: con muchas tareas desplegadas, las últimas quedaban tapadas por
+  // los botones flotantes. En Hoy se deja espacio de sobra al final del scroll
+  // (alto de los botones apilados + nav), para poder subirlas por encima.
+  var contentEl = document.getElementById('content');
+  if(contentEl) contentEl.style.paddingBottom = onHoy ? '200px' : '';
   // FAB secundario de reinicio de tareas de hoy. Pedido: en modo NO
   // simplificado aparece SIEMPRE (no es opcional); en modo simplificado
   // sigue respetando la preferencia de Yo → Personalización. Pedido:
@@ -3108,9 +3295,22 @@ function renderHoyTasksSection(){
     '</div>';
   }
 
+  // Pedido: reordenar categorías (entre sí) y tareas (dentro de su categoría).
+  // En este modo se muestran TODAS las tareas del día (sin filtro), en filas
+  // simples con flechas — así cada flecha mueve siempre a un vecino visible.
+  if(all.length>1){
+    html += '<div style="display:flex;justify-content:flex-end;margin:-2px 0 8px;">'+
+      '<button onclick="toggleReorder()" style="background:'+(S._reorder?'var(--accent)':'none')+';border:1.5px solid '+(S._reorder?'var(--accent)':'var(--line)')+';color:'+(S._reorder?'#fff':'var(--muted)')+';border-radius:14px;padding:4px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(S._reorder?'✓ Listo':'⇅ Reordenar')+'</button>'+
+    '</div>';
+  }
+  if(S._reorder && all.length>1){
+    return html + renderReorderHTML(all, cats) + '</div>';
+  }
+
   // Pedido: agrupar también por categoría en "Pendientes" (antes solo se
   // agrupaba en "Todas" — Pendientes siempre mostraba una lista plana).
-  var groupByCategory = (S.activeCatFilter==='all' || S.activeCatFilter==='__pending') && cats.length > 0;
+  var groupByCategory = cats.length > 0;
+  var singleCatView = (S.activeCatFilter!=='all' && S.activeCatFilter!=='__pending');
 
   if(!visible.length){
     html += '<div style="padding:40px 16px;text-align:center;">'+
@@ -3131,7 +3331,7 @@ function renderHoyTasksSection(){
       if(!group||!group.length) return;
       anyCatSectionShown = true;
       var doneInCat = group.filter(isDone).length;
-      var collapsed = isCatCollapsed(cat.id, doneInCat, group.length);
+      var collapsed = singleCatView ? false : isCatCollapsed(cat.id, doneInCat, group.length);
       html += '<div id="cat-sec-'+cat.id+'">'+
         '<div class="cat-sec-head" onclick="toggleCatSection(\''+cat.id+'\')">'+
           '<div style="width:8px;height:8px;border-radius:50%;background:'+cat.color+';flex-shrink:0;"></div>'+
@@ -3302,7 +3502,93 @@ function renderHoy(){
 // pantalla. Ahora solo se actualiza el estado activo/inactivo de los
 // botones ya existentes (sin tocar su scroll) y se reemplaza el contenido
 // de la sección de tareas (ver renderHoyTasksSection).
+// Pedido: tocar de nuevo el filtro que ya está activo (Todas / Pendientes /
+// una categoría) pliega o despliega sus secciones: si alguna está plegada,
+// las despliega todas; si ya están todas desplegadas, las pliega.
+// ── Reordenar categorías y tareas (flechas ▲▼) ─────────────────────────────
+function _taskCatKey(x){
+  return (x.categoryId && (S.categories||[]).some(function(c){return c.id===x.categoryId;})) ? x.categoryId : null;
+}
+function refreshHoyTasks(){
+  var sec = document.getElementById('hoy-tasks-section');
+  if(sec) sec.innerHTML = renderHoyTasksSection(); else render();
+}
+function toggleReorder(){ S._reorder = !S._reorder; refreshHoyTasks(); }
+function _reorderArrows(upCall, downCall, canUp, canDown){
+  function b(call, ok, ch){
+    return '<button '+(ok?'onclick="'+call+'"':'disabled')+' style="width:30px;height:30px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);color:'+(ok?'var(--ink)':'var(--muted-soft)')+';font-size:12px;cursor:'+(ok?'pointer':'default')+';opacity:'+(ok?1:.45)+';padding:0;flex-shrink:0;">'+ch+'</button>';
+  }
+  return '<div style="display:flex;gap:6px;flex-shrink:0;">'+b(upCall,canUp,'▲')+b(downCall,canDown,'▼')+'</div>';
+}
+function renderReorderHTML(all, cats){
+  var byCat = {}, noCat = [];
+  all.forEach(function(t){ var k=_taskCatKey(t); if(k){ (byCat[k]=byCat[k]||[]).push(t); } else noCat.push(t); });
+  var shown = cats.filter(function(c){return byCat[c.id] && byCat[c.id].length;});
+  function taskRows(list){
+    return list.map(function(t,i){
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px 8px 14px;border-bottom:1px solid var(--line-soft);">'+
+        '<span style="flex:1;min-width:0;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text||'(sin nombre)')+'</span>'+
+        _reorderArrows("moveTaskInList('"+t.id+"',-1)","moveTaskInList('"+t.id+"',1)", i>0, i<list.length-1)+
+      '</div>';
+    }).join('');
+  }
+  var html = '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">Usa las flechas para cambiar el orden.</div>';
+  shown.forEach(function(c,ci){
+    html += '<div style="margin-bottom:14px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:2px solid '+c.color+'55;">'+
+        '<div style="width:9px;height:9px;border-radius:50%;background:'+c.color+';flex-shrink:0;"></div>'+
+        '<span style="flex:1;font-size:12px;font-weight:700;color:'+c.color+';text-transform:uppercase;letter-spacing:.06em;">'+esc(c.name)+'</span>'+
+        _reorderArrows("moveCategoryInList('"+c.id+"',-1)","moveCategoryInList('"+c.id+"',1)", ci>0, ci<shown.length-1)+
+      '</div>'+
+      taskRows(byCat[c.id])+
+    '</div>';
+  });
+  if(noCat.length){
+    html += '<div style="margin-bottom:14px;">'+
+      (shown.length?'<div style="padding:6px 4px;border-bottom:2px dashed var(--line);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Sin categoría</div>':'')+
+      taskRows(noCat)+
+    '</div>';
+  }
+  return html;
+}
+function moveTaskInList(id, dir){
+  var t = S.tasks.find(function(x){return x.id===id;}); if(!t) return;
+  var day = taskWeekdayThisWeek(t), key = _taskCatKey(t);
+  var group = S.tasks.filter(function(x){return taskWeekdayThisWeek(x)===day && _taskCatKey(x)===key;});
+  var i = group.findIndex(function(x){return x.id===id;});
+  var nb = group[i+dir]; if(!nb) return;
+  var a = S.tasks.findIndex(function(x){return x.id===id;}), b = S.tasks.findIndex(function(x){return x.id===nb.id;});
+  var tmp = S.tasks[a]; S.tasks[a] = S.tasks[b]; S.tasks[b] = tmp;
+  saveState(); refreshHoyTasks();
+}
+function moveCategoryInList(catId, dir){
+  var day = S.day;
+  var shown = (S.categories||[]).filter(function(c){return S.tasks.some(function(t){return taskWeekdayThisWeek(t)===day && t.categoryId===c.id;});});
+  var i = shown.findIndex(function(c){return c.id===catId;});
+  var nb = shown[i+dir]; if(!nb) return;
+  var a = S.categories.findIndex(function(c){return c.id===catId;}), b = S.categories.findIndex(function(c){return c.id===nb.id;});
+  var tmp = S.categories[a]; S.categories[a] = S.categories[b]; S.categories[b] = tmp;
+  saveState(); refreshHoyTasks();
+}
+function toggleAllCatSections(){
+  var sec = document.getElementById('hoy-tasks-section'); if(!sec) return;
+  var bodies = sec.querySelectorAll('[id^="cat-body-"]'); if(!bodies.length) return;
+  var anyCollapsed = false;
+  Array.prototype.forEach.call(bodies, function(b){ if(b.style.display==='none') anyCollapsed = true; });
+  var collapse = !anyCollapsed;
+  if(!S.collapsedCats) S.collapsedCats = {};
+  Array.prototype.forEach.call(bodies, function(b){
+    var catId = b.id.replace('cat-body-','');
+    S.collapsedCats[catId] = collapse;
+    b.style.display = collapse ? 'none' : 'block';
+    var s = document.getElementById('cat-sec-'+catId);
+    var arrow = s && s.querySelector('.cat-sec-chevron');
+    if(arrow) arrow.style.transform = collapse ? 'rotate(-90deg)' : 'none';
+  });
+  saveState();
+}
 function setCatFilter(id){
+  if(S.activeCatFilter===id){ toggleAllCatSections(); return; }
   S.activeCatFilter = id;
   var bar = document.getElementById('cat-tabs-bar');
   if(bar){
@@ -3889,7 +4175,8 @@ function renderYoMain(){
     yoRowHTML('preferencias','⚙️','Preferencias', prefSub, false)+
     yoRowHTML('tema','🎨','Tema visual', currentThemeName, false)+
     yoRowHTML('categorias','🗂️','Categorías', catModeSub, false)+
-    yoRowHTML('periodos','📆','Períodos', periodsSub, true)
+    yoRowHTML('periodos','📆','Períodos', periodsSub, false)+
+    yoRowHTML('temporizador','⏱️','Temporizador', timerCfgSummary(), true)
   );
 
   // ── Avisos ────────────────────────────────────────────────────────────
@@ -3901,7 +4188,7 @@ function renderYoMain(){
   );
 
   // ── Ayuda ─────────────────────────────────────────────────────────────
-  html += yoSectionHTML('Ayuda', yoRowHTML('ayuda','💡','Ayuda y sugerencias', 'Tutorial, feedback', true));
+  html += yoSectionHTML('Ayuda', yoRowHTML('ayuda','💡','Ayuda y sugerencias', 'Tutorial, feedback', false)+yoRowHTML('faq','❓','Preguntas frecuentes', 'Cómo funciona cada cosa', true));
 
   // ── Datos y privacidad ────────────────────────────────────────────────
   html += yoSectionHTML('Datos', yoRowHTML('datos','🗄️','Datos y privacidad', 'Exportar, importar, restablecer', true));
@@ -3925,13 +4212,13 @@ function renderYoScreenWrap(screen){
   var titles = {
     perfil:'Perfil', plan:'Nivel de acceso', preferencias:'Preferencias',
     tema:'Tema visual', categorias:'Categorías', periodos:'Períodos', notificaciones:'Notificaciones', calendario:'Google Calendar',
-    estadisticas:'Estadísticas',
+    estadisticas:'Estadísticas', temporizador:'Temporizador', faq:'Preguntas frecuentes',
     ayuda:'Ayuda', datos:'Datos y privacidad'
   };
   var renderers = {
     perfil:renderYoPerfilScreen, plan:renderYoPlanScreen, preferencias:renderYoPreferenciasScreen,
     tema:renderYoTemaScreen, categorias:renderYoCategoriasScreen, periodos:renderYoPeriodosScreen, notificaciones:renderYoNotificacionesScreen, calendario:renderYoCalendarioScreen,
-    estadisticas:renderYoEstadisticasScreen,
+    estadisticas:renderYoEstadisticasScreen, temporizador:renderYoTemporizadorScreen, faq:renderYoFaqScreen,
     ayuda:renderYoAyudaScreen, datos:renderYoDatosScreen
   };
   if(!renderers[screen]){ S.yoScreen=null; return renderYoMain(); }
@@ -4040,8 +4327,8 @@ function renderYoPreferenciasScreen(){
       '<div style="height:1px;background:var(--line-soft);margin:14px -14px;"></div>'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
         '<div style="flex:1;">'+
-          '<div style="font-weight:600;font-size:13px;color:var(--ink);">Botón flotante para reiniciar</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">En Hoy, se habilita sábado y domingo para reiniciar todas tus tareas diarias de la semana y volver a ganar XP con ellas. Si lo apagas, desmarcas a mano una por una.</div>'+
+          '<div style="font-weight:600;font-size:13px;color:var(--ink);">Botón flotante para reiniciar'+infoBtn('resetfab')+'</div>'+
+          
         '</div>'+
         '<button class="tog" onclick="toggleSimpleModeFab()" style="background:'+(S.simpleModeFabReset!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
           '<span class="tok" style="left:'+(S.simpleModeFabReset!==false?22:2)+'px;"></span>'+
@@ -4072,8 +4359,8 @@ function renderYoPreferenciasScreen(){
   html += '<div class="card" style="margin-bottom:10px;">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);">🔊 Efectos de sonido</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Sonidos cortos al crear, completar o eliminar una tarea, marcar un ítem, cambiar de pestaña, activar interruptores, mantener la racha, o desbloquear un logro. Incluye una leve vibración en el celular.</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">🔊 Efectos de sonido'+infoBtn('sounds')+'</div>'+
+        
       '</div>'+
       '<button class="tog" id="sound-tog" onclick="toggleSound()" style="background:'+(S.soundOn!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
         '<span class="tok" style="left:'+(S.soundOn!==false?22:2)+'px;"></span>'+
@@ -4096,8 +4383,8 @@ function renderYoPreferenciasScreen(){
   html += '<div class="card" style="margin-bottom:10px;">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);">💬 Recordatorio de la semana</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">La franja de arriba en Hoy para escribir una frase o intención de la semana (o el aviso para agregarla si aún no tienes una).</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">💬 Recordatorio de la semana'+infoBtn('weekphrase')+'</div>'+
+        
       '</div>'+
       '<button class="tog" onclick="toggleShowWeeklyMessage()" style="background:'+(S.showWeeklyMessage!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
         '<span class="tok" style="left:'+(S.showWeeklyMessage!==false?22:2)+'px;"></span>'+
@@ -4186,7 +4473,7 @@ function setCatCollapseMode(mode){
 // Pedido: poder desactivar períodos (ej. semestral) que no se usan.
 function renderYoPeriodosScreen(){
   var periods = ['semana','mes','semestre','año'];
-  var html = '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px;">Desactiva los períodos que no uses — desaparecen de la pestaña Objetivos y de las opciones al vincular tareas. "Día" no se puede desactivar. Si ya tenías tareas en un período que desactivas, no se borran: solo quedan ocultas hasta que lo reactives.</div>';
+  var html = '<div style="display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px;">Períodos activos'+infoBtn('periods')+'</div>';
   html += '<div class="card" style="padding:4px 14px;">'+
     periods.map(function(p,i){
       var on = isPeriodEnabled(p);
@@ -4201,7 +4488,41 @@ function renderYoPeriodosScreen(){
       '</div>';
     }).join('')+
   '</div>';
+  html += renderAutoResetSection();
   return html;
+}
+// Yo → Períodos → "Reinicio automático" (no se muestra en modo simplificado,
+// donde el reinicio es siempre automático).
+function renderAutoResetSection(){
+  if(S.simpleMode) return '';
+  var rows = [
+    {p:'semana', when:'Cada lunes a las 4:00 (tareas diarias y de semana)'},
+    {p:'mes', when:'Al terminar la ventana de reinicio del mes (día 3 del mes siguiente)'},
+    {p:'semestre', when:'Al terminar la ventana de reinicio (11 de enero / 11 de julio)'},
+    {p:'año', when:'Al terminar la ventana de reinicio (16 de enero)'}
+  ].filter(function(r){return isPeriodEnabled(r.p);});
+  var html = '<div style="display:flex;align-items:center;font-size:14px;font-weight:700;color:var(--ink);margin:22px 0 10px;">Reinicio automático'+infoBtn('autoreset')+'</div>'+
+    '<div class="card" style="padding:4px 14px;">';
+  html += rows.map(function(r,i){
+    var on = autoResetEnabled(r.p);
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;'+(i<rows.length-1?'border-bottom:1px solid var(--line-soft);':'')+'">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">'+PL[r.p]+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">'+r.when+'</div>'+
+      '</div>'+
+      '<button class="tog" onclick="toggleAutoReset(\''+r.p+'\')" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(on?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>';
+  }).join('');
+  html += '</div>';
+  return html;
+}
+function toggleAutoReset(period){
+  if(!S.autoReset) S.autoReset = {};
+  S.autoReset[period] = S.autoReset[period]===false ? true : false;
+  saveState();
+  render();
 }
 function togglePeriodEnabled(period){
   if(!S.disabledPeriods) S.disabledPeriods = {};
@@ -4264,8 +4585,8 @@ function renderYoNotificacionesScreen(){
 
   // 3) Recordatorio de tareas (timing por defecto)
   html += '<div class="card" style="margin-bottom:10px;'+(notifOn?'':'opacity:.55;')+'">'+
-    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:2px;">🔔 Recordatorio de tareas</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Valor por defecto al activar "🔔 Recordatorio" en una tarea con horario — cada tarea puede después ajustar el suyo propio.</div>'+
+    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:2px;">🔔 Recordatorio de tareas'+infoBtn('notifdef')+'</div>'+
+    
     '<div id="notif-default-body">'+notifDefaultBodyHTML()+'</div>'+
   '</div>';
 
@@ -4273,8 +4594,8 @@ function renderYoNotificacionesScreen(){
   html += '<div class="card" style="margin-bottom:10px;'+(notifOn?'':'opacity:.55;')+'">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:'+(drr.on?14:0)+'px;">'+
       '<div style="flex:1;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);">📋 Revisión diaria</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Un aviso a la hora que elijas, en los días que elijas, para revisar tus tareas y tickear las que ya tengas listas.</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">📋 Revisión diaria'+infoBtn('dailyreview')+'</div>'+
+        
       '</div>'+
       '<button class="tog" onclick="toggleDailyReviewReminder()" style="background:'+(drr.on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
         '<span class="tok" style="left:'+(drr.on?22:2)+'px;"></span>'+
@@ -4506,6 +4827,8 @@ function renderYoEstadisticasScreen(){
     renderTodayByCategory()+
   '</div>';
 
+  html += renderLevelTracksStatsCard();
+
   return html;
 }
 
@@ -4521,6 +4844,76 @@ function renderYoAyudaScreen(){
       '<div style="font-size:11px;color:var(--muted);margin-top:1px;">'+l.sub+'</div></div>'+
       '<span style="font-size:18px;color:var(--muted);">›</span>'+
     '</button>';
+  });
+  return html;
+}
+
+// ── Yo → Preguntas frecuentes ──────────────────────────────────────────────
+// Reúne en un solo lugar las explicaciones que antes estaban repartidas como
+// texto largo en cada pantalla (ahora, en cada lugar, queda un ícono "i").
+function faqItems(){
+  var T = INFO_TIPS;
+  return [
+    ['Tareas', [
+      ['¿Qué es el "Tipo de meta"?', T.goal],
+      ['¿Qué significa "Cuándo"?', T.when],
+      ['¿Cómo se repite una tarea con fecha puntual?', T.repeat],
+      ['¿Para qué sirve la estrella (tarea crucial)?', T.crucial],
+      ['¿Cómo duplico, muevo o elimino una tarea?', 'Toca el ⋯ de la tarea: ahí puedes duplicarla (justo debajo, o a otro día), llevarla a otro día, añadirle un recordatorio o eliminarla.'],
+      ['¿Cómo cambio el orden de mis tareas y categorías?', 'En Hoy, toca "⇅ Reordenar" (arriba de la lista) y usa las flechas ▲▼: las categorías se ordenan entre sí y las tareas dentro de su categoría. Toca "✓ Listo" al terminar.'],
+      ['¿Para qué sirven los botones Todas / Pendientes / categorías?', 'Filtran la lista de Hoy. Si tocas de nuevo el que ya está activo, pliega o despliega todas sus secciones.']
+    ]],
+    ['Checklist y temporizador', [
+      ['¿Qué es "Con algunos alcanza"?', T.clrule],
+      ['¿Qué es el "Checklist único cada vez"?', T.clfresh],
+      ['¿Cómo funciona el temporizador?', T.timer],
+      ['¿Qué ajustes de sonido tiene el temporizador?', T.timercfg]
+    ]],
+    ['Reinicios y períodos', [
+      ['¿Cuándo se reinicia cada período?', 'Semana: cada lunes a las 4:00 (tareas diarias recurrentes y de semana; las "solo esta semana" desaparecen). Mes, semestre y año: al terminar su ventana de reinicio. Cada reinicio toca únicamente las tareas de su propio período.'],
+      ['¿Qué pasa si no reinicio a tiempo?', T.autoreset],
+      ['¿Para qué sirve desactivar períodos?', T.periods],
+      ['¿Qué hace el botón flotante de reinicio?', T.resetfab]
+    ]],
+    ['Niveles y logros', [
+      ['¿Qué son los seguimientos?', 'Niveles propios para algo específico (ej. "Deporte"): suben con las tareas de una categoría o las que tú elijas. Cada nivel tiene su figura, que se va llenando de color y cambia a una más compleja al subir. Puedes renombrar los niveles. Cupos: 1 en el plan gratuito, 3 con acceso completo, y +1 al llegar al nivel 8 y +1 con la medalla "Cima constante".'],
+      ['¿Para qué sirven los efectos de sonido?', T.sounds]
+    ]],
+    ['Modos y plantillas', [
+      ['¿Qué hace el modo enfoque?', T.modohf],
+      ['¿Qué es el modo de baja energía?', T.modebaja],
+      ['¿Y si solo quiero bajar el ritmo?', T.modebaja2],
+      ['¿Qué pasa con los días de fin de semana en un modo?', T.modeweek],
+      ['¿Cómo funciona la plantilla asociada a un modo?', T.tplauto],
+      ['¿Qué pasa al aplicar una plantilla?', T.tplreplace],
+      ['¿Los mensajes de apoyo de un modo se pueden editar u ocultar?', T.modefixed+' '+T.hidehelp]
+    ]],
+    ['Categorías y vínculos', [
+      ['¿Para qué sirven las categorías?', T.cats],
+      ['¿Cómo vinculo una tarea a otra?', T.linkup],
+      ['¿Y si la tarea tiene checklist?', T.linkcl],
+      ['¿Qué son las conexiones de un proyecto?', T.projlinks]
+    ]],
+    ['Avisos', [
+      ['¿Cómo funcionan los recordatorios de tareas?', T.notifdef],
+      ['¿Qué es la revisión diaria?', T.dailyreview],
+      ['¿Qué es el recordatorio de la semana?', T.weekphrase],
+      ['¿Me avisa de todas mis tareas?', T.notifonly]
+    ]]
+  ];
+}
+function renderYoFaqScreen(){
+  var html = '';
+  faqItems().forEach(function(sec){
+    html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 8px;">'+esc(sec[0])+'</div>'+
+      '<div class="card" style="padding:2px 14px;">';
+    sec[1].forEach(function(qa, i){
+      html += '<details class="faq"'+(i<sec[1].length-1?' style="border-bottom:1px solid var(--line-soft);"':'')+'>'+
+        '<summary>'+esc(qa[0])+'</summary>'+
+        '<div class="faq-a">'+esc(qa[1])+'</div>'+
+      '</details>';
+    });
+    html += '</div>';
   });
   return html;
 }
@@ -6051,7 +6444,7 @@ function exportGanttXLSX(pid){
 function buildConexionesView(p){
   var sections=p.sections||[];
   var html='<div style="padding:16px 16px 80px;">';
-  html+='<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Conecta las tareas del proyecto con tus objetivos o tareas diarias. Al completar el objetivo, el % de la tarea se actualiza.</div>';
+  html+='<div style="display:flex;align-items:center;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:12px;">Conexiones'+infoBtn('projlinks')+'</div>';
   sections.forEach(function(s,si){
     var allNodes=flattenForConexiones(s.tasks||[],(si+1)+'.');
     if(!allNodes.length)return;
@@ -6406,7 +6799,8 @@ function askResetToday(){
 function doResetToday(){
   S.tasks = S.tasks.map(function(t){
     if(t.period!=='dia' || t.date) return t; // solo recurrentes — las puntuales no se tocan
-    return Object.assign({},t,{done:false,prog:0,checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false});})});
+    var clr = resetChecklistForCycle(t); // mismo reinicio (incluye prog de ítems) que el resto de los reinicios
+    return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
   });
   S.tasks.filter(function(t){return t.period==='dia' && !t.date;}).forEach(function(t){
     if(S.rewardedTaskIds) delete S.rewardedTaskIds[t.id];
@@ -6670,8 +7064,8 @@ function openCategoryManager(){
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
       '<span class="serif" style="font-weight:700;font-size:20px;">Categorías</span>'+
       '<button onclick="removeOverlay(\'cat-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
-    '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Organiza tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.</div>'+
+    ''+infoBtn('cats')+'</div>'+
+    
     listHTML+
     '<button onclick="newCategory()" style="background:none;border:1.5px dashed var(--accent);color:var(--accent);border-radius:10px;width:100%;padding:10px;font-size:13px;font-weight:600;margin-top:8px;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva categoría</button>'+
     '<button onclick="removeOverlay(\'cat-modal\')" style="width:100%;background:var(--line);color:var(--muted);border:none;border-radius:10px;padding:10px;font-size:13px;margin-top:8px;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
@@ -6687,7 +7081,14 @@ function taskHTML(t,showPeriod){
   if(SEL.active && SEL.type==='tasks') return taskHTMLSelectable(t,showPeriod);
   var done=isDone(t),r=tRatio(t);
   var hasQty=(t.qty||1)>1,hasCL=t.checklist&&t.checklist.length>0;
+  var hasTimer = !!(t.hasTimer && t.timer && t.timer.sets && t.timer.sets.length);
   var clDone=hasCL?t.checklist.filter(function(i){return i.done;}).length:0;
+  // Pedido: si el checklist usa la regla "con algunos alcanza" (K de N), el
+  // contador de la fila muestra "hechos/K" en vez de "hechos/N total" —
+  // así se ve de un vistazo cuánto falta para la meta real, no cuánto falta
+  // para marcar TODO.
+  var clKofN = hasCL && t.clRule && t.clRule.mode==='kofn';
+  var clGoal = clKofN ? Math.max(1,Math.min(t.clRule.k||1,t.checklist.length)) : (hasCL?t.checklist.length:0);
   var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:700;color:var(--accent);">'+(t.prog||0)+'</span>':(r>0&&hasCL?'<span style="font-size:7px;font-weight:700;color:var(--accent);">'+clDone+'</span>':''));
   // Pedido: las tareas con cantidad usan la misma casilla cuadrada
   // redondeada que el resto (antes eran un círculo aparte, sin motivo para
@@ -6748,11 +7149,15 @@ function taskHTML(t,showPeriod){
           // círculo repetidas veces) — útil cuando la meta es un número
           // grande, ej. una meta de 100.
           (hasQty?'<input type="number" inputmode="numeric" min="0" max="'+t.qty+'" value="'+(t.prog||0)+'" onclick="event.stopPropagation()" onchange="event.stopPropagation();setTaskProg(\''+t.id+'\',this.value)" style="width:22px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:11px;font-weight:700;color:var(--muted);font-family:Inter,sans-serif;padding:0;flex-shrink:0;"/><span style="font-size:11px;color:var(--muted);flex-shrink:0;">/'+t.qty+'</span>':'')+
-          (hasCL?'<span onclick="event.stopPropagation();openCLSheet(\''+t.id+'\')" title="Abrir checklist" style="font-size:11px;color:var(--muted);flex-shrink:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">'+clDone+'/'+t.checklist.length+'</span>':'')+
+          (hasCL?'<span onclick="event.stopPropagation();openCLSheet(\''+t.id+'\')" title="'+(clKofN?('Con '+clGoal+' de '+t.checklist.length+' alcanza — abrir checklist'):'Abrir checklist')+'" style="font-size:11px;color:var(--muted);flex-shrink:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">'+clDone+'/'+clGoal+(clKofN?' ✦':'')+'</span>':'')+
         '</div>'+
         ((hasQty||hasCL)?mpHTML(r):'')+tagHTML+
       '</div>'+
       (hasCL?'<button onclick="expCL(\''+t.id+'\')" id="exp-'+t.id+'" style="background:none;border:none;color:var(--muted);font-size:14px;padding:0 3px;flex-shrink:0;transition:transform .2s;transform:'+(clIsOpen?'rotate(180deg)':'none')+';">▾</button>':'')+
+      // Botón de temporizador (pedido): abre la pantalla de ejecución con
+      // sets/descansos. La casilla de la izquierda sigue funcionando normal
+      // para marcarla a mano, sin usar el temporizador — no son excluyentes.
+      (hasTimer?'<button onclick="event.stopPropagation();openTimerRun(\''+t.id+'\')" title="Iniciar temporizador" style="background:var(--accent);border:none;color:#fff;font-size:12px;padding:0;width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">▶</button>':'')+
       // Botón editar — visible directo
       '<button onclick="openEdit(\''+t.id+'\')" title="Editar" style="background:none;border:none;color:var(--muted);font-size:15px;padding:0 4px;flex-shrink:0;line-height:1;">✎</button>'+
       // Botón vincular — pedido: ahora se puede vincular con tareas del
@@ -6820,6 +7225,10 @@ function openTaskMenu(id, event){
     });
     items.push({divider:true});
     // Duplicar — ícono de dos hojas superpuestas
+    items.push({
+      icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1" y="3" width="9" height="10" rx="1.5"/><path d="M4 3V2a1 1 0 011-1h6a1 1 0 011 1v8a1 1 0 01-1 1h-1"/></svg>',
+      label:'Duplicar', action:'duplicateTaskSameDay(\''+id+'\')'
+    });
     items.push({
       icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="1" y="3" width="9" height="10" rx="1.5"/><path d="M4 3V2a1 1 0 011-1h6a1 1 0 011 1v8a1 1 0 01-1 1h-1"/></svg>',
       label:'Duplicar al día siguiente', action:'duplicateTaskToNextDay(\''+id+'\')'
@@ -6964,8 +7373,8 @@ function openCLSourcePicker(taskId){
   sheet.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
       '<span class="serif" style="font-weight:700;font-size:19px;">Vincular</span>'+
       '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
-    '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes ir y volver para vincular varios, sin cerrar esta hoja).</div>'+
+    ''+infoBtn('linkcl')+'</div>'+
+    
     wholeRow+
     rows+
     '<button class="cbtn" style="width:100%;margin-top:6px;" onclick="closeLinkPicker()">Cerrar</button>';
@@ -7052,8 +7461,8 @@ function openLinkTargetPicker(taskId, sourceItemId){
       (hasBack?'<button onclick="openCLSourcePicker(\''+taskId+'\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:0 6px 0 0;line-height:1;">‹</button>':'')+
       '<span class="serif" style="font-weight:700;font-size:19px;flex:1;">Vincular con…</span>'+
       '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
-    '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Al avanzar acá, avanzará automáticamente allá — puedes elegir varias tareas superiores a la vez y la meta de cada destino se recalcula sola.</div>'+
+    ''+infoBtn('linkup')+'</div>'+
+    
     modeBar+
     summary+
     body+
@@ -7202,7 +7611,7 @@ function toggleCatSection(catId){
   if(body) body.style.display = nowCollapsed ? 'none' : 'block';
   // Rotar flecha
   if(sec){
-    var arrow = sec.querySelector('div[style*="rotate"]');
+    var arrow = sec.querySelector('.cat-sec-chevron');
     if(arrow) arrow.style.transform = nowCollapsed ? 'rotate(-90deg)' : 'rotate(0)';
   }
 }
@@ -7250,6 +7659,17 @@ function moveTaskToDay(id){
   });
 }
 
+// Copia justo debajo de la original, en el mismo día (y misma categoría), sin
+// marcar y con el checklist limpio; se puede editar/renombrar después.
+function duplicateTaskSameDay(id){
+  var t = S.tasks.find(function(x){return x.id===id;}); if(!t) return;
+  var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), done:false, prog:0, text:t.text+' (copia)'});
+  copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false,prog:0});});
+  var idx = S.tasks.findIndex(function(x){return x.id===id;});
+  S.tasks.splice(idx+1, 0, copy);
+  saveState(); render();
+  toast('⊕ Tarea duplicada');
+}
 function duplicateTaskToNextDay(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
@@ -7647,17 +8067,7 @@ function confirmReset(){
 }
 
 function doPeriodReset(period){
-  S.tasks = S.tasks.map(function(t){
-    if(t.period===period){
-      var clr = resetChecklistForCycle(t);
-      return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
-    }
-    return t;
-  });
-  // Limpiar rewardedTaskIds de las tareas reseteadas
-  S.tasks.filter(function(t){return t.period===period;}).forEach(function(t){
-    delete S.rewardedTaskIds[t.id];
-  });
+  resetTasksOfPeriod(period);
   saveState();render();
   toast('✓ Tareas de '+PL[period].toLowerCase()+' reiniciadas');
 }
@@ -7720,6 +8130,752 @@ function renderObjetivosSwipeArea(){
     (mine.length?'<button class="addtbtn" onclick="openNew(\''+sel+'\')">+ Agregar tarea</button>':'');
 }
 
+// ── Seguimientos de nivel personalizados: UI ────────────────────────────────
+// Pedido: en vez de reusar el color de nivel general, el color de cada
+// seguimiento sale del color de SU categoría (si sigue una), o de la misma
+// paleta que usan las categorías (para que "combine" visualmente aunque el
+// seguimiento no siga ninguna categoría en particular) — el usuario también
+// puede elegir uno explícito desde el editor (track.color).
+function levelTrackColor(track, idx){
+  if(track.color) return track.color;
+  if(track.source && track.source.type==='category'){
+    var cat = (S.categories||[]).find(function(c){return c.id===track.source.categoryId;});
+    if(cat) return cat.color;
+  }
+  return CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+}
+function levelTrackSourceLabel(track){
+  if(!track.source) return '';
+  if(track.source.type==='category'){
+    var cat=(S.categories||[]).find(function(c){return c.id===track.source.categoryId;});
+    return cat?('Categoría: '+cat.name):'Categoría eliminada';
+  }
+  var n=(track.source.taskIds||[]).length;
+  return n+' tarea'+(n===1?'':'s')+' elegida'+(n===1?'':'s');
+}
+// ── Nombres de nivel "prototípicos" para seguimientos personalizados ────────
+// A diferencia del nivel general (con nombres fijos y temáticos), acá se usa
+// una escala genérica de maestría que sirve para cualquier cosa que el
+// usuario decida seguir (Deporte, Estudio, lo que sea) — y es 100%
+// personalizable por seguimiento (track.levelNames), así que estos son solo
+// el punto de partida por defecto.
+var TRACK_LEVEL_NAMES_DEFAULT = ['Iniciado','Aprendiz','Practicante','Competente','Adepto','Experto','Maestro','Gran Maestro','Leyenda','Mítico'];
+function _toRoman(n){
+  var map=[[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']], res='';
+  map.forEach(function(m){ while(n>=m[0]){res+=m[1]; n-=m[0];} });
+  return res;
+}
+function trackLevelName(track, lvl){
+  if(track && track.levelNames && track.levelNames[lvl]) return track.levelNames[lvl];
+  var base = TRACK_LEVEL_NAMES_DEFAULT[(lvl-1)%TRACK_LEVEL_NAMES_DEFAULT.length];
+  var cycle = Math.floor((lvl-1)/TRACK_LEVEL_NAMES_DEFAULT.length);
+  return cycle>0 ? base+' '+_toRoman(cycle+1) : base;
+}
+// ── La "gema" de cada seguimiento: una figura geométrica que se vuelve más
+// compleja e intrincada a cada nivel (más lados + facetas internas + una
+// estrella interior desde nivel 6), y que se va RELLENANDO de su color desde
+// abajo a medida que sube el XP dentro del nivel — como un líquido que sube
+// hasta completar la figura de un color radiante; al subir de nivel, pasa a
+// una figura nueva, más compleja, y empieza a llenarse de nuevo.
+function trackGemPath(level){
+  var sides = Math.max(3, Math.min(3+Math.floor((level-1)*0.9), 12));
+  var cx=50, cy=50, R=40;
+  var pts=[];
+  for(var i=0;i<sides;i++){
+    var a=-Math.PI/2 + i*2*Math.PI/sides;
+    pts.push([+(cx+R*Math.cos(a)).toFixed(2), +(cy+R*Math.sin(a)).toFixed(2)]);
+  }
+  var outer='M'+pts.map(function(p){return p[0]+','+p[1];}).join('L')+'Z';
+  var facets='';
+  if(level>=2){
+    pts.forEach(function(p){ facets+='M'+cx+','+cy+'L'+p[0]+','+p[1]+' '; });
+  }
+  var innerStar='';
+  if(level>=6){
+    var innerR=R*0.48, ip=[];
+    for(var j=0;j<sides;j++){
+      var ia=-Math.PI/2+Math.PI/sides+j*2*Math.PI/sides;
+      ip.push([+(cx+innerR*Math.cos(ia)).toFixed(2), +(cy+innerR*Math.sin(ia)).toFixed(2)]);
+    }
+    innerStar='M'+ip.map(function(p){return p[0]+','+p[1];}).join('L')+'Z';
+  }
+  return {outer:outer, facets:facets, innerStar:innerStar};
+}
+var _trackGemSeq=0;
+function levelTrackGemHTML(track, idx, size){
+  size = size||44;
+  var info = lvlInfo(track.xp||0);
+  var col = levelTrackColor(track, idx);
+  var shape = trackGemPath(info.lvl);
+  var clipId = 'tgclip'+String(track.id||'x').replace(/[^a-zA-Z0-9]/g,'')+(_trackGemSeq++);
+  var fillY = 100-(info.ratio*100);
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 100 100" style="flex-shrink:0;overflow:visible;">'+
+    '<defs><clipPath id="'+clipId+'"><path d="'+shape.outer+'"/></clipPath></defs>'+
+    '<path d="'+shape.outer+'" fill="'+col+'" opacity=".14"/>'+
+    (shape.innerStar?'<path d="'+shape.innerStar+'" fill="'+col+'" opacity=".1"/>':'')+
+    (shape.facets?'<path d="'+shape.facets+'" stroke="'+col+'" stroke-width=".6" opacity=".22" fill="none"/>':'')+
+    '<g clip-path="url(#'+clipId+')">'+
+      '<rect x="0" y="'+fillY.toFixed(2)+'" width="100" height="'+(100-fillY).toFixed(2)+'" fill="'+col+'" style="transition:y .6s ease-out,height .6s ease-out;"/>'+
+    '</g>'+
+    '<path d="'+shape.outer+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round"/>'+
+    (shape.facets?'<path d="'+shape.facets+'" stroke="'+col+'" stroke-width=".8" opacity=".5" fill="none"/>':'')+
+  '</svg>';
+}
+function levelTrackCardHTML(track, idx, editable){
+  var info = lvlInfo(track.xp||0);
+  return '<div '+(editable?'onclick="openTrackEditor(\''+track.id+'\')"':'')+' style="display:flex;align-items:center;gap:12px;padding:9px 2px;'+(editable?'cursor:pointer;':'')+'">'+
+    levelTrackGemHTML(track, idx, 42)+
+    '<div style="flex:1;min-width:0;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Nivel '+info.lvl+' · '+esc(trackLevelName(track,info.lvl))+'</div>'+
+      '<div style="font-size:10.5px;color:var(--muted-soft);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+levelTrackSourceLabel(track)+'</div>'+
+    '</div>'+
+    '<div style="text-align:right;flex-shrink:0;">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--ink-soft);">'+(track.xp||0)+' XP</div>'+
+    '</div>'+
+    (editable?'<span style="font-size:16px;color:var(--muted);flex-shrink:0;">›</span>':'')+
+  '</div>';
+}
+// Tarjeta para Plan → Progreso: con gestión (crear/editar/borrar).
+function renderLevelTracksSection(){
+  var tracks = S.levelTracks||[];
+  var maxSlots = maxLevelTrackSlots();
+  var html = '<div class="card" style="margin-bottom:14px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:'+(tracks.length?4:2)+'px;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);">🎯 Seguimientos</div>'+
+      '<div style="font-size:11px;color:var(--muted);">'+tracks.length+'/'+maxSlots+'</div>'+
+    '</div>';
+  if(tracks.length){
+    html += tracks.map(function(t,i){return levelTrackCardHTML(t,i,true);}).join('<div style="height:1px;background:var(--line-soft);margin:0 2px;"></div>');
+  } else {
+    html += '<div style="font-size:12px;color:var(--muted);line-height:1.5;padding:6px 2px 10px;">Crea un seguimiento para subir de nivel en algo específico — por ejemplo "Deporte" — con todas las tareas de una categoría, o eligiendo tú mismo cuáles cuentan.</div>';
+  }
+  if(tracks.length < maxSlots){
+    html += '<button onclick="openTrackEditor(null)" style="width:100%;margin-top:'+(tracks.length?10:0)+'px;background:var(--bg);border:1.5px dashed var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">+ Nuevo seguimiento</button>';
+  } else {
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.45;">Llegaste al máximo de tu plan'+(isPremium()?'':' gratuito')+' ('+maxSlots+'). '+(isPremium()?'':'Con acceso completo son hasta 3, y ')+'nivel 8 o la medalla 🏔️ "Cima constante" dan +1 cupo cada uno.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+// Tarjeta de solo lectura para Yo → Estadísticas.
+function renderLevelTracksStatsCard(){
+  var tracks = S.levelTracks||[];
+  if(!tracks.length) return '';
+  return '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:6px;">🎯 Seguimientos</div>'+
+    tracks.map(function(t,i){return levelTrackCardHTML(t,i,false);}).join('<div style="height:1px;background:var(--line-soft);margin:0 2px;"></div>')+
+    '<div style="font-size:11px;color:var(--accent);margin-top:8px;cursor:pointer;font-weight:600;" onclick="setTab(\'progreso\')">Gestionar en Progreso ›</div>'+
+  '</div>';
+}
+function openTrackEditor(trackId){
+  var isNew = !trackId;
+  if(isNew && (S.levelTracks||[]).length >= maxLevelTrackSlots()){
+    showInfoModal('Límite de seguimientos','Ya tienes el máximo de seguimientos para tu plan actual. Sube de nivel, consigue la medalla correspondiente, o pásate a acceso completo para desbloquear más cupos.','Entendido');
+    return;
+  }
+  var firstCat = (S.categories||[])[0];
+  var track = isNew
+    ? {id:uid(), name:'', source:{type:'category', categoryId:firstCat?firstCat.id:null}, xp:0}
+    : JSON.parse(JSON.stringify((S.levelTracks||[]).find(function(t){return t.id===trackId;})||{}));
+  TE = {isNew:isNew, track:track};
+  showTrackEditorModal();
+}
+function trackEditorBodyHTML(){
+  var t = TE.track;
+  var isManual = t.source && t.source.type==='manual';
+  var info = lvlInfo(t.xp||0);
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
+      '<span class="serif" style="font-weight:700;font-size:18px;">'+(TE.isNew?'Nuevo seguimiento':'Editar seguimiento')+'</span>'+
+      '<button onclick="removeOverlay(\'track-editor\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;">'+
+      levelTrackGemHTML(t, 0, 84)+
+      '<div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:6px;">Nivel '+info.lvl+' · '+esc(trackLevelName(t,info.lvl))+'</div>'+
+      (TE.isNew?'<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">Así se ve tu seguimiento — se va llenando de color con el XP.</div>':'')+
+    '</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Nombre</div>'+
+    '<input id="te-name" class="finp" type="text" placeholder="Ej: Deporte" value="'+esc(t.name||'')+'" oninput="TE.track.name=this.value;" style="margin-bottom:16px;"/>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">¿Qué cuenta para subir de nivel acá?</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
+      '<button type="button" onclick="teSetSourceType(\'category\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(!isManual?'var(--accent)':'var(--line)')+';background:'+(!isManual?'var(--accent)':'var(--paper)')+';color:'+(!isManual?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Por categoría</button>'+
+      '<button type="button" onclick="teSetSourceType(\'manual\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(isManual?'var(--accent)':'var(--line)')+';background:'+(isManual?'var(--accent)':'var(--paper)')+';color:'+(isManual?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Tareas elegidas a mano</button>'+
+    '</div>'+
+    '<div id="te-source-area">'+teSourceAreaHTML()+'</div>'+
+    teColorAreaHTML()+
+    teLevelNamesAreaHTML()+
+    '<div style="display:flex;gap:8px;margin-top:20px;">'+
+      (TE.isNew?'':'<button onclick="confirmDeleteTrack(\''+t.id+'\')" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+
+      '<button onclick="saveTrackEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button>'+
+    '</div>';
+}
+// Color del seguimiento: por defecto sigue el color de su categoría (si
+// sigue una); el círculo con el degradé representa esa opción ("automático").
+// El resto son la misma paleta que usan las categorías, para que combine.
+function teColorAreaHTML(){
+  var t = TE.track;
+  var isManual = t.source && t.source.type==='manual';
+  var usingAuto = !t.color;
+  var html = '<div style="margin-top:16px;">'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Color</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  if(!isManual){
+    html += '<button type="button" onclick="teSetColor(null)" title="Automático: color de la categoría" style="width:28px;height:28px;border-radius:50%;border:'+(usingAuto?'3px solid var(--ink)':'2px solid var(--line)')+';background:conic-gradient(from 0deg,'+CATEGORY_COLORS.join(',')+');cursor:pointer;padding:0;"></button>';
+  }
+  html += CATEGORY_COLORS.map(function(c){
+    var active = t.color===c;
+    return '<button type="button" onclick="teSetColor(\''+c+'\')" style="width:28px;height:28px;border-radius:50%;border:'+(active?'3px solid var(--ink)':'2px solid transparent')+';background:'+c+';cursor:pointer;padding:0;"></button>';
+  }).join('');
+  html += '</div></div>';
+  return html;
+}
+function teSetColor(color){
+  TE.track.color = color;
+  teRerender();
+}
+// Personalización de nombres de nivel (pedido): los de acá son solo el punto
+// de partida (TRACK_LEVEL_NAMES_DEFAULT) — cualquier nivel se puede renombrar;
+// vacío = usa el nombre por defecto (se ve como placeholder).
+function teLevelNamesAreaHTML(){
+  var t = TE.track;
+  var open = !!TE._namesOpen;
+  var html = '<div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line-soft);">'+
+    '<button type="button" onclick="teToggleNamesArea()" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:0;cursor:pointer;font-family:Inter,sans-serif;">'+
+      '<span style="font-size:12.5px;font-weight:700;color:var(--ink);">Personalizar nombres de nivel</span>'+
+      '<span style="font-size:13px;color:var(--muted);transform:'+(open?'rotate(180deg)':'none')+';display:inline-block;">⌄</span>'+
+    '</button>';
+  if(open){
+    html += '<div style="margin-top:10px;max-height:210px;overflow-y:auto;">';
+    for(var lvl=1; lvl<=12; lvl++){
+      var custom = (t.levelNames&&t.levelNames[lvl])||'';
+      var def = trackLevelName(t, lvl);
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'+
+        '<span style="font-size:11px;color:var(--muted);width:16px;flex-shrink:0;text-align:right;">'+lvl+'</span>'+
+        '<input type="text" placeholder="'+esc(def)+'" value="'+esc(custom)+'" oninput="teSetLevelName('+lvl+',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:5px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+      '</div>';
+    }
+    html += '</div><div style="font-size:10.5px;color:var(--muted);margin-top:2px;">Deja vacío para usar el nombre por defecto.</div>';
+  }
+  html += '</div>';
+  return html;
+}
+function teToggleNamesArea(){ TE._namesOpen = !TE._namesOpen; teRerender(); }
+function teSetLevelName(lvl, val){
+  if(!TE.track.levelNames) TE.track.levelNames={};
+  val = (val||'').trim();
+  if(val) TE.track.levelNames[lvl]=val; else delete TE.track.levelNames[lvl];
+}
+function teSourceAreaHTML(){
+  var t = TE.track;
+  var isManual = t.source && t.source.type==='manual';
+  if(!isManual){
+    var cats = S.categories||[];
+    if(!cats.length) return '<div style="font-size:12px;color:var(--muted);line-height:1.5;">No tienes categorías creadas todavía. Crea una en Yo → Categorías, o elige "Tareas elegidas a mano".</div>';
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+cats.map(function(c){
+      var active = t.source && t.source.categoryId===c.id;
+      return '<button type="button" onclick="teSetCategory(\''+c.id+'\')" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(active?c.color:'var(--line)')+';background:'+(active?(c.color+'22'):'var(--paper)')+';color:'+(active?c.color:'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
+    }).join('')+'</div>';
+  }
+  var periodNames = {dia:'Día',semana:'Semana',mes:'Mes',semestre:'Semestre','año':'Año'};
+  var tasks = (S.tasks||[]).slice().sort(function(a,b){return (a.text||'').localeCompare(b.text||'');});
+  if(!tasks.length) return '<div style="font-size:12px;color:var(--muted);">No tienes tareas todavía.</div>';
+  var selected = (t.source&&t.source.taskIds)||[];
+  return '<div style="max-height:220px;overflow-y:auto;border:1px solid var(--line-soft);border-radius:10px;">'+
+    tasks.map(function(tk){
+      var checked = selected.indexOf(tk.id)!==-1;
+      return '<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;">'+
+        '<input type="checkbox" onchange="teToggleTask(\''+tk.id+'\')" '+(checked?'checked':'')+' style="width:17px;height:17px;flex-shrink:0;accent-color:var(--accent);"/>'+
+        '<span style="font-size:13px;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(tk.text||'(sin nombre)')+'</span>'+
+        '<span style="font-size:10px;color:var(--muted);flex-shrink:0;">'+(periodNames[tk.period]||tk.period)+'</span>'+
+      '</label>';
+    }).join('')+
+  '</div>'+
+  '<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+selected.length+' tarea'+(selected.length===1?'':'s')+' elegida'+(selected.length===1?'':'s')+'.</div>';
+}
+function showTrackEditorModal(){
+  removeOverlay('track-editor');
+  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='track-editor';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('track-editor');});
+  overlay.innerHTML = '<div class="sheet" id="te-sheet">'+trackEditorBodyHTML()+'</div>';
+  document.body.appendChild(overlay);
+}
+// Reemplaza SOLO el contenido interno del sheet (nunca recrea el overlay):
+// removeOverlay() es async (fade-out de 180ms), así que volver a llamar a
+// showTrackEditorModal() en cada cambio dejaría, por un instante, dos
+// overlays #track-editor superpuestos con ids duplicados — el mismo
+// problema que ya se evitó en openNewEvent().
+function teRerender(){
+  var sheet = document.getElementById('te-sheet');
+  if(sheet) sheet.innerHTML = trackEditorBodyHTML();
+}
+function teSetSourceType(type){
+  if(type==='category'){
+    var firstCat = (S.categories||[])[0];
+    var curCatId = (TE.track.source&&TE.track.source.type==='category')?TE.track.source.categoryId:null;
+    TE.track.source = {type:'category', categoryId: curCatId || (firstCat?firstCat.id:null)};
+  } else {
+    var curIds = (TE.track.source&&TE.track.source.type==='manual')?TE.track.source.taskIds:[];
+    TE.track.source = {type:'manual', taskIds: curIds||[]};
+  }
+  teRerender();
+  playSound('toggle');
+}
+function teSetCategory(catId){
+  TE.track.source = {type:'category', categoryId:catId};
+  teRerender();
+}
+function teToggleTask(taskId){
+  if(!TE.track.source || TE.track.source.type!=='manual') TE.track.source={type:'manual',taskIds:[]};
+  var ids = (TE.track.source.taskIds||[]).slice();
+  var idx = ids.indexOf(taskId);
+  if(idx===-1) ids.push(taskId); else ids.splice(idx,1);
+  TE.track.source.taskIds = ids;
+  teRerender();
+}
+function saveTrackEditor(){
+  var nameInp = document.getElementById('te-name');
+  var name = (nameInp?nameInp.value:TE.track.name||'').trim();
+  if(!name){ toast('Ponle un nombre al seguimiento'); return; }
+  var src = TE.track.source;
+  if(!src || (src.type==='category' && !src.categoryId) || (src.type==='manual' && !(src.taskIds||[]).length)){
+    toast('Elige una categoría o al menos una tarea'); return;
+  }
+  TE.track.name = name;
+  if(!S.levelTracks) S.levelTracks=[];
+  if(TE.isNew){
+    S.levelTracks.push(TE.track);
+  } else {
+    S.levelTracks = S.levelTracks.map(function(t){return t.id===TE.track.id?TE.track:t;});
+  }
+  saveState();
+  removeOverlay('track-editor');
+  render();
+  toast('✓ Seguimiento guardado');
+}
+function confirmDeleteTrack(id){
+  var track = (S.levelTracks||[]).find(function(t){return t.id===id;});
+  if(!track) return;
+  var box = document.createElement('div');
+  box.className = 'conf-box';
+  box.innerHTML = '<div class="conf-inner">'+
+    '<div style="text-align:center;margin-bottom:14px;">'+
+      '<div style="font-size:38px;margin-bottom:8px;">🗑️</div>'+
+      '<div class="serif" style="font-weight:800;font-size:17px;color:var(--ink);">¿Eliminar "'+esc(track.name)+'"?</div>'+
+    '</div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">Se pierde todo el progreso de este seguimiento (Nivel '+lvlInfo(track.xp||0).lvl+'). No afecta tus tareas.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button onclick="this.closest(\'.conf-box\').remove();deleteTrack(\''+id+'\');" style="flex:1;background:var(--bad);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>'+
+      '<button onclick="this.closest(\'.conf-box\').remove()" style="flex:1;background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Cancelar</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(box);
+}
+function deleteTrack(id){
+  S.levelTracks = (S.levelTracks||[]).filter(function(t){return t.id!==id;});
+  saveState();
+  removeOverlay('track-editor');
+  render();
+}
+// ── Motor del temporizador de sets/repeticiones/descansos (pedido) ─────────
+// Notas de diseño, para quien retome esto:
+// - Usa su PROPIO AudioContext (_timerGetCtx), separado del _sndCtx general
+//   de la app — así pausar el temporizador (ctx.suspend()) no silencia ni
+//   traba el resto de los sonidos de la app mientras tanto.
+// - Los sonidos se PROGRAMAN de antemano contra el reloj del AudioContext
+//   (osc.start(tiempoFuturo)), no con setTimeout/setInterval — esa es la
+//   diferencia real para que sigan sonando si el usuario cambia de pestaña
+//   o app (ej. para poner música): el hardware de audio programado no se ve
+//   afectado por el throttling que los navegadores aplican a los timers de
+//   JS en segundo plano. Eso sí, esto depende de que el navegador no
+//   descargue/congele la pestaña por completo (fuera de nuestro control,
+//   pero instalarla como app / PWA ayuda bastante).
+// - Pausar = ctx.suspend() (congela TODO el audio programado sin perder los
+//   tiempos relativos); reanudar = ctx.resume(). Saltar de tramo cancela lo
+//   pendiente y reprograma desde un nuevo "origen" virtual.
+// - La cuenta regresiva visual se calcula siempre desde ctx.currentTime -
+//   TR.audioStartCtxTime (nunca contando "ticks"), así que es inmune a que
+//   el setInterval de refresco se atrase.
+var TR = null; // estado de la sesión de temporizador en curso (null = ninguna)
+var _timerCtx = null;
+function _timerGetCtx(){
+  if(_timerCtx) return _timerCtx;
+  try{
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    _timerCtx = new AC();
+  }catch(e){ return null; }
+  return _timerCtx;
+}
+// Config por ejercicio (todo opcional; sin nada, se comporta como antes):
+//  · set.reps      → cuántas veces seguidas se repite ESE ejercicio cada vez que le toca
+//  · set.restReps  → descanso entre esas repeticiones (null = el descanso general entre ejercicios)
+//  · set.restAfter → descanso al terminar el ejercicio, antes del siguiente ejercicio — o, si es el
+//                    último de la vuelta, antes de la vuelta siguiente (null = el general que corresponda)
+function buildTimerSteps(timer){
+  var steps = [];
+  var sets = timer.sets;
+  for(var r=0; r<timer.rounds; r++){
+    sets.forEach(function(set, i){
+      var reps = Math.max(1, set.reps||1);
+      var restReps = (set.restReps==null) ? (timer.restBetween||0) : set.restReps;
+      var isLastSet = i===sets.length-1, isLastRound = r===timer.rounds-1;
+      var name = set.name||('Ejercicio '+(i+1));
+      var color = set.color||CATEGORY_COLORS[i%CATEGORY_COLORS.length];
+      for(var k=1; k<=reps; k++){
+        steps.push({type:'work', name:name, sec:Math.max(1,set.sec||30), color:color, round:r+1, totalRounds:timer.rounds, rep:k, reps:reps});
+        if(k<reps){
+          if(restReps>0) steps.push({type:'rest', name:'Descanso', sec:restReps, round:r+1, totalRounds:timer.rounds});
+        } else if(!isLastSet){
+          var ra = (set.restAfter==null) ? (timer.restBetween||0) : set.restAfter;
+          if(ra>0) steps.push({type:'rest', name:'Descanso', sec:ra, round:r+1, totalRounds:timer.rounds});
+        } else if(!isLastRound){
+          var rr = (set.restAfter==null) ? (timer.restBetweenRounds||0) : set.restAfter;
+          if(rr>0) steps.push({type:'restRound', name:'Descanso entre vueltas', sec:rr, round:r+1, totalRounds:timer.rounds});
+        }
+      }
+    });
+  }
+  var t=0;
+  steps.forEach(function(s){ s.startAt=t; t+=s.sec; });
+  return {steps:steps, totalSec:t};
+}
+function timerStepIndexAt(elapsed){
+  var steps = TR.steps;
+  for(var i=0;i<steps.length;i++){
+    if(elapsed < steps[i].startAt+steps[i].sec) return i;
+  }
+  return steps.length-1;
+}
+function cancelScheduledTimerAudio(){
+  if(!TR) return;
+  (TR.scheduledOscillators||[]).forEach(function(osc){ try{osc.stop(0);}catch(e){} });
+  TR.scheduledOscillators = [];
+}
+// Programa el audio desde el paso fromIdx en adelante (usado al iniciar, y al
+// saltar de tramo). Nunca programa algo con tiempo ya pasado.
+function scheduleTimerAudioFrom(fromIdx){
+  var ctx = _timerGetCtx();
+  if(!ctx || !TR) return;
+  var cfg = S.timerCfg || {countdownBeepSec:3,volume:1,sounds:{}};
+  var vol = (cfg.volume==null?1:cfg.volume);
+  var sounds = cfg.sounds||{};
+  var steps = TR.steps;
+  var base = TR.audioStartCtxTime;
+  var now = ctx.currentTime;
+  if(fromIdx===0 && sounds.start!==false){
+    TR.scheduledOscillators.push(_sndTone(ctx, Math.max(base-0.05,now+0.01), 659.25, 0.14, 'sine', 0.16*vol));
+    TR.scheduledOscillators.push(_sndTone(ctx, Math.max(base+0.05,now+0.05), 987.77, 0.2, 'sine', 0.18*vol));
+  }
+  for(var idx=fromIdx; idx<steps.length; idx++){
+    var step = steps[idx];
+    var stepAt = base + step.startAt;
+    if(idx>fromIdx || fromIdx>0){
+      if(stepAt>=now-0.05){
+        if(step.type==='work' && sounds.work!==false){
+          TR.scheduledOscillators.push(_sndTone(ctx, Math.max(stepAt,now+0.02), 880, 0.16, 'triangle', 0.18*vol));
+        } else if((step.type==='rest'||step.type==='restRound') && sounds.rest!==false){
+          TR.scheduledOscillators.push(_sndTone(ctx, Math.max(stepAt,now+0.02), 392, 0.22, 'sine', 0.14*vol));
+        }
+      }
+    }
+    if(sounds.countdown!==false && cfg.countdownBeepSec>0){
+      var n = Math.min(cfg.countdownBeepSec, step.sec-1);
+      for(var s=n; s>=1; s--){
+        var beepAt = stepAt + (step.sec-s);
+        if(beepAt < now-0.05) continue;
+        var isLast = s===1;
+        TR.scheduledOscillators.push(_sndTone(ctx, Math.max(beepAt,now+0.01), isLast?987.77:698.46, 0.09, 'square', (isLast?0.16:0.11)*vol));
+      }
+    }
+  }
+  var endAt = base + TR.totalSec;
+  if(sounds.finish!==false && endAt>=now-0.05){
+    [[523.25,0,0.16],[659.25,0.13,0.16],[784.0,0.26,0.16],[1046.5,0.4,0.32]].forEach(function(p){
+      TR.scheduledOscillators.push(_sndTone(ctx, Math.max(endAt+p[1],now+0.01), p[0], p[2], 'triangle', 0.18*vol));
+    });
+  }
+}
+function timerRequestWakeLock(){
+  if(!S.timerCfg || S.timerCfg.keepScreenOn===false) return;
+  if(!('wakeLock' in navigator)) return;
+  try{
+    navigator.wakeLock.request('screen').then(function(lock){
+      if(TR) TR.wakeLock = lock; else { try{lock.release();}catch(e){} }
+    }).catch(function(){ /* algunos navegadores lo niegan sin gesto reciente; no es crítico */ });
+  }catch(e){}
+}
+function timerReleaseWakeLock(){
+  if(TR && TR.wakeLock){ try{TR.wakeLock.release();}catch(e){} TR.wakeLock=null; }
+}
+function buildTimerAndStart(taskId, timer, taskName, isPreview){
+  var built = buildTimerSteps(timer);
+  if(!built.steps.length){ toast('Agrega al menos un ejercicio'); return; }
+  TR = {
+    taskId: isPreview?null:taskId, preview: !!isPreview, taskName: taskName,
+    steps: built.steps, totalSec: built.totalSec,
+    scheduledOscillators: [], wakeLock:null, paused:false, finished:false, tickHandle:null
+  };
+  var ctx = _timerGetCtx();
+  if(ctx){
+    if(ctx.state==='suspended') ctx.resume();
+    TR.audioStartCtxTime = ctx.currentTime + 0.15;
+    scheduleTimerAudioFrom(0);
+  } else {
+    TR.audioStartCtxTime = 0;
+    toast('Tu navegador no soporta sonido para el temporizador — igual funciona la cuenta visual');
+  }
+  timerRequestWakeLock();
+  showTimerRunOverlay();
+  TR.tickHandle = setInterval(timerTick, 200);
+}
+function openTimerRun(taskId, previewConfig, previewName, isPreview){
+  if(isPreview){
+    buildTimerAndStart(null, previewConfig, previewName||'Vista previa', true);
+    return;
+  }
+  var t = S.tasks.find(function(x){return x.id===taskId;});
+  if(!t || !t.timer){ return; }
+  buildTimerAndStart(taskId, t.timer, t.text, false);
+}
+function timerTick(){
+  if(!TR || TR.finished) return;
+  var ctx = _timerGetCtx();
+  var elapsed = ctx ? Math.max(0, ctx.currentTime - TR.audioStartCtxTime) : 0;
+  if(elapsed >= TR.totalSec){
+    timerFinish();
+    return;
+  }
+  timerRenderFrame();
+}
+function timerFinish(){
+  if(!TR) return;
+  TR.finished = true;
+  if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
+  timerReleaseWakeLock();
+  vibrate(50);
+  if(!TR.preview && TR.taskId){
+    var t = S.tasks.find(function(x){return x.id===TR.taskId;});
+    if(t && !isDone(t)) tapTask(TR.taskId);
+  }
+  timerRenderFrame();
+}
+function timerTogglePause(){
+  if(!TR || TR.finished) return;
+  var ctx = _timerGetCtx();
+  if(TR.paused){
+    if(ctx) ctx.resume();
+    TR.paused = false;
+    timerRequestWakeLock();
+    if(!TR.tickHandle) TR.tickHandle = setInterval(timerTick, 200);
+  } else {
+    if(ctx) ctx.suspend();
+    TR.paused = true;
+    if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
+    timerReleaseWakeLock();
+  }
+  timerRenderFrame();
+}
+function timerSkip(delta){
+  if(!TR || TR.finished) return;
+  var ctx = _timerGetCtx();
+  if(!ctx) return;
+  cancelScheduledTimerAudio();
+  var elapsed = Math.max(0, ctx.currentTime - TR.audioStartCtxTime);
+  var curIdx = timerStepIndexAt(elapsed);
+  var newIdx = Math.max(0, Math.min(TR.steps.length-1, curIdx+delta));
+  TR.audioStartCtxTime = ctx.currentTime - TR.steps[newIdx].startAt;
+  scheduleTimerAudioFrom(newIdx);
+  timerRenderFrame();
+}
+function closeTimerRun(){
+  if(TR){
+    cancelScheduledTimerAudio();
+    if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
+    timerReleaseWakeLock();
+  }
+  TR = null;
+  removeOverlay('timer-run');
+}
+function confirmExitTimerRun(){
+  if(!TR) return;
+  if(TR.finished){ closeTimerRun(); return; }
+  var box=document.createElement('div');
+  box.className='conf-box';
+  box.innerHTML='<div class="conf-inner">'+
+    '<div style="text-align:center;margin-bottom:14px;">'+
+      '<div style="font-size:36px;margin-bottom:8px;">⏹️</div>'+
+      '<div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);">¿Salir del temporizador?</div>'+
+    '</div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">Se pierde el progreso de esta sesión. Si ya terminaste a tu modo, podés marcar la tarea como hecha a mano desde la lista.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button onclick="this.closest(\'.conf-box\').remove();closeTimerRun();" style="flex:1;background:var(--bad);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Salir</button>'+
+      '<button onclick="this.closest(\'.conf-box\').remove()" style="flex:1;background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Seguir</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(box);
+}
+function showTimerRunOverlay(){
+  removeOverlay('timer-run');
+  var overlay = document.createElement('div');
+  overlay.className='overlay'; overlay.id='timer-run';
+  overlay.style.background='#000';
+  overlay.style.alignItems='stretch';
+  overlay.style.justifyContent='stretch';
+  overlay.innerHTML = '<div id="timer-run-body" style="width:100%;height:100%;display:flex;flex-direction:column;"></div>';
+  document.body.appendChild(overlay);
+  timerRenderFrame();
+}
+function timerRenderFrame(){
+  var body = document.getElementById('timer-run-body');
+  if(!body || !TR) return;
+  if(TR.finished){
+    body.style.background = 'linear-gradient(160deg, #1a1a1a, #000)';
+    body.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:24px;text-align:center;">'+
+      '<div style="font-size:60px;margin-bottom:12px;">✅</div>'+
+      '<div class="serif" style="font-size:22px;font-weight:700;margin-bottom:6px;">¡Listo!</div>'+
+      '<div style="font-size:14px;color:rgba(255,255,255,.7);margin-bottom:28px;">'+esc(TR.taskName)+'</div>'+
+      '<button onclick="closeTimerRun()" style="background:#fff;color:#111;border:none;border-radius:12px;padding:14px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
+    '</div>';
+    return;
+  }
+  var ctx = _timerGetCtx();
+  var elapsed = ctx ? Math.max(0, ctx.currentTime - TR.audioStartCtxTime) : 0;
+  var idx = timerStepIndexAt(elapsed);
+  var step = TR.steps[idx];
+  var remaining = Math.max(0, Math.ceil(step.startAt+step.sec-elapsed));
+  var stepRatio = Math.min(1, Math.max(0, (elapsed-step.startAt)/step.sec));
+  var isRest = step.type!=='work';
+  var mm = Math.floor(remaining/60), ss = remaining%60;
+  var hh = Math.floor(remaining/3600), mi = Math.floor((remaining%3600)/60);
+  var timeLabel = hh>0 ? (hh+':'+(mi<10?'0':'')+mi+':'+(ss<10?'0':'')+ss)
+                : (mm>0 ? (mm+':'+(ss<10?'0':'')+ss) : String(remaining));
+  var bgColor = isRest ? '#20242b' : (step.color||'#2d8c70');
+  body.style.background = bgColor;
+  body.style.transition = 'background .5s ease';
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;padding-top:calc(16px + env(safe-area-inset-top,0px));">'+
+      '<button onclick="confirmExitTimerRun()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">×</button>'+
+      '<div style="color:rgba(255,255,255,.85);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Vuelta '+step.round+'/'+step.totalRounds+'</div>'+
+      '<div style="width:36px;"></div>'+
+    '</div>'+
+    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:0 24px;text-align:center;">'+
+      '<div style="font-size:15px;font-weight:700;letter-spacing:.03em;color:rgba(255,255,255,.85);margin-bottom:'+(step.type==='work'&&step.reps>1?'4':'10')+'px;text-transform:uppercase;">'+esc(step.name||(isRest?'Descanso':'Ejercicio'))+'</div>'+
+      (step.type==='work'&&step.reps>1?'<div style="font-size:12.5px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px;">Serie '+step.rep+' de '+step.reps+'</div>':'')+
+      '<div style="font-size:'+(hh>0?66:92)+'px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;">'+timeLabel+'</div>'+
+      '<div style="width:180px;height:4px;background:rgba(255,255,255,.25);border-radius:4px;margin-top:22px;overflow:hidden;">'+
+        '<div style="width:'+Math.round(stepRatio*100)+'%;height:100%;background:#fff;"></div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:10px;">Paso '+(idx+1)+' de '+TR.steps.length+'</div>'+
+    '</div>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:22px;padding:24px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));">'+
+      '<button onclick="timerSkip(-1)" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:50px;height:50px;border-radius:50%;font-size:19px;cursor:pointer;">⏮</button>'+
+      '<button onclick="timerTogglePause()" style="background:#fff;border:none;color:#111;width:72px;height:72px;border-radius:50%;font-size:26px;cursor:pointer;">'+(TR.paused?'▶':'⏸')+'</button>'+
+      '<button onclick="timerSkip(1)" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:50px;height:50px;border-radius:50%;font-size:19px;cursor:pointer;">⏭</button>'+
+    '</div>'+
+    (TR.preview?'<div style="text-align:center;color:rgba(255,255,255,.55);font-size:11px;padding-bottom:10px;">Vista previa — no se guarda ni se marca como completada</div>':'');
+}
+// Re-adquirir el wake lock al volver a la pestaña (el sistema operativo lo
+// libera solo apenas la pestaña deja de estar visible, sea cual sea el
+// motivo) y sincronizar la vista si venía retrasada por el throttling en
+// segundo plano.
+document.addEventListener('contextmenu', function(e){
+  var el = e.target;
+  if(el && el.closest && el.closest('input,textarea,[contenteditable="true"]')) return;
+  e.preventDefault(); // sin menú contextual del navegador al mantener presionado
+});
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='visible' && TR && !TR.finished){
+    if(!TR.paused) timerRequestWakeLock();
+    timerRenderFrame();
+  }
+  // Si la app estuvo días en segundo plano, ponerse al día al volver: antes
+  // los reinicios automáticos solo se revisaban al abrirla desde cero.
+  if(document.visibilityState==='visible' && typeof checkAutoReset==='function'){
+    var resetNow = checkAutoReset();
+    var advNow = advanceRecurringEvents();
+    if(resetNow.length || advNow){ render(); announceAutoReset(resetNow); }
+  }
+});
+// ── Yo → Temporizador: configuración global de sonidos y pantalla ──────────
+function timerCfgSummary(){
+  var cfg = S.timerCfg||{};
+  var on = Object.keys(cfg.sounds||{}).filter(function(k){return cfg.sounds[k]!==false;}).length;
+  var total = Object.keys(cfg.sounds||{}).length||5;
+  return on+'/'+total+' sonidos activos';
+}
+function renderYoTemporizadorScreen(){
+  var cfg = S.timerCfg || {countdownBeepSec:3,volume:1,sounds:{},keepScreenOn:true};
+  var soundLabels = {start:'Inicio de la sesión', work:'Empieza un ejercicio', rest:'Empieza un descanso', countdown:'Cuenta regresiva (pitidos)', finish:'Final de la sesión'};
+  var html = '<div style="display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:14px;">Sonidos y pantalla del temporizador'+infoBtn('timercfg')+'</div>';
+
+  html += '<div class="fsec" style="margin-bottom:14px;">'+
+    '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Sonidos</div>';
+  Object.keys(soundLabels).forEach(function(key, i){
+    var on = cfg.sounds[key]!==false;
+    html += '<div class="frow" style="margin-bottom:'+(i<Object.keys(soundLabels).length-1?10:0)+'px;">'+
+      '<span style="font-size:13px;color:var(--ink);">'+soundLabels[key]+'</span>'+
+      '<button class="tog" id="tcfg-snd-'+key+'" onclick="toggleTimerSound(\''+key+'\')" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';">'+
+        '<span class="tok" style="left:'+(on?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="fsec" style="margin-bottom:14px;">'+
+    '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Cuenta regresiva</div>'+
+    '<div style="display:flex;align-items:center;gap:10px;">'+
+      '<span style="font-size:13px;color:var(--ink);flex:1;">Pitido en los últimos...</span>'+
+      '<button class="qb" onclick="changeTimerBeepSec(-1)">−</button>'+
+      '<span id="tcfg-beepsec" style="font-weight:700;min-width:60px;text-align:center;font-size:13px;">'+(cfg.countdownBeepSec>0?(cfg.countdownBeepSec+' seg'):'apagado')+'</span>'+
+      '<button class="qb" onclick="changeTimerBeepSec(1)">+</button>'+
+    '</div>'+
+  '</div>';
+
+  html += '<div class="fsec" style="margin-bottom:14px;">'+
+    '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Volumen</div>'+
+    '<input type="range" min="0" max="100" value="'+Math.round((cfg.volume==null?1:cfg.volume)*100)+'" oninput="setTimerVolume(this.value)" style="width:100%;accent-color:var(--accent);"/>'+
+  '</div>';
+
+  html += '<div class="fsec">'+
+    '<div class="frow">'+
+      '<div style="flex:1;padding-right:10px;">'+
+        '<div style="font-size:13px;font-weight:600;color:var(--ink);">Mantener la pantalla encendida</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Mientras corre el temporizador, para no perderte la cuenta regresiva.</div>'+
+      '</div>'+
+      '<button class="tog" id="tcfg-wakelock" onclick="toggleTimerKeepScreen()" style="background:'+(cfg.keepScreenOn!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(cfg.keepScreenOn!==false?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div>'+
+  '</div>'+
+  '';
+
+  return html;
+}
+function toggleTimerSound(key){
+  if(!S.timerCfg.sounds) S.timerCfg.sounds={};
+  S.timerCfg.sounds[key] = S.timerCfg.sounds[key]===false ? true : false;
+  var tog=document.getElementById('tcfg-snd-'+key);
+  if(tog){var on=S.timerCfg.sounds[key]!==false;tog.style.background=on?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(on?22:2)+'px';}
+  saveState();
+  playSound('toggle');
+}
+function changeTimerBeepSec(delta){
+  S.timerCfg.countdownBeepSec = Math.max(0, Math.min(10, (S.timerCfg.countdownBeepSec||0)+delta));
+  var el=document.getElementById('tcfg-beepsec');
+  if(el) el.textContent = S.timerCfg.countdownBeepSec>0 ? (S.timerCfg.countdownBeepSec+' seg') : 'apagado';
+  saveState();
+}
+function setTimerVolume(val){
+  S.timerCfg.volume = Math.max(0, Math.min(1, (parseInt(val,10)||0)/100));
+  saveState();
+}
+function toggleTimerKeepScreen(){
+  S.timerCfg.keepScreenOn = S.timerCfg.keepScreenOn===false ? true : false;
+  var tog=document.getElementById('tcfg-wakelock');
+  if(tog){var on=S.timerCfg.keepScreenOn!==false;tog.style.background=on?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(on?22:2)+'px';}
+  saveState();
+  playSound('toggle');
+}
 function renderProgress(){
   if(S.simpleMode){
     return '<div style="text-align:center;padding:60px 24px;">'+
@@ -7794,6 +8950,7 @@ function renderProgress(){
   // Pedido: sacar la tarjeta de acceso al calendario y el bloque de
   // estadísticas de Progreso — el calendario ya vive en su propia
   // subpestaña (Plan → Calendarios), no hace falta un atajo duplicado acá.
+  html += renderLevelTracksSection();
   html += renderMedals();
   html += renderAchievements();
   
@@ -8394,8 +9551,8 @@ function openStreakCfg(){
     '<div style="height:1px;background:var(--line-soft);margin:2px 0 16px;"></div>'+
     '<div class="frow" style="margin-bottom:8px;">'+
       '<div style="flex:1;padding-right:10px;">'+
-        '<div style="font-weight:600;font-size:13px;color:var(--ink);">Libre los fines de semana</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">No exige el umbral sábado ni domingo — retómalo el lunes y esos dos días se suman solos a tu racha, sin cortarla.</div>'+
+        '<div style="font-weight:600;font-size:13px;color:var(--ink);">Libre los fines de semana'+infoBtn('modeweek')+'</div>'+
+        
       '</div>'+
       '<button class="tog" id="streak-weekend-tog" onclick="toggleStreakSkipWeekends()" style="background:'+(sc.skipWeekends?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
         '<span class="tok" style="left:'+(sc.skipWeekends?22:2)+'px;"></span>'+
@@ -8516,14 +9673,14 @@ function showVacacionesWarning(){
   var box=document.createElement('div');box.className='conf-box';
   box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
     '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🌴</div>'+
-    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Vacaciones</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para cuando estás fuera de tu rutina habitual y quieres bajar la exigencia sin perder del todo el hilo.</div>'+
+    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Vacaciones'+infoBtn('modebaja')+'</div>'+
+    
     '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
       '<div>· Solo verás <b>'+vc.maxTasks+' tareas/día</b></div>'+
       '<div>· Umbral de racha baja a <b>'+Math.round((vc.lowThresh||0.3)*100)+'%</b></div>'+
       '<div style="margin-top:6px;color:var(--accent);font-weight:600;">Una vez usado, queda inhabilitado por '+FREE_MODE_COOLDOWN_DAYS+' días.</div>'+
-    '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">Si solo quieres bajar el ritmo unos días sin usar este modo, considera un modo personalizado o una plantilla con menos tareas.</div>'+
+    ''+infoBtn('modebaja2')+'</div>'+
+    
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();doActivateVacaciones();">Sí, activar Vacaciones</button>'+
       '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
@@ -8681,8 +9838,8 @@ function openEditVacaciones(){
     '<div class="fsec" style="background:var(--accent-bg);margin-top:12px;">'+
       '<div style="margin-bottom:8px;"><span style="font-size:13px;font-weight:600;color:var(--ink);">💛 Mensaje de apoyo</span></div>'+
       '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(vc.supportMessage||'')+'</div>'+
-    '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin:12px 0 16px;line-height:1.5;">Si quieres ocultar las sugerencias de actividades y los mensajes de apoyo de la aplicación lo puedes hacer en desde Yo → Más ajustes → Ayuda y consejos.</div>'+
+    ''+infoBtn('hidehelp')+'</div>'+
+    
     // BUGFIX: mismo caso que Baja Energía — openEditVacacTemplate() ya
     // existía completo pero no tenía ningún botón que lo abriera.
     '<div class="fsec" style="margin-bottom:16px;">'+
@@ -8740,8 +9897,8 @@ function openEditBaja(){
         '<span style="font-size:13px;font-weight:600;color:var(--ink);">💛 Mensaje de apoyo</span>'+
       '</div>'+
       '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(be.emergencyMessage)+'</div>'+
-    '</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin:4px 0 16px;line-height:1.5;">Los consejos, tareas elementales y el mensaje de apoyo de este modo son fijos y no se pueden editar. Puedes ocultarlos desde Yo → Más ajustes → Ayuda y consejos.</div>'+
+    ''+infoBtn('modefixed')+'</div>'+
+    
     // BUGFIX: openEditBajaTemplate() ya existía completo (S.bajaEnergia.templateId
     // se usa de verdad al activar el modo) pero no había ningún botón para
     // llegar a él — el modo personalizado sí ofrece esto, Baja Energía no.
@@ -9262,8 +10419,8 @@ function applyTemplateNow(tplId){
   if(!tpl) return;
   var box=document.createElement('div');box.className='conf-box';
   box.innerHTML='<div class="conf-inner">'+
-    '<div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);">Aplicar "'+esc(tpl.name)+'"</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;line-height:1.5;">Tus tareas diarias actuales se reemplazarán con las de la plantilla. Las tareas semanales/mensuales/etc. se mantienen.</div>'+
+    '<div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);">Aplicar "'+esc(tpl.name)+'"'+infoBtn('tplreplace')+'</div>'+
+    
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();_applyTemplate(\''+tplId+'\');">Aplicar</button>'+
       '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
@@ -9347,8 +10504,7 @@ function showModeModal(){
     var sel = m.templateId===t.id ? ' selected' : '';
     return '<option value="'+t.id+'"'+sel+'>'+esc(t.name)+'</option>';
   }).join('');
-  var tplSelector = '<label class="flbl">Plantilla asociada (opcional)</label>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4;">Al activar este modo, esta plantilla se aplicará automáticamente. Las tareas actuales quedarán guardadas y volverán al desactivar.</div>'+
+  var tplSelector = '<label class="flbl" style="display:flex;align-items:center;">Plantilla asociada (opcional)'+infoBtn('tplauto')+'</label>'+
     '<select id="mm-tpl" style="width:100%;background:var(--paper);border:1.5px solid var(--line);border-radius:8px;padding:8px;font-size:13px;font-family:Inter,sans-serif;color:var(--ink);margin-bottom:14px;outline:none;">'+
       '<option value="">— Sin plantilla —</option>'+
       templatesOpts+
@@ -9484,7 +10640,7 @@ function tapCL(taskId,itemId){
     return toggledItem;
   });
   var newDone = newCL.filter(function(i){return i.done;}).length;
-  var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
+  var updated=Object.assign({},t,{checklist:newCL}); updated.done = checklistSatisfied(updated);
   var delta = newDone - oldDone;
   var justCompleted = !wasDone && isDone(updated);
   var justUncompleted = wasDone && !isDone(updated);
@@ -9518,7 +10674,7 @@ function stepCL(taskId,itemId,stepDelta){
   });
   if(!targetItem) return;
   var newDoneCount=newCL.filter(function(i){return i.done;}).length;
-  var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
+  var updated=Object.assign({},t,{checklist:newCL}); updated.done = checklistSatisfied(updated);
   var taskLevelDelta = newDoneCount - oldDoneCount;
   var justCompleted = !wasDone && isDone(updated);
   var justUncompleted = wasDone && !isDone(updated);
@@ -9548,7 +10704,7 @@ function setCLProg(taskId,itemId,val){
   });
   if(!targetItem || !delta) return;
   var newDoneCount=newCL.filter(function(i){return i.done;}).length;
-  var updated=Object.assign({},t,{checklist:newCL,done:newCL.every(function(i){return i.done;})});
+  var updated=Object.assign({},t,{checklist:newCL}); updated.done = checklistSatisfied(updated);
   var taskLevelDelta = newDoneCount - oldDoneCount;
   var justCompleted = !wasDone && isDone(updated);
   var justUncompleted = wasDone && !isDone(updated);
@@ -9589,8 +10745,11 @@ function openCLSheet(taskId){
   var overlay=document.createElement('div');overlay.className='overlay';overlay.id='cl-sheet';
   overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('cl-sheet');});
   overlay.innerHTML='<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
-      '<span class="serif" style="font-weight:700;font-size:18px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</div>'+
+        (t.clRule&&t.clRule.mode==='kofn'?'<div style="font-size:11.5px;color:var(--accent);font-weight:600;margin-top:2px;">✦ Con '+Math.max(1,Math.min(t.clRule.k||1,(t.checklist||[]).length))+' de '+(t.checklist||[]).length+' alcanza</div>':'')+
+      '</div>'+
       '<button onclick="removeOverlay(\'cl-sheet\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;flex-shrink:0;">×</button>'+
     '</div>'+
     '<div id="cl-sheet-items">'+clSheetItemsHTML(t)+'</div>'+
@@ -9659,7 +10818,9 @@ function finishUpdate(updated, justCompleted, delta){
   // plegado es "smart", no se pliega en este mismo render (ver
   // isCatCollapsed) — se marca para plegarse recién un rato después, ya con
   // el ✓ visible, en vez de desaparecer de golpe apenas se completa.
-  if(justCompleted && updated.categoryId && (S.catCollapseMode==='smart')){
+  // BUGFIX: antes se marcaba para plegar apenas se completaba UNA tarea de la
+  // categoría, aunque quedaran otras pendientes. Ahora solo si ya están todas.
+  if(justCompleted && updated.categoryId && (S.catCollapseMode==='smart') && catFullyDoneForDay(updated.categoryId, taskWeekdayThisWeek(updated))){
     S._delayedCollapseCatId = updated.categoryId;
   }
   saveState();
@@ -9674,7 +10835,8 @@ function finishUpdate(updated, justCompleted, delta){
         // renderizar toda la página, solo esta sección.
         if(S._delayedCollapseCatId===catId){
           S._delayedCollapseCatId = null;
-          softCollapseCatSection(catId);
+          // Re-verificar: si mientras tanto se desmarcó una tarea o se agregó otra, no se pliega.
+          if(catFullyDoneForDay(catId, S.day)) softCollapseCatSection(catId);
         }
       }, 900);
     })(S._delayedCollapseCatId);
@@ -9682,11 +10844,7 @@ function finishUpdate(updated, justCompleted, delta){
   if(justCompleted){
     playSound('complete');
     vibrate(30);
-    if(!S.rewardedTaskIds[updated.id]){
-      S.rewardedTaskIds[updated.id]=true;
-      addXP(PT[updated.period]||1);
-      saveState();
-    }
+    awardTaskXP(updated);
   }
   // Propagar según el modo de vinculación
   propagate(updated, justCompleted, delta||0);
@@ -9695,6 +10853,10 @@ function finishUpdate(updated, justCompleted, delta){
 // Pliega una categoría sin pasar por render() completo — usado por el
 // respiro de "smart" (ver finishUpdate/isCatCollapsed) para que el plegado
 // automático se vea como una transición suave y no como otro refresh.
+function catFullyDoneForDay(catId, day){
+  var list = S.tasks.filter(function(x){return x.categoryId===catId && taskWeekdayThisWeek(x)===day;});
+  return list.length>0 && list.every(isDone);
+}
 function softCollapseCatSection(catId){
   var body = document.getElementById('cat-body-'+catId);
   var sec = document.getElementById('cat-sec-'+catId);
@@ -9706,7 +10868,7 @@ function softCollapseCatSection(catId){
     }, 350);
   }
   if(sec){
-    var arrow = sec.querySelector('div[style*="rotate"]');
+    var arrow = sec.querySelector('.cat-sec-chevron');
     if(arrow) arrow.style.transform = 'rotate(-90deg)';
   }
 }
@@ -9735,11 +10897,7 @@ function propagate(t, justCompleted, delta){
     S.tasks = S.tasks.map(function(tt){return tt.id===tid?updParent:tt;});
     var parentJustCompleted = !wasDone && nowDone;
     if(parentJustCompleted){
-      if(!S.rewardedTaskIds[tid]){
-        S.rewardedTaskIds[tid]=true;
-        addXP(PT[parent.period]||1);
-        saveState();
-      }
+      awardTaskXP(updParent);
     }
     // Propagar recursivamente (con su delta también)
     propagate(updParent, parentJustCompleted, addAmount);
@@ -9834,8 +10992,14 @@ function resetChecklistForCycle(t){
       lastChecklist: meaningful.length ? meaningful.map(function(i){return {text:i.text, qty:(i.qty||1)};}) : (t.lastChecklist||null)
     };
   }
+  // BUGFIX: antes solo se ponía done:false y se dejaba el prog intacto. Los
+  // ítems de un checklist que reciben avance de tareas vinculadas (ver
+  // propagateCLLink) guardan ese avance en item.prog — al reiniciar, la
+  // tarea seguía "viéndose completa" (barra, contador, stepper) aunque el
+  // check estuviera apagado, y al volver a completar las tareas hijas el
+  // avance seguía sumando desde el valor viejo en vez de desde cero.
   return {
-    checklist: cl.map(function(i){return Object.assign({},i,{done:false});}),
+    checklist: cl.map(function(i){return Object.assign({},i,{done:false,prog:0});}),
     lastChecklist: t.lastChecklist||null
   };
 }
@@ -9868,20 +11032,43 @@ function advanceRecurringEvents(){
     return Object.assign({},t,{date:newDate, day:dayIdxFromDate(next), done:false, prog:0, checklist:clr.checklist, lastChecklist:clr.lastChecklist});
   });
   if(changed) saveState();
+  return changed;
+}
+// ── Qué tareas le corresponden a cada reinicio ─────────────────────────────
+// BUGFIX: el reinicio automático del lunes desmarcaba TODAS las tareas (mes,
+// semestre y año incluidos) y borraba el anti-farming de todas. Ahora cada
+// reinicio —manual o automático— toca únicamente las de SU período:
+//  · 'semana' = tareas diarias recurrentes (sin fecha) + tareas de semana.
+//    Las tareas con fecha específica son de un solo uso y no se reinician.
+//  · 'mes' / 'semestre' / 'año' = solo las de ese período.
+function taskBelongsToResetPeriod(t, period){
+  if(period==='semana') return (t.period==='dia' && !t.date) || t.period==='semana';
+  return t.period===period;
+}
+function resetTasksOfPeriod(period){
+  // Tareas "solo esta semana" (t.oneShotWeek): no se reinician, se van al
+  // reiniciar la semana — su función era valer solo por la semana en curso.
+  if(period==='semana'){
+    var gone = S.tasks.filter(function(t){return t.oneShotWeek && t.period==='dia' && !t.date;}).map(function(t){return t.id;});
+    if(gone.length){
+      S.tasks = S.tasks.filter(function(t){return gone.indexOf(t.id)===-1;});
+      if(!S.rewardedTaskIds) S.rewardedTaskIds = {};
+      gone.forEach(function(id){ delete S.rewardedTaskIds[id]; });
+    }
+  }
+  S.tasks = S.tasks.map(function(t){
+    if(!taskBelongsToResetPeriod(t, period)) return t;
+    var clr = resetChecklistForCycle(t);
+    return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
+  });
+  // Anti-farming: solo se limpia para las tareas que se reiniciaron
+  if(!S.rewardedTaskIds) S.rewardedTaskIds = {};
+  S.tasks.filter(function(t){return taskBelongsToResetPeriod(t, period);}).forEach(function(t){
+    delete S.rewardedTaskIds[t.id];
+  });
 }
 function doReset(){
-  // Reinicio de semana: solo tareas de tipo 'dia' y 'semana'
-  S.tasks = S.tasks.map(function(t){
-    if(t.period === 'dia' || t.period === 'semana'){
-      var clr = resetChecklistForCycle(t);
-      return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
-    }
-    return t;
-  });
-  // Limpiar anti-farming para tareas reseteadas
-  S.tasks.filter(function(t){return t.period==='dia'||t.period==='semana';}).forEach(function(t){
-    if(S.rewardedTaskIds) delete S.rewardedTaskIds[t.id];
-  });
+  resetTasksOfPeriod('semana');
   S.taskBlocks = {};
   S.resetUsedCount = (S.resetUsedCount||0) + 1;
   markResetUsed();
@@ -9903,53 +11090,91 @@ function showInfoModal(title,body,btn){
   document.body.appendChild(box);
 }
 
-// ── Auto reset on Monday 4 AM ──────────────────────────────────────────────
+// ── Reinicio automático ("forzado") ─────────────────────────────────────────
+// Cada período tiene su propio ciclo, y el reinicio automático solo toca las
+// tareas de ESE período (ver taskBelongsToResetPeriod):
+//  · Semana: el ciclo cambia cada lunes a las 4:00. Antes solo se disparaba
+//    si la app se abría ese mismo lunes; ahora, si se abre más tarde en la
+//    semana, igual se reinicia al abrirla (una sola vez por semana).
+//  · Mes / semestre / año: el ciclo cambia cuando termina su ventana de
+//    reinicio manual (ver monthResetCycleId y compañía). Si el usuario ya
+//    lo reinició a mano en ese ciclo, no se vuelve a reiniciar.
+// Configurable en Yo → Períodos (S.autoReset). Si un período está en "no", su
+// ciclo igual se da por visto (para no reiniciar de golpe al volver a
+// activarlo), pero sus tareas no se tocan: quedan como están hasta que el
+// usuario las reinicie a mano. En modo simplificado no hay ajuste: siempre
+// automático.
+function autoResetEnabled(period){
+  if(S.simpleMode) return true;
+  return !S.autoReset || S.autoReset[period]!==false;
+}
+function weekCycleId(now){
+  var d = new Date(now.getTime() - 4*3600*1000); // la semana "arranca" el lunes a las 4:00
+  var back = (d.getDay()+6)%7;
+  return localDateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate()-back));
+}
+function periodCycleIdNow(period){
+  if(period==='mes') return monthResetCycleId();
+  if(period==='semestre') return semesterResetCycleId();
+  return String(yearResetCycleId());
+}
+// Devuelve la lista de períodos que se reiniciaron solos (para avisarle al usuario).
 function checkAutoReset(){
-  var now=new Date();
-  var dow=now.getDay(); // Mon=1
-  var hour=now.getHours();
-  // BUGFIX: antes esta clave salía de now.toISOString() (UTC), mientras que
-  // dow/hour de arriba son locales. En Chile eso hacía que, de noche, esta
-  // función pensara que ya era "otro día" (uno que no coincidía con
-  // S.lastAutoReset) y disparara el reinicio semanal completo fuera de
-  // hora — desmarcando tareas que el usuario ya había completado ese
-  // mismo día. Ahora todoKey usa la misma fecha LOCAL que dow y hour.
-  var todayKey=localDateStr(now);
-  if(dow===1&&hour>=4&&S.lastAutoReset!==todayKey){
-    // Auto reset — solo tareas recurrentes (sin fecha específica). Las tareas
-    // puntuales (t.date) son de un solo día y no se desmarcan ni se tocan
-    // en el reinicio semanal.
-    S.tasks=S.tasks.map(function(t){
-      if(t.period==='dia' && t.date) return t;
-      var clr = resetChecklistForCycle(t);
-      return Object.assign({},t,{done:false,prog:0,checklist:clr.checklist,lastChecklist:clr.lastChecklist});
-    });
-    S.rewardedTaskIds={};
-    S.taskBlocks={};
-    S.lastAutoReset=todayKey;
-    
-    // Aplicar plantilla programada para esta semana, si hay
-    var thisWeek = getWeekKey();
-    var scheduledTplId = S.weekSchedule ? S.weekSchedule[thisWeek] : null;
-    if(scheduledTplId){
-      var tpl = (S.templates||[]).find(function(t){return t.id===scheduledTplId;});
-      if(tpl){
-        // Reemplazar tareas recurrentes del día con las de la plantilla —
-        // las tareas puntuales (con fecha) se conservan intactas.
-        var nonDay = S.tasks.filter(function(t){return t.period!=='dia' || t.date;});
-        var newDayTasks = (tpl.tasks||[]).map(function(t){
-          return Object.assign({},t,{
-            id:uid(),done:false,prog:0,date:null,
-            day: t.day===undefined?0:t.day,
-            checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false,id:uid()});})
+  var now = new Date();
+  var done = [];
+  var dirty = false;
+  if(!S.periodAutoSeen) S.periodAutoSeen = {};
+  if(!S.periodResetUsed) S.periodResetUsed = {};
+
+  // Semana
+  var wk = weekCycleId(now);
+  if(S.lastAutoReset !== wk){
+    if(S.lastAutoReset && autoResetEnabled('semana')){
+      resetTasksOfPeriod('semana');
+      S.taskBlocks = {};
+      done.push('semana');
+      // Plantilla programada para esta semana: solo cuando la semana avanza sola
+      var scheduledTplId = S.weekSchedule ? S.weekSchedule[getWeekKey()] : null;
+      if(scheduledTplId){
+        var tpl = (S.templates||[]).find(function(t){return t.id===scheduledTplId;});
+        if(tpl){
+          var nonDay = S.tasks.filter(function(t){return t.period!=='dia' || t.date;});
+          var newDayTasks = (tpl.tasks||[]).map(function(t){
+            return Object.assign({},t,{
+              id:uid(),done:false,prog:0,date:null,
+              day: t.day===undefined?0:t.day,
+              checklist:(t.checklist||[]).map(function(i){return Object.assign({},i,{done:false,id:uid()});})
+            });
           });
-        });
-        S.tasks = nonDay.concat(newDayTasks);
-        S.activeTemplate = scheduledTplId;
+          S.tasks = nonDay.concat(newDayTasks);
+          S.activeTemplate = scheduledTplId;
+        }
       }
     }
-    saveState();
+    S.lastAutoReset = wk;
+    dirty = true;
   }
+
+  // Mes / semestre / año
+  ['mes','semestre','año'].forEach(function(p){
+    var cur = periodCycleIdNow(p);
+    var seen = S.periodAutoSeen[p];
+    if(seen === cur) return;
+    if(seen && autoResetEnabled(p) && isPeriodEnabled(p) && S.periodResetUsed[p] !== seen){
+      resetTasksOfPeriod(p);
+      done.push(p);
+    }
+    S.periodAutoSeen[p] = cur;
+    dirty = true;
+  });
+
+  if(dirty) saveState();
+  return done;
+}
+function announceAutoReset(periods){
+  if(!periods || !periods.length) return;
+  var names = periods.map(function(p){return PL[p].toLowerCase();});
+  setTimeout(function(){ toast('↻ Reinicio automático: '+names.join(', ')); }, 900);
 }
 
 // ── Notify reset available on weekend (once per weekend day) ──────────────
@@ -9966,6 +11191,7 @@ function checkResetNotification(){
 
 
 var M={};
+var TE=null; // Estado temporal del editor de "seguimientos de nivel" (ver openTrackEditor)
 var RM=null; // estado del popup de recordatorio independiente (openReminderPopup)
 var _tabHistorySuspended=false; // evita volver a apilar historial cuando el cambio de pestaña viene de "atrás"
 function openNew(period){
@@ -9994,7 +11220,7 @@ function openNew(period){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,hasDate:false,repeatEvery:0,isEvent:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,clRule:{mode:'all',k:2},hasTimer:false,timer:defaultTimerConfig(),hasDate:false,repeatEvery:0,oneShot:false,isEvent:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
   showTaskModal();
 }
 // Crear una tarea puntual (con fecha específica) para un día cualquiera —
@@ -10027,7 +11253,7 @@ function openNewDatedTask(dateKey, opts){
   // duplicados, y además hacía que el back-button quedara con dos entradas
   // de historial apiladas para un solo modal.
   opts = opts || {};
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:opts.hora||null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,hasDate:true,repeatEvery:0,isEvent:!!opts.isEvent,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:opts.hora||null,duracion:60,notif:null};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:opts.hora||null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,clRule:{mode:'all',k:2},hasTimer:false,timer:defaultTimerConfig(),hasDate:true,repeatEvery:0,oneShot:false,isEvent:!!opts.isEvent,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:opts.hora||null,duracion:60,notif:null};
   showTaskModal();
 }
 // ── Pedido: botón flotante aparte para crear un EVENTO (fecha + hora +
@@ -10041,7 +11267,7 @@ function openNewEvent(){
 }
 function openEdit(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
-  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
+  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,clRule:t.clRule?JSON.parse(JSON.stringify(t.clRule)):{mode:'all',k:Math.max(1,(t.checklist||[]).length-1)||1},hasTimer:!!t.hasTimer,timer:t.timer?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(),oneShot:!!t.oneShotWeek,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
   // BUGFIX: si la tarea venía de antes con Cantidad Y Checklist activos a
   // la vez (posible antes de esta regla), se normaliza acá al abrir el
   // editor en vez de esperar a que mSave() lo resuelva en silencio — así
@@ -10050,71 +11276,147 @@ function openEdit(id){
   M.duracion = t.duracion||60; M.moreOpen = M.hasQty || M.hasCL || !!M.hora || M.hasDate;
   showTaskModal();
 }
-function showTaskModal(){
-  removeOverlay('task-modal');
-  var t=M.task;
-  var isDay=t.period==='dia';
-  // El checklist "único cada vez" (ver resetChecklistForCycle) solo tiene
-  // sentido si la tarea de verdad se repite — una tarea de día con fecha
-  // específica (M.hasDate) es de un solo uso, así que no aplica ahí.
-  var showFreshCL = !isDay || !M.hasDate || M.repeatEvery>0;
-  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='task-modal';
-  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('task-modal');});
-  // clItemsHTML() y clAddButtonHTML() ahora son funciones globales (definidas
-  // junto a mRerenderCL más abajo) para que el re-render incremental después
-  // de agregar/sacar un ítem use exactamente el mismo HTML que el render
-  // inicial acá — antes estaban duplicadas y mRerenderCL usaba una versión
-  // más chica e inconsistente.
-  overlay.innerHTML='<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
-      '<span class="serif" style="font-weight:700;font-size:20px;">'+(M.isNew?(M.isEvent?'Nuevo evento':'Nueva tarea'):'Editar tarea')+'</span>'+
-      '<button onclick="removeOverlay(\'task-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+// ── Editor de tarea diaria (reorganizado) ─────────────────────────────────
+// Nombre + ⭐ + 🎲 arriba, categorías siempre a la vista, "Tipo de meta" como
+// control segmentado (son modos excluyentes: simple / cantidad / checklist /
+// temporizador) y un bloque "Cuándo" que agrupa repetición, fecha y horario.
+// ── Íconos "i" con explicación breve (en vez de textos largos a la vista) ──
+var INFO_TIPS = {
+  goal:'Simple: se marca y listo. Cantidad: una meta numérica (ej. 8 vasos). Checklist: sub-pasos, con opción de que alcance con algunos. Temporizador: sets, vueltas y descansos con cuenta regresiva. Solo uno a la vez.',
+  when:'Cada semana: se repite el mismo día todas las semanas. Solo esta semana: aparece este día y desaparece al reiniciar la semana. Fecha puntual: un día concreto, con repetición opcional cada N días.',
+  repeat:'Al pasar la fecha, la tarea salta sola a la próxima que le toque (con su checklist reiniciado si es "único cada vez"). Sin repetición es solo para ese día.',
+  clfresh:'Al reiniciarse la tarea, el checklist empieza vacío en vez de repetir los mismos ítems (útil para listas que cambian, como "qué comprar"). Queda el botón para recordar el último.',
+  clrule:'"Con algunos alcanza": la tarea se completa al marcar K ítems cualquiera de los N, no todos. Con K=1 basta uno ("este o este o este").',
+  timer:'Cada ejercicio tiene su propio ⚙ con vueltas y descansos propios (si no los tocas, usa los generales). La tarea también se puede marcar a mano, sin usar el temporizador.',
+  crucial:'Las tareas cruciales se destacan con una estrella y son las que siguen visibles en los modos que muestran solo lo esencial.',
+  periods:'Desactiva los períodos que no uses: desaparecen de Objetivos y de las opciones al vincular tareas.',
+  autoreset:'Si no reinicias un período a tiempo, la app puede hacerlo sola al vencer el plazo, y solo con las tareas de ese período. Si lo apagas, ese período no avanza (sus tareas quedan como están) hasta que lo reinicies tú.',
+  resetfab:'En Hoy, se habilita sábado y domingo para reiniciar todas tus tareas diarias de la semana y volver a ganar XP con ellas. Si lo apagas, desmarcas a mano una por una.',
+  sounds:'Sonidos cortos al crear, completar o eliminar una tarea, marcar un ítem, cambiar de pestaña, activar interruptores, mantener la racha, o desbloquear un logro. Incluye una leve vibración en el celular.',
+  weekphrase:'La franja de arriba en Hoy para escribir una frase o intención de la semana (o el aviso para agregarla si aún no tienes una).',
+  dailyreview:'Un aviso a la hora que elijas, en los días que elijas, para revisar tus tareas y tickear las que ya tengas listas.',
+  notifdef:'Valor por defecto al activar "🔔 Recordatorio" en una tarea con horario. Cada tarea puede después ajustar el suyo propio.',
+  modohf:'Este modo está pensado para períodos cortos de enfoque máximo, cuando quieres ver todas tus tareas sin límite artificial.',
+  cats:'Organiza tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.',
+  linkcl:'Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes ir y volver para vincular varios, sin cerrar esta hoja).',
+  linkup:'Al avanzar acá, avanzará automáticamente allá — puedes elegir varias tareas superiores a la vez y la meta de cada destino se recalcula sola.',
+  modeweek:'No exige el umbral sábado ni domingo — retómalo el lunes y esos dos días se suman solos a tu racha, sin cortarla.',
+  modebaja:'Este modo está pensado para cuando estás fuera de tu rutina habitual y quieres bajar la exigencia sin perder del todo el hilo.',
+  modebaja2:'Si solo quieres bajar el ritmo unos días sin usar este modo, considera un modo personalizado o una plantilla con menos tareas.',
+  hidehelp:'Si quieres ocultar las sugerencias de actividades y los mensajes de apoyo de la aplicación lo puedes hacer en desde Yo → Más ajustes → Ayuda y consejos.',
+  modefixed:'Los consejos, tareas elementales y el mensaje de apoyo de este modo son fijos y no se pueden editar. Puedes ocultarlos desde Yo → Más ajustes → Ayuda y consejos.',
+  tplreplace:'Tus tareas diarias actuales se reemplazarán con las de la plantilla. Las tareas semanales/mensuales/etc. se mantienen.',
+  notifonly:'Te aviso solo de las tareas que tú elijas, cuando se acerque su hora. Sin spam: nada de notificaciones para todas tus tareas.',
+  projlinks:'Conecta las tareas del proyecto con tus objetivos o tareas diarias. Al completar el objetivo, el % de la tarea se actualiza.',
+  tplauto:'Al activar este modo, esta plantilla se aplicará automáticamente. Las tareas actuales quedarán guardadas y volverán al desactivar.',
+  timercfg:'Estos ajustes valen para todas las tareas con temporizador. Los sonidos usan el audio del sistema, así que siguen sonando si cambias de app (depende de que el navegador mantenga la pestaña activa).'
+};
+function infoBtn(key){
+  return '<button type="button" class="ibtn" aria-label="Más información" onclick="showTip(\''+key+'\',event)">i</button>';
+}
+function showTip(key, ev){
+  if(ev && ev.stopPropagation) ev.stopPropagation();
+  var old = document.getElementById('tip-pop'); if(old) old.remove();
+  var txt = INFO_TIPS[key]; if(!txt) return;
+  var b = ev && (ev.currentTarget || ev.target);
+  var pop = document.createElement('div'); pop.id = 'tip-pop';
+  pop.style.cssText = 'position:fixed;z-index:9500;max-width:272px;background:var(--ink);color:var(--paper);font-size:12px;line-height:1.5;padding:10px 13px;border-radius:11px;box-shadow:0 6px 22px rgba(0,0,0,.28);';
+  pop.textContent = txt;
+  document.body.appendChild(pop);
+  var r = b && b.getBoundingClientRect ? b.getBoundingClientRect() : {left:20,right:40,top:80,bottom:100};
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var left = Math.max(10, Math.min(window.innerWidth - w - 10, r.left - w/2 + 8));
+  var top = r.bottom + 8; if(top + h > window.innerHeight - 10) top = Math.max(10, r.top - h - 8);
+  pop.style.left = left+'px'; pop.style.top = top+'px';
+  setTimeout(function(){
+    document.addEventListener('click', function h(){ var p=document.getElementById('tip-pop'); if(p) p.remove(); document.removeEventListener('click', h); });
+  }, 0);
+}
+function crucialBtnStyle(){
+  var on = !!M.crucial;
+  return 'width:38px;height:38px;border-radius:12px;font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;padding:0;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent)':'var(--muted)')+';';
+}
+function mSegHTML(id, items, active, fn){
+  return '<div id="'+id+'" class="seg">'+items.map(function(i){
+    return '<button type="button" class="seg-b'+(i[0]===active?' on':'')+'" data-k="'+i[0]+'" onclick="'+fn+'(\''+i[0]+'\')">'+i[1]+'</button>';
+  }).join('')+'</div>';
+}
+function mSecLabel(text, tipKey){ return '<div class="sec-lbl">'+text+(tipKey?infoBtn(tipKey):'')+'</div>'; }
+function mRefreshSeg(id, key){
+  var seg = document.getElementById(id); if(!seg) return;
+  Array.prototype.forEach.call(seg.querySelectorAll('.seg-b'), function(b){ b.classList.toggle('on', b.getAttribute('data-k')===key); });
+}
+function mCatChipsInnerHTML(){
+  var none = !M.categoryId;
+  var html = '<button type="button" onclick="mSetCategory(null)" style="padding:5px 11px;border:1.5px solid '+(none?'var(--accent)':'var(--line)')+';background:'+(none?'var(--accent-bg)':'transparent')+';color:'+(none?'var(--accent)':'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Sin categoría</button>';
+  (S.categories||[]).forEach(function(c){
+    var on = M.categoryId===c.id;
+    html += '<button type="button" onclick="mSetCategory(\''+c.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?c.color:'var(--line)')+';background:'+(on?c.color+'22':'transparent')+';color:'+(on?c.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
+  });
+  html += '<button type="button" onclick="openNewCategoryFromModal()" style="padding:5px 11px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>';
+  return html;
+}
+function mGoalType(){ return M.hasQty?'qty':M.hasCL?'cl':M.hasTimer?'timer':'simple'; }
+function mSetGoalType(type){
+  M._quiet = true;
+  try{
+    var cur = mGoalType();
+    if(cur!==type){
+      if(type==='simple'){
+        if(cur==='qty') mToggleQty(); else if(cur==='cl') mToggleCLSection(); else if(cur==='timer') mToggleTimerSection();
+      } else if(type==='qty') mToggleQty();
+      else if(type==='cl') mToggleCLSection();
+      else if(type==='timer') mToggleTimerSection();
+    }
+  } finally { M._quiet = false; }
+  mRefreshSeg('m-goal-seg', mGoalType()); // si el checklist fue rechazado (tarea con avance vinculado), la barra vuelve a lo real
+}
+function mSetWhen(mode){
+  if(mode==='date'){ M.hasDate = true; M.oneShot = false; if(!M.task.date) M.task.date = todayStr(); }
+  else { M.hasDate = false; M.oneShot = (mode==='week'); }
+  mRefreshSeg('m-when-seg', mode);
+  var area = document.getElementById('m-date-area'); if(area) area.style.display = M.hasDate ? 'block' : 'none';
+  var inp = document.getElementById('m-date-input'); if(inp) inp.value = M.task.date||'';
+  playSound('toggle');
+}
+function taskModalDayHTML(showFreshCL){
+  var t = M.task;
+  var when = M.hasDate ? 'date' : (M.oneShot ? 'week' : 'weekly');
+  return ''+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">'+
+      '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..." style="flex:1;min-width:0;margin:0;font-size:16px;padding:6px 0;"/>'+
+      '<button type="button" id="m-crucial-btn" onclick="mToggleCrucial()" title="Tarea crucial" aria-label="Tarea crucial" style="'+crucialBtnStyle()+'">'+(M.crucial?'★':'☆')+'</button>'+
+      (M.isNew?'<button type="button" onclick="fillGenericTask()" title="Sugerir una tarea genérica" aria-label="Sugerir una tarea genérica" style="width:38px;height:38px;border-radius:12px;border:1.5px dashed var(--line);background:transparent;font-size:17px;line-height:1;cursor:pointer;flex-shrink:0;padding:0;">🎲</button>':'')+
     '</div>'+
-    '<label class="flbl">Nombre</label>'+
-    '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..."/>'+
-    (M.isNew?'<button onclick="fillGenericTask()" style="background:none;border:1.5px dashed var(--line);border-radius:8px;width:100%;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;margin:-6px 0 12px;display:flex;align-items:center;justify-content:center;gap:6px;">🎲 Generar tarea genérica</button>':'')+
-    // Crucial (solo tareas diarias) — antes solo se podía marcar después de
-    // guardar, desde el menú ⋯ de la tarea; mToggleCrucial() ya existía pero
-    // no tenía botón en el modal. Va justo después del nombre por ser de uso
-    // frecuente.
-    (isDay?'<div class="frow" style="margin:2px 0 14px;">'+
-      '<span style="font-size:13px;font-weight:600;color:var(--ink);">⭐ Tarea crucial</span>'+
-      '<button class="tog" id="m-crucial-tog" onclick="mToggleCrucial()" style="background:'+(M.crucial?'var(--accent)':'var(--muted-soft)')+';">'+
-        '<span class="tok" style="left:'+(M.crucial?22:2)+'px;"></span>'+
-      '</button>'+
-    '</div>':'')+
-    // Cantidad — visible fuera de "Más opciones" por ser de uso frecuente,
-    // justo debajo de Tarea crucial. Sin box oscuro, igual que Tarea crucial.
-    '<div class="frow" style="margin:2px 0 14px;">'+
-      '<span style="font-size:13px;font-weight:600;color:var(--ink);">Definir cantidad específica</span>'+
-      '<button class="tog" id="m-qty-tog" onclick="mToggleQty()" style="background:'+(M.hasQty?'var(--accent)':'var(--muted-soft)')+';">'+
-        '<span class="tok" style="left:'+(M.hasQty?22:2)+'px;"></span>'+
-      '</button>'+
-    '</div>'+
-    '<div id="m-qty-area" style="display:'+(M.hasQty?'block':'none')+';margin:-6px 0 14px;">'+
+    mSecLabel('Categoría')+
+    '<div id="m-cat-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'+mCatChipsInnerHTML()+'</div>'+
+    mSecLabel('Tipo de meta','goal')+
+    mSegHTML('m-goal-seg',[['simple','Simple'],['qty','Cantidad'],['cl','Checklist'],['timer','⏱ Timer']], mGoalType(), 'mSetGoalType')+
+    '<div id="m-qty-area" style="display:'+(M.hasQty?'block':'none')+';margin-top:12px;">'+
       '<div style="display:flex;align-items:center;">'+
         '<span style="font-size:12px;color:var(--muted);flex:1;">Meta total</span>'+
         '<div style="display:flex;align-items:center;gap:10px;">'+
-          '<button class="qb" onclick="mChangeQty(-1)">−</button>'+
-          '<input id="m-qty-val" type="number" inputmode="numeric" min="2" max="999" value="'+M.qty+'" onchange="mSetQtyDirect(this.value)" style="font-size:16px;font-weight:700;width:44px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-family:Inter,sans-serif;color:var(--ink);"/>'+
-          '<button class="qb" onclick="mChangeQty(1)">+</button>'+
+          '<button type="button" class="qb" onclick="mChangeQty(-1)">−</button>'+
+          '<input id="m-qty-val" type="number" inputmode="numeric" min="2" max="999" value="'+M.qty+'" onchange="mSetQtyDirect(this.value)" style="font-size:16px;font-weight:700;width:44px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;color:var(--ink);font-family:Inter,sans-serif;padding:2px 0;"/>'+
+          '<button type="button" class="qb" onclick="mChangeQty(1)">+</button>'+
         '</div>'+
       '</div>'+
-      '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">Toca el número para escribirlo directo, o usa −/+.</div>'+
     '</div>'+
-    // ── Más opciones (colapsable, solo tareas diarias): Horario + Fecha +
-    // Checklist van todas dentro de un mismo box oscuro (una sola fsec);
-    // Categoría queda en su propio box separado porque es de otra naturaleza.
-    // Se usan con menos frecuencia que nombre/crucial/cantidad — ocultarlas
-    // por defecto hace que agregar una tarea simple sea más rápido y menos
-    // denso. Se auto-expanden si la tarea ya las tenía activas al editar.
-    (isDay?('<button type="button" onclick="mToggleMore()" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:4px 0 10px;">'+
-      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Más opciones'+((M.hasCL||M.hora)&&!M.moreOpen?' · en uso':'')+'</span>'+
-      '<span id="m-more-chev" style="font-size:20px;color:var(--accent);font-weight:700;line-height:.6;transition:transform .2s;transform:'+(M.moreOpen?'rotate(180deg)':'none')+';">▾</span>'+
-    '</button>'+
-    '<div id="m-more-area" style="display:'+(M.moreOpen?'block':'none')+';">'+
-    '<div class="fsec">'+
-      // Hora — para poder verlas ordenadas en Plan → Horario
+    '<div id="m-cl-area" style="display:'+(M.hasCL?'block':'none')+';margin-top:12px;">'+
+      clRuleAreaHTML()+
+      (showFreshCL?clFreshAreaExtrasHTML():'')+
+      '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
+      '<div id="m-cl-addrow">'+clAddButtonHTML()+'</div>'+
+    '</div>'+
+    '<div id="m-timer-area" style="display:'+(M.hasTimer?'block':'none')+';margin-top:12px;">'+timerAreaHTML()+'</div>'+
+    '<div style="height:18px;"></div>'+
+    mSecLabel('Cuándo','when')+
+    mSegHTML('m-when-seg',[['weekly','Cada semana'],['week','Solo esta semana'],['date','Fecha puntual']], when, 'mSetWhen')+
+    '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';margin-top:12px;">'+
+      '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\',true)" style="cursor:pointer;margin-bottom:0;" value="'+(M.task.date||'')+'"/>'+
+      mRepeatAreaHTML()+
+    '</div>'+
+    '<div class="fsec" style="margin-top:14px;">'+
       '<div class="frow" style="margin-bottom:'+(M.hora?10:0)+'px;">'+
         '<span style="font-size:13px;font-weight:600;color:var(--ink);">Definir horario específico</span>'+
         '<button class="tog" id="m-hora-tog" onclick="mToggleHora()" style="background:'+(M.hora?'var(--accent)':'var(--muted-soft)')+';">'+
@@ -10161,48 +11463,58 @@ function showTaskModal(){
         '<div id="m-notif-area" style="display:'+(M.notif&&M.notif.on?'block':'none')+';">'+
           mNotifAreaHTML()+
         '</div>'+
-      '</div>'+
-      '<div style="height:1px;background:var(--line-soft);margin:14px 0;"></div>'+
-      // Fecha específica — tarea puntual para un solo día en vez de recurrente
-      // cada semana.
-      '<div class="frow" style="margin-bottom:'+(M.hasDate?10:0)+'px;">'+
-        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Fecha específica</span>'+
-        '<button class="tog" id="m-date-tog" onclick="mToggleDate()" style="background:'+(M.hasDate?'var(--accent)':'var(--muted-soft)')+';">'+
-          '<span class="tok" style="left:'+(M.hasDate?22:2)+'px;"></span>'+
-        '</button>'+
-      '</div>'+
-      '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';">'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Esta tarea aparecerá ese día (y de ahí en más, según la recurrencia de abajo).</div>'+
-        '<input id="m-date-input" class="finp" type="text" readonly onclick="openCustomDatePicker(\'m-date-input\',true)" style="cursor:pointer;" value="'+(M.task.date||'')+'"/>'+
-        mRepeatAreaHTML()+
-      '</div>'+
-      '<div style="height:1px;background:var(--line-soft);margin:14px 0;"></div>'+
-      // Checklist interno
-      '<div class="frow" style="margin-bottom:'+(M.hasCL?12:0)+'px;">'+
-        '<span style="font-size:13px;font-weight:600;color:var(--ink);">Checklist interno</span>'+
-        '<button class="tog" id="m-cl-tog" onclick="mToggleCLSection()" style="background:'+(M.hasCL?'var(--accent)':'var(--muted-soft)')+';">'+
-          '<span class="tok" style="left:'+(M.hasCL?22:2)+'px;"></span>'+
-        '</button>'+
-      '</div>'+
-      '<div id="m-cl-area" style="display:'+(M.hasCL?'block':'none')+';">'+
-        (showFreshCL?clFreshAreaExtrasHTML():'')+
-        '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
-        '<div id="m-cl-addrow">'+clAddButtonHTML()+'</div>'+
-      '</div>'+
+      '</div>'
+    '</div>';
+}
+function showTaskModal(){
+  removeOverlay('task-modal');
+  var t=M.task;
+  var isDay=t.period==='dia';
+  // El checklist "único cada vez" (ver resetChecklistForCycle) solo tiene
+  // sentido si la tarea de verdad se repite — una tarea de día con fecha
+  // específica (M.hasDate) es de un solo uso, así que no aplica ahí.
+  var showFreshCL = !isDay || (!M.hasDate && !M.oneShot) || M.repeatEvery>0;
+  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='task-modal';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('task-modal');});
+  // clItemsHTML() y clAddButtonHTML() ahora son funciones globales (definidas
+  // junto a mRerenderCL más abajo) para que el re-render incremental después
+  // de agregar/sacar un ítem use exactamente el mismo HTML que el render
+  // inicial acá — antes estaban duplicadas y mRerenderCL usaba una versión
+  // más chica e inconsistente.
+  overlay.innerHTML='<div class="sheet">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
+      '<span class="serif" style="font-weight:700;font-size:20px;">'+(M.isNew?(M.isEvent?'Nuevo evento':'Nueva tarea'):'Editar tarea')+'</span>'+
+      '<button onclick="removeOverlay(\'task-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
-    // Categoría — box separado, distinto en naturaleza a lo anterior
-    '<div class="fsec">'+
-      '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Categoría</div>'+
-      '<div id="m-cat-chips" style="display:flex;flex-wrap:wrap;gap:6px;">'+
-        '<button onclick="mSetCategory(null)" style="padding:5px 11px;border:1.5px solid '+(!M.categoryId?'var(--accent)':'var(--line)')+';background:'+(!M.categoryId?'var(--accent-bg)':'transparent')+';color:'+(!M.categoryId?'var(--accent)':'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Sin categoría</button>'+
-        (S.categories||[]).map(function(c){
-          var on = M.categoryId===c.id;
-          return '<button onclick="mSetCategory(\''+c.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?c.color:'var(--line)')+';background:'+(on?c.color+'22':'transparent')+';color:'+(on?c.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
-        }).join('')+
-        '<button onclick="openNewCategoryFromModal()" style="padding:5px 11px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>'+
-      '</div>'+
+    (isDay?taskModalDayHTML(showFreshCL):(
+    '<label class="flbl">Nombre</label>'+
+    '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..."/>'+
+    (M.isNew?'<button onclick="fillGenericTask()" style="background:none;border:1.5px dashed var(--line);border-radius:8px;width:100%;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;margin:-6px 0 12px;display:flex;align-items:center;justify-content:center;gap:6px;">🎲 Generar tarea genérica</button>':'')+
+    // Cantidad — visible fuera de "Más opciones" por ser de uso frecuente,
+    // justo debajo de Tarea crucial. Sin box oscuro, igual que Tarea crucial.
+    '<div class="frow" style="margin:2px 0 14px;">'+
+      '<span style="font-size:13px;font-weight:600;color:var(--ink);">Definir cantidad específica</span>'+
+      '<button class="tog" id="m-qty-tog" onclick="mToggleQty()" style="background:'+(M.hasQty?'var(--accent)':'var(--muted-soft)')+';">'+
+        '<span class="tok" style="left:'+(M.hasQty?22:2)+'px;"></span>'+
+      '</button>'+
     '</div>'+
-    '</div>'):(
+    '<div id="m-qty-area" style="display:'+(M.hasQty?'block':'none')+';margin:-6px 0 14px;">'+
+      '<div style="display:flex;align-items:center;">'+
+        '<span style="font-size:12px;color:var(--muted);flex:1;">Meta total</span>'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<button class="qb" onclick="mChangeQty(-1)">−</button>'+
+          '<input id="m-qty-val" type="number" inputmode="numeric" min="2" max="999" value="'+M.qty+'" onchange="mSetQtyDirect(this.value)" style="font-size:16px;font-weight:700;width:44px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+          '<button class="qb" onclick="mChangeQty(1)">+</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">Toca el número para escribirlo directo, o usa −/+.</div>'+
+    '</div>'+
+    // ── Más opciones (colapsable, solo tareas diarias): Horario + Fecha +
+    // Checklist van todas dentro de un mismo box oscuro (una sola fsec);
+    // Categoría queda en su propio box separado porque es de otra naturaleza.
+    // Se usan con menos frecuencia que nombre/crucial/cantidad — ocultarlas
+    // por defecto hace que agregar una tarea simple sea más rápido y menos
+    // denso. Se auto-expanden si la tarea ya las tenía activas al editar.
       // Pedido: las tareas de semana/mes/semestre/año antes no tenían NADA
       // de esto — ni siquiera checklist. Acá se agrega solo el checklist
       // (hora/fecha/categoría siguen siendo exclusivos de tareas diarias,
@@ -10220,7 +11532,8 @@ function showTaskModal(){
           '</button>'+
         '</div>'+
         '<div id="m-cl-area" style="display:'+(M.hasCL?'block':'none')+';">'+
-          (showFreshCL?clFreshAreaExtrasHTML():'')+
+          clRuleAreaHTML()+
+        (showFreshCL?clFreshAreaExtrasHTML():'')+
           '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
           '<div id="m-cl-addrow">'+clAddButtonHTML()+'</div>'+
         '</div>'+
@@ -10270,7 +11583,7 @@ function mRepeatAreaHTML(){
   var isCustom = M.repeatEvery>0 && M.repeatEvery!==1 && M.repeatEvery!==7;
   var showCustomInput = isCustom || M._repeatCustomOpen;
   var html = '<div id="m-repeat-area" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-soft);">'+
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">¿Se repite?</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;align-items:center;">¿Se repite?'+infoBtn('repeat')+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
       mRepeatChipHTML('No se repite',0)+
       mRepeatChipHTML('Cada día',1)+
@@ -10284,7 +11597,7 @@ function mRepeatAreaHTML(){
         '<span style="font-size:12.5px;color:var(--ink-soft);">día(s)</span>'+
       '</div>'
     ):'')+
-    '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">'+(M.repeatEvery>0?'Al pasar la fecha, esta tarea salta sola a la próxima que le toque (con su propio checklist, si tiene uno "único cada vez").':'Solo para ese día — no vuelve a aparecer.')+'</div>'+
+    ''+
   '</div>';
   return html;
 }
@@ -10524,8 +11837,8 @@ function mNudgeNotifMM(delta){
 }
 function mToggleCrucial(){
   M.crucial=!M.crucial;
-  var tog=document.getElementById('m-crucial-tog');
-  if(tog){tog.style.background=M.crucial?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(M.crucial?22:2)+'px';}
+  var starBtn=document.getElementById('m-crucial-btn');
+  if(starBtn){starBtn.style.cssText=crucialBtnStyle();starBtn.textContent=M.crucial?'★':'☆';}
   if(M.crucial){ playSound('crucial'); vibrate(15); }
 }
 function openNewCategoryFromModal(){
@@ -10596,6 +11909,11 @@ function mSetCategory(id){
     showTaskModal(); // fallback
   }
 }
+// ── Temporizador de sets/repeticiones/descansos (pedido) ───────────────────
+function defaultTimerConfig(){
+  return {sets:[{id:uid(), name:'', sec:30, color:CATEGORY_COLORS[0]}], rounds:1, restBetween:15, restBetweenRounds:30};
+}
+function mQuietToast(m){ if(!M._quiet) toast(m); }
 function mToggleQty(){
   M.hasQty=!M.hasQty;if(M.hasQty&&M.qty<2)M.qty=3;
   var tog=document.getElementById('m-qty-tog'),area=document.getElementById('m-qty-area');
@@ -10611,7 +11929,14 @@ function mToggleQty(){
     var clTog=document.getElementById('m-cl-tog'),clArea=document.getElementById('m-cl-area');
     if(clTog){clTog.style.background='var(--muted-soft)';var ck=clTog.querySelector('.tok');if(ck)ck.style.left='2px';}
     if(clArea)clArea.style.display='none';
-    toast('Se desactivó el checklist interno (no pueden estar los dos a la vez)');
+    mQuietToast('Se desactivó el checklist interno (no pueden estar los dos a la vez)');
+  }
+  if(M.hasQty && M.hasTimer){
+    M.hasTimer=false;
+    var tmTog=document.getElementById('m-timer-tog'),tmArea=document.getElementById('m-timer-area');
+    if(tmTog){tmTog.style.background='var(--muted-soft)';var tmk=tmTog.querySelector('.tok');if(tmk)tmk.style.left='2px';}
+    if(tmArea)tmArea.style.display='none';
+    mQuietToast('Se desactivó el temporizador (no pueden estar los dos a la vez)');
   }
   playSound('toggle');
 }
@@ -10642,11 +11967,247 @@ function mToggleCLSection(){
     var qtyTog=document.getElementById('m-qty-tog'),qtyArea=document.getElementById('m-qty-area');
     if(qtyTog){qtyTog.style.background='var(--muted-soft)';var qk=qtyTog.querySelector('.tok');if(qk)qk.style.left='2px';}
     if(qtyArea)qtyArea.style.display='none';
-    toast('Se desactivó "Definir cantidad" (no pueden estar los dos a la vez)');
+    mQuietToast('Se desactivó "Definir cantidad" (no pueden estar los dos a la vez)');
+  }
+  if(M.hasCL && M.hasTimer){
+    M.hasTimer=false;
+    var tmTog2=document.getElementById('m-timer-tog'),tmArea2=document.getElementById('m-timer-area');
+    if(tmTog2){tmTog2.style.background='var(--muted-soft)';var tmk2=tmTog2.querySelector('.tok');if(tmk2)tmk2.style.left='2px';}
+    if(tmArea2)tmArea2.style.display='none';
+    mQuietToast('Se desactivó el temporizador (no pueden estar los dos a la vez)');
   }
   playSound('toggle');
 }
-// Pedido: el checklist puede ser "único cada vez" — al reiniciarse la tarea
+// ── Editor del temporizador (sets, vueltas, descansos) ──────────────────────
+function mToggleTimerSection(){
+  M.hasTimer = !M.hasTimer;
+  if(M.hasTimer && (!M.timer || !M.timer.sets || !M.timer.sets.length)) M.timer = defaultTimerConfig();
+  var tog=document.getElementById('m-timer-tog'), area=document.getElementById('m-timer-area');
+  if(tog){tog.style.background=M.hasTimer?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(M.hasTimer?22:2)+'px';}
+  if(area){area.style.display=M.hasTimer?'block':'none'; mRerenderTimerArea();}
+  if(M.hasTimer && (M.hasCL || M.hasQty)){
+    var wasCL=M.hasCL;
+    M.hasCL=false; M.hasQty=false;
+    var clTog=document.getElementById('m-cl-tog'),clArea=document.getElementById('m-cl-area');
+    if(clTog){clTog.style.background='var(--muted-soft)';var ck=clTog.querySelector('.tok');if(ck)ck.style.left='2px';}
+    if(clArea)clArea.style.display='none';
+    var qtyTog=document.getElementById('m-qty-tog'),qtyArea=document.getElementById('m-qty-area');
+    if(qtyTog){qtyTog.style.background='var(--muted-soft)';var qk=qtyTog.querySelector('.tok');if(qk)qk.style.left='2px';}
+    if(qtyArea)qtyArea.style.display='none';
+    mQuietToast('Se desactivó '+(wasCL?'el checklist':'"Definir cantidad"')+' (no pueden estar los dos a la vez)');
+  }
+  playSound('toggle');
+}
+// ── Duraciones cómodas para tiempos largos (estudio, pomodoro...) ───────────
+// Cada duración se edita como "min : seg" (ej. 45 min = 45 : 00), con atajos
+// de un toque (5, 10, 25, 45, 60, 90 min) y plantillas (Pomodoro, Estudio, HIIT).
+var TIMER_MAX_SEC = 21600; // 6 horas por tramo
+function fmtDur(sec){
+  sec = Math.max(0, Math.round(sec||0));
+  var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60, out = [];
+  if(h) out.push(h+' h');
+  if(m) out.push(m+' min');
+  if(s || !out.length) out.push(s+' s');
+  return out.join(' ');
+}
+// kind: 'set' (duración del ejercicio) | 'setf' (descanso propio de un ejercicio) | 'gen' (descanso general)
+function durInputHTML(sec, kind, id, field, dim){
+  var m = Math.floor(sec/60), s = sec%60;
+  var st = 'width:38px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;font-weight:700;padding:5px 0;font-family:Inter,sans-serif;color:'+(dim?'var(--muted)':'var(--ink)')+';';
+  var oc = 'onchange="mDurChange(this,\''+kind+'\',\''+(id||'')+'\',\''+(field||'')+'\')"';
+  return '<span class="dur" style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0;">'+
+    '<input type="number" inputmode="numeric" min="0" max="360" value="'+m+'" '+oc+' style="'+st+'"/><span style="font-size:10px;color:var(--muted);">min</span>'+
+    '<input type="number" inputmode="numeric" min="0" max="59" value="'+s+'" '+oc+' style="'+st+'"/><span style="font-size:10px;color:var(--muted);">s</span>'+
+  '</span>';
+}
+function mDurChange(el, kind, id, field){
+  var box = el.closest('.dur'), ins = box.querySelectorAll('input');
+  var total = (parseInt(ins[0].value,10)||0)*60 + (parseInt(ins[1].value,10)||0);
+  total = Math.max(0, Math.min(TIMER_MAX_SEC, total));
+  mSetTimerDur(kind, id, field, total);
+}
+function mSetTimerDur(kind, id, field, total){
+  if(kind==='set') M.timer.sets = M.timer.sets.map(function(s){return s.id===id?Object.assign({},s,{sec:Math.max(1,total)}):s;});
+  else if(kind==='setf') M.timer.sets = M.timer.sets.map(function(s){var u=Object.assign({},s);if(s.id===id)u[field]=total;return u;});
+  else M.timer[field] = total;
+  mRerenderTimerArea();
+}
+function mQuickDur(setId, min){ mSetTimerDur('set', setId, 'sec', min*60); }
+function mAddDur(setId, addSec){
+  var s = M.timer.sets.find(function(x){return x.id===setId;}); if(!s) return;
+  mSetTimerDur('set', setId, 'sec', Math.min(TIMER_MAX_SEC, (s.sec||0)+addSec));
+}
+var TIMER_PRESETS = {
+  pomodoro:{label:'🍅 Pomodoro', make:function(){return {sets:[{id:uid(),name:'Foco',sec:1500,color:CATEGORY_COLORS[1]}],rounds:4,restBetween:0,restBetweenRounds:300};}},
+  estudio:{label:'📚 Estudio 45+10', make:function(){return {sets:[{id:uid(),name:'Estudio',sec:2700,color:CATEGORY_COLORS[2]}],rounds:2,restBetween:0,restBetweenRounds:600};}},
+  hiit:{label:'🔥 HIIT 40/20', make:function(){return {sets:[{id:uid(),name:'Trabajo',sec:40,color:CATEGORY_COLORS[0]}],rounds:8,restBetween:0,restBetweenRounds:20};}}
+};
+function mApplyTimerPreset(key){
+  var p = TIMER_PRESETS[key]; if(!p) return;
+  M.timer = p.make(); M._timerOpenSet = null;
+  mRerenderTimerArea();
+  playSound('toggle');
+}
+function timerPresetsHTML(){
+  return '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;">'+Object.keys(TIMER_PRESETS).map(function(k){
+    return '<button type="button" onclick="mApplyTimerPreset(\''+k+'\')" style="flex-shrink:0;padding:6px 11px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);border-radius:14px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+TIMER_PRESETS[k].label+'</button>';
+  }).join('')+'</div>';
+}
+function timerQuickDurHTML(set){
+  var chips = [5,10,15,25,30,45,60,90];
+  return '<div style="font-size:11px;color:var(--muted);margin:6px 0 5px;">Duración rápida</div>'+
+    '<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:4px;">'+chips.map(function(m){
+      var on = (set.sec||0)===m*60;
+      return '<button type="button" onclick="mQuickDur(\''+set.id+'\','+m+')" style="flex-shrink:0;padding:5px 9px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+m+' min</button>';
+    }).join('')+
+    [['+1 min',60],['+5 min',300],['+10 min',600]].map(function(p){return '<button type="button" onclick="mAddDur(\''+set.id+'\','+p[1]+')" style="flex-shrink:0;padding:5px 9px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+p[0]+'</button>';}).join('')+
+    '</div>';
+}
+function timerSetRowHTML(set, idx){
+  var col = set.color || CATEGORY_COLORS[idx%CATEGORY_COLORS.length];
+  var open = M._timerOpenSet===set.id;
+  var custom = (set.reps>1) || set.restReps!=null || set.restAfter!=null;
+  var html = '<div style="border-bottom:1px solid var(--line-soft);">'+
+    '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">'+
+      '<button type="button" onclick="mCycleTimerSetColor(\''+set.id+'\')" title="Tocar para cambiar el color" style="width:22px;height:22px;border-radius:50%;background:'+col+';flex-shrink:0;cursor:pointer;border:2px solid var(--paper);box-shadow:0 0 0 1.5px var(--line);padding:0;"></button>'+
+      '<input type="text" placeholder="Ejercicio '+(idx+1)+'" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:6px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+      durInputHTML(set.sec||30,'set',set.id,'sec',false)+
+      '<button type="button" onclick="mToggleTimerSetOpen(\''+set.id+'\')" title="Ajustes de este ejercicio" style="background:'+(open||custom?'var(--accent-bg)':'none')+';border:1.5px solid '+(open||custom?'var(--accent)':'var(--line)')+';color:'+(open||custom?'var(--accent)':'var(--muted)')+';border-radius:8px;height:26px;padding:0 7px;font-size:11px;font-weight:700;flex-shrink:0;cursor:pointer;font-family:Inter,sans-serif;">⚙'+(set.reps>1?' ×'+set.reps:'')+'</button>'+
+      '<button type="button" onclick="mRemoveTimerSet(\''+set.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:18px;flex-shrink:0;cursor:pointer;line-height:1;">×</button>'+
+    '</div>';
+  if(open){
+    var isLast = idx===M.timer.sets.length-1;
+    html += '<div style="background:var(--bg);border-radius:10px;padding:4px 12px 8px;margin:0 0 10px;">'+
+      timerQuickDurHTML(set)+
+      timerSetStepperHTML(set,'reps','Vueltas de este ejercicio','',1)+
+      (set.reps>1?timerSetStepperHTML(set,'restReps','Descanso entre sus vueltas','s',5):'')+
+      timerSetStepperHTML(set,'restAfter', isLast?(M.timer.rounds>1?'Descanso antes de la siguiente vuelta general':'Descanso al terminar'):'Descanso antes del siguiente ejercicio','s',5)+
+    '</div>';
+  }
+  return html+'</div>';
+}
+function mTimerSetAutoValue(set, field){
+  if(field==='restReps') return M.timer.restBetween||0;
+  var idx = M.timer.sets.findIndex(function(s){return s.id===set.id;});
+  return idx===M.timer.sets.length-1 ? (M.timer.restBetweenRounds||0) : (M.timer.restBetween||0);
+}
+function timerSetStepperHTML(set, field, label, suffix, step){
+  var isReps = field==='reps';
+  var isAuto = !isReps && set[field]==null;
+  var val = isReps ? (set.reps||1) : (isAuto ? mTimerSetAutoValue(set,field) : set[field]);
+  var ctl = isReps
+    ? '<button type="button" class="qb" onclick="mChangeTimerSetField(\''+set.id+'\',\'reps\',-1)">−</button>'+
+      '<span style="font-weight:700;min-width:34px;text-align:center;font-size:13px;">'+val+'</span>'+
+      '<button type="button" class="qb" onclick="mChangeTimerSetField(\''+set.id+'\',\'reps\',+1)">+</button>'
+    : durInputHTML(val,'setf',set.id,field,isAuto);
+  return '<div style="display:flex;align-items:center;gap:8px;margin:6px 0;">'+
+    '<span style="font-size:11.5px;color:var(--ink-soft);flex:1;line-height:1.3;">'+label+(isAuto?' <span style="color:var(--muted);">(general)</span>':'')+'</span>'+
+    (!isReps&&!isAuto?'<button type="button" onclick="mAutoTimerSetField(\''+set.id+'\',\''+field+'\')" title="Volver al valor general" style="background:none;border:none;color:var(--accent);font-size:10.5px;font-weight:700;cursor:pointer;padding:0 2px;font-family:Inter,sans-serif;">auto</button>':'')+
+    ctl+
+  '</div>';
+}
+function mToggleTimerSetOpen(setId){
+  M._timerOpenSet = (M._timerOpenSet===setId) ? null : setId;
+  mRerenderTimerArea();
+}
+function mChangeTimerSetField(setId, field, delta){
+  M.timer.sets = M.timer.sets.map(function(s){
+    if(s.id!==setId) return s;
+    var u = Object.assign({},s);
+    if(field==='reps') u.reps = Math.max(1, Math.min(50, (s.reps||1)+delta));
+    else {
+      var base = s[field]==null ? mTimerSetAutoValue(s,field) : s[field];
+      u[field] = Math.max(0, Math.min(TIMER_MAX_SEC, base+delta));
+    }
+    return u;
+  });
+  mRerenderTimerArea();
+}
+function mAutoTimerSetField(setId, field){
+  M.timer.sets = M.timer.sets.map(function(s){
+    if(s.id!==setId) return s;
+    var u = Object.assign({},s); u[field]=null; return u;
+  });
+  mRerenderTimerArea();
+}
+function timerFieldStepperHTML(label, field, step, suffix){
+  var val = M.timer[field];
+  return '<div style="display:flex;align-items:center;gap:10px;margin:8px 0;">'+
+    '<span style="font-size:12px;color:var(--ink-soft);flex:1;">'+label+'</span>'+
+    '<button type="button" class="qb" onclick="mChangeTimerField(\''+field+'\',-'+step+')">−</button>'+
+    '<span style="font-weight:700;min-width:34px;text-align:center;font-size:13px;">'+val+(suffix||'')+'</span>'+
+    '<button type="button" class="qb" onclick="mChangeTimerField(\''+field+'\',+'+step+')">+</button>'+
+  '</div>';
+}
+function timerDurFieldHTML(label, field){
+  return '<div style="display:flex;align-items:center;gap:10px;margin:8px 0;">'+
+    '<span style="font-size:12px;color:var(--ink-soft);flex:1;">'+label+'</span>'+
+    durInputHTML(M.timer[field]||0,'gen','',field,false)+
+  '</div>';
+}
+function timerEstimateTotalSec(timer){
+  return buildTimerSteps(timer).totalSec; // misma lógica que la ejecución, con los ajustes por ejercicio
+}
+function timerAreaHTML(){
+  var timer = M.timer;
+  var totalSec = timerEstimateTotalSec(timer);
+  var mm = Math.floor(totalSec/60), ss = totalSec%60;
+  var html = timerPresetsHTML()+'<div id="timer-sets-list">'+timer.sets.map(function(s,i){return timerSetRowHTML(s,i);}).join('')+'</div>'+
+    '<button type="button" onclick="mAddTimerSet()" style="width:100%;margin-top:8px;background:none;border:1.5px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;">+ Agregar ejercicio</button>'+
+    '<div style="height:1px;background:var(--line-soft);margin:14px 0 4px;"></div>'+
+    timerFieldStepperHTML('Vueltas de toda la rutina','rounds',1,'')+
+    timerDurFieldHTML('Descanso entre ejercicios (general)','restBetween')+
+    (timer.rounds>1?timerDurFieldHTML('Descanso entre vueltas (general)','restBetweenRounds'):'')+
+    
+    '<div style="font-size:12px;color:var(--muted);margin-top:10px;display:flex;align-items:center;">Duración total: <b style="margin-left:4px;color:var(--ink);">'+fmtDur(totalSec)+'</b>'+infoBtn('timer')+'</div>'+
+    (M.isNew?'':'<button type="button" onclick="previewTimerRun()" style="width:100%;margin-top:10px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:10px;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">▶ Probar</button>');
+  return html;
+}
+function mRerenderTimerArea(){
+  var area = document.getElementById('m-timer-area');
+  if(area) area.innerHTML = timerAreaHTML();
+}
+function mUpdateTimerSet(setId, field, val){
+  M.timer.sets = M.timer.sets.map(function(s){
+    if(s.id!==setId) return s;
+    var updated = Object.assign({},s);
+    if(field==='sec') updated.sec = Math.max(1, Math.min(TIMER_MAX_SEC, parseInt(val,10)||30));
+    else updated[field] = val;
+    return updated;
+  });
+  if(field==='sec') mRerenderTimerArea(); // por el total estimado; el nombre no necesita repintar (perdería foco)
+}
+function mAddTimerSet(){
+  if(M.timer.sets.length>=20){ toast('Máximo 20 ejercicios por temporizador'); return; }
+  M.timer.sets.push({id:uid(), name:'', sec:30, color:CATEGORY_COLORS[M.timer.sets.length%CATEGORY_COLORS.length]});
+  mRerenderTimerArea();
+  playSound('add');
+}
+function mRemoveTimerSet(setId){
+  if(M.timer.sets.length<=1){ toast('Debe quedar al menos un ejercicio'); return; }
+  M.timer.sets = M.timer.sets.filter(function(s){return s.id!==setId;});
+  mRerenderTimerArea();
+}
+function mCycleTimerSetColor(setId){
+  M.timer.sets = M.timer.sets.map(function(s){
+    if(s.id!==setId) return s;
+    var i = CATEGORY_COLORS.indexOf(s.color);
+    var next = CATEGORY_COLORS[(i+1)%CATEGORY_COLORS.length];
+    return Object.assign({},s,{color:next});
+  });
+  mRerenderTimerArea();
+}
+function mChangeTimerField(field, delta){
+  var min = field==='rounds' ? 1 : 0;
+  M.timer[field] = Math.max(min, (M.timer[field]||0)+delta);
+  mRerenderTimerArea();
+}
+// Botón "Probar" del editor: corre el temporizador con la config actual SIN
+// guardar la tarea ni marcarla como completada — solo para escuchar los
+// sonidos y ver cómo se ve antes de guardar.
+function previewTimerRun(){
+  openTimerRun(null, JSON.parse(JSON.stringify(M.timer)), (M.task&&M.task.text)||'Vista previa', true);
+}
 // (nueva semana/mes/etc.) queda vacío en vez de repetir los mismos ítems
 // (ver resetChecklistForCycle). Útil para listas que cambian, como "qué
 // comprar" en la tarea "Abastecerse". Se guarda el último checklist usado
@@ -10662,8 +12223,8 @@ function clFreshAreaExtrasHTML(){
   var last = (M.task && M.task.lastChecklist) || [];
   var html = '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px;">'+
       '<div style="flex:1;">'+
-        '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:2px;">Checklist único cada vez</div>'+
-        '<div style="font-size:11px;color:var(--muted);line-height:1.4;">Al reiniciarse, empieza vacío en vez de repetir los mismos ítems. Útil para listas que cambian, como "qué comprar".</div>'+
+        '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:2px;display:flex;align-items:center;">Checklist único cada vez'+infoBtn('clfresh')+'</div>'+
+        ''+
       '</div>'+
       '<button class="tog" id="m-clfresh-tog" onclick="mToggleCLFresh()" style="background:'+(M.clFresh?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
         '<span class="tok" style="left:'+(M.clFresh?22:2)+'px;"></span>'+
@@ -10978,7 +12539,7 @@ function propagateCLLink(childItem, delta, complDelta, visited){
       S.tasks=S.tasks.map(function(t){return t.id===parentTask.id?updatedTask:t;});
       var justCompletedTask = !wasDone && nowDone;
       var justUncompletedTask = wasDone && !nowDone;
-      if(justCompletedTask && !S.rewardedTaskIds[parentTask.id]){S.rewardedTaskIds[parentTask.id]=true;addXP(PT[parentTask.period]||1);}
+      if(justCompletedTask && !S.rewardedTaskIds[parentTask.id]){awardTaskXP(updatedTask);}
       // seguir subiendo si esta tarea a su vez está vinculada más arriba
       propagateCLLink({linkUp:updatedTask.clLinkUp}, appliedDelta, justCompletedTask?1:(justUncompletedTask?-1:0), nextVisited);
       return;
@@ -10993,11 +12554,12 @@ function propagateCLLink(childItem, delta, complDelta, visited){
     var newChecklist=parentTask.checklist.map(function(i){return i.id===parentItem.id?Object.assign({},i,{prog:newProg,done:newDone}):i;});
     var newDoneCount=newChecklist.filter(function(i){return i.done;}).length;
     var taskDelta=newDoneCount-oldDoneCount;
-    var updatedParentTask=Object.assign({},parentTask,{checklist:newChecklist, done: newChecklist.length? newChecklist.every(function(i){return i.done;}) : parentTask.done});
+    var updatedParentTask=Object.assign({},parentTask,{checklist:newChecklist});
+    updatedParentTask.done = newChecklist.length ? checklistSatisfied(updatedParentTask) : parentTask.done;
     S.tasks=S.tasks.map(function(t){return t.id===parentTask.id?updatedParentTask:t;});
     var justCompletedParent = !wasTaskDone && isDone(updatedParentTask);
     var justUncompletedParent = wasTaskDone && !isDone(updatedParentTask);
-    if(justCompletedParent && !S.rewardedTaskIds[parentTask.id]){S.rewardedTaskIds[parentTask.id]=true;addXP(PT[parentTask.period]||1);}
+    if(justCompletedParent && !S.rewardedTaskIds[parentTask.id]){awardTaskXP(updatedParentTask);}
     var updatedParentItem=newChecklist.find(function(i){return i.id===parentItem.id;});
     var itemJustCompleted = !parentItem.done && updatedParentItem.done;
     var itemJustUncompleted = parentItem.done && !updatedParentItem.done;
@@ -11010,6 +12572,53 @@ function mRerenderCL(){
   area.innerHTML=clItemsHTML();
   var addrow=document.getElementById('m-cl-addrow');
   if(addrow)addrow.innerHTML=clAddButtonHTML();
+  mRerenderCLRuleArea();
+}
+// ── Pedido: el checklist puede completarse con una regla más flexible que
+// "todos los ítems" — "con cualquiera de estos alcanza" (k=1) o "completar
+// K de N" (ver checklistSatisfied, que es la única función que de verdad
+// decide esto). Este bloque solo aparece con 2+ ítems (con 0 o 1 no tiene
+// sentido elegir "cuántos hacen falta").
+function clRuleAreaHTML(){
+  var n = M.checklist.length;
+  if(n<2) return '<div id="m-clrule-area"></div>';
+  var isKofn = M.clRule && M.clRule.mode==='kofn';
+  var k = Math.max(1, Math.min((M.clRule&&M.clRule.k)||1, n));
+  var html = '<div id="m-clrule-area" style="padding-bottom:12px;border-bottom:1px solid var(--line-soft);margin-bottom:12px;">'+
+    '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:6px;display:flex;align-items:center;">Modo de completado'+infoBtn('clrule')+'</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:'+(isKofn?8:0)+'px;">'+
+      '<button type="button" onclick="mSetCLRuleMode(\'all\')" style="padding:6px 11px;border-radius:20px;border:1.5px solid '+(!isKofn?'var(--accent)':'var(--line)')+';background:'+(!isKofn?'var(--accent)':'var(--paper)')+';color:'+(!isKofn?'#fff':'var(--ink-soft)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Todos los ítems</button>'+
+      '<button type="button" onclick="mSetCLRuleMode(\'kofn\')" style="padding:6px 11px;border-radius:20px;border:1.5px solid '+(isKofn?'var(--accent)':'var(--line)')+';background:'+(isKofn?'var(--accent)':'var(--paper)')+';color:'+(isKofn?'#fff':'var(--ink-soft)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Con algunos alcanza</button>'+
+    '</div>'+
+    (isKofn?(
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<span style="font-size:12px;color:var(--ink-soft);">Hacen falta</span>'+
+        '<button type="button" onclick="mStepCLRuleK(-1)" style="width:26px;height:26px;border-radius:7px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:15px;line-height:1;cursor:pointer;">−</button>'+
+        '<span style="font-size:14px;font-weight:700;color:var(--accent);min-width:14px;text-align:center;">'+k+'</span>'+
+        '<button type="button" onclick="mStepCLRuleK(1)" style="width:26px;height:26px;border-radius:7px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:15px;line-height:1;cursor:pointer;">+</button>'+
+        '<span style="font-size:12px;color:var(--muted);">de '+n+'</span>'+
+      '</div>'+
+''
+    ):'')+
+  '</div>';
+  return html;
+}
+function mSetCLRuleMode(mode){
+  if(!M.clRule) M.clRule={mode:'all',k:2};
+  M.clRule.mode = mode;
+  if(mode==='kofn' && !(M.clRule.k>=1)) M.clRule.k = Math.max(1, M.checklist.length-1)||1;
+  mRerenderCLRuleArea();
+  playSound('toggle');
+}
+function mStepCLRuleK(delta){
+  if(!M.clRule) M.clRule={mode:'kofn',k:1};
+  var n = Math.max(M.checklist.length,1);
+  M.clRule.k = Math.max(1, Math.min((M.clRule.k||1)+delta, n));
+  mRerenderCLRuleArea();
+}
+function mRerenderCLRuleArea(){
+  var box=document.getElementById('m-clrule-area');
+  if(box) box.outerHTML = clRuleAreaHTML();
 }
 // ── Vincular la tarea COMPLETA (sin checklist propio) a un ítem de una
 // tarea de período más amplio. Disponible para cualquier período salvo
@@ -11034,7 +12643,7 @@ function mSave(){
   var cl=M.hasCL?M.checklist.filter(function(i){return i.text.trim();}):[];
   if(!isPremium() && cl.length>MAX_CHECKLIST_ITEMS_FREE) cl=cl.slice(0,MAX_CHECKLIST_ITEMS_FREE);
   var qty=M.hasQty?Math.max(2,M.qty):1;
-  var done_=cl.length?cl.every(function(i){return i.done;}):(qty>1?(M.task.prog||0)>=qty:!!M.task.done);
+  var done_=cl.length?checklistSatisfied({checklist:cl,clRule:M.clRule}):(qty>1?(M.task.prog||0)>=qty:!!M.task.done);
   // BUGFIX: si es una tarea simple (sin "Cantidad"), "prog" debe quedar en
   // sincronía con "done" (0 o 1) — igual que ya se corrigió en tapTask() —
   // para que un vínculo hacia otra tarea (t.clLinkUp) calcule bien el
@@ -11052,7 +12661,7 @@ function mSave(){
   // Pedido: la tarea COMPLETA puede estar vinculada (clLinkUp) aunque tenga
   // checklist propio — antes se borraba el vínculo acá apenas el checklist
   // tenía algún ítem; ahora se conserva siempre tal cual estaba.
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
@@ -11396,6 +13005,26 @@ var MEDALS_CATALOG = [
     reward:{type:'xp', value:12, label:'+12 XP'},
     check:function(){return (S.themesUsed||[]).length >= 5;}
   },
+  {
+    // Pedido: medalla nueva, "relativamente difícil de obtener", que
+    // desbloquea +1 cupo de seguimiento de nivel personalizado. La más
+    // exigente hasta ahora pedía 20 días seguidos ("Cuatro al hilo"); esta
+    // pide el TRIPLE de días consecutivos con actividad real, así que es
+    // notoriamente más difícil que cualquier otra del catálogo.
+    id:'streak-60', emoji:'🏔️', title:'Cima constante',
+    desc:'Completa al menos 1 tarea todos los días durante 60 días seguidos.',
+    reward:{type:'trackslot+1', value:1, label:'+1 seguimiento de nivel personalizado'},
+    check:function(){
+      var hist = S.dailyHistory || {};
+      var today = new Date();
+      for(var i=0;i<60;i++){
+        var d = addDaysLocal(today, -i);
+        var data = hist[localDateStr(d)];
+        if(!data || (data.completed||0) < 1) return false;
+      }
+      return true;
+    }
+  },
 ];
 
 // Verifica todas las medallas y desbloquea las que correspondan (sin aviso)
@@ -11418,6 +13047,10 @@ function checkMedals(){
           // Aumentar límite de tareas de la cuenta en 1 en todos los períodos
           if(!S.bonusTaskLimit) S.bonusTaskLimit = 0;
           S.bonusTaskLimit += m.reward.value;
+        } else if(m.reward.type === 'trackslot+1'){
+          // Cupo extra para seguimientos de nivel personalizados
+          if(!S.bonusTrackSlots) S.bonusTrackSlots = 0;
+          S.bonusTrackSlots += m.reward.value;
         }
       }
       setTimeout(function(medal){
@@ -12050,8 +13683,8 @@ function showNotifAsk(){
   var box=document.createElement('div');box.className='conf-box';box.id='notif-ask';
   box.innerHTML='<div class="conf-inner" style="max-width:320px;">'+
     iconBadgeHTML(ICON_BELL, 64)+
-    '<div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);text-align:center;">¿Quieres recordatorios?</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;text-align:center;">Te aviso solo de las tareas que tú elijas, cuando se acerque su hora. Sin spam: nada de notificaciones para todas tus tareas.</div>'+
+    '<div class="serif" style="font-weight:700;font-size:18px;margin-bottom:8px;color:var(--ink);text-align:center;">¿Quieres recordatorios?'+infoBtn('notifonly')+'</div>'+
+    
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       '<button class="sbtn" style="font-size:13px;" onclick="grantNotif();this.closest(\'.conf-box\').remove();">Sí, activar</button>'+
       '<button class="tbtn" style="text-align:center;text-decoration:none;" onclick="this.closest(\'.conf-box\').remove();">Ahora no</button>'+
@@ -12941,6 +14574,13 @@ if(S.notifPermission === 'granted') scheduleNotifications();
       // acá, su propio ov.remove() dispara este mismo observer, pero como
       // handlingPop ya está en true no se vuelve a tocar el historial.
       try{ closeProjectView(); }catch(e){ if(node.parentNode) node.remove(); }
+    } else if(node.id==='timer-run'){
+      // Mismo motivo que project-view: la sesión de temporizador tiene
+      // limpieza propia (cancelar sonidos programados, parar el intervalo,
+      // soltar el wake lock) que removeOverlay() genérico no conoce — sin
+      // esto, salir con el botón atrás dejaba sonidos fantasma programados
+      // y la pantalla sin poder apagarse nunca más.
+      try{ closeTimerRun(); }catch(e){ if(node.parentNode) node.remove(); }
     } else if(node.id){
       // Reutiliza el mismo fade-out que ya usa el resto de la app para cerrar
       try{ removeOverlay(node.id); }catch(e){ if(node.parentNode) node.remove(); }
@@ -12992,9 +14632,10 @@ if('serviceWorker' in navigator){
 trackVisit();          // Registrar la visita de hoy
 checkMedals();         // Revisar medallas al iniciar
 checkStreakOnLoad();
-checkAutoReset();      // Auto reset on Monday 4 AM
+var _bootAutoReset = checkAutoReset();      // Reinicio automático por período (ver checkAutoReset)
 advanceRecurringEvents(); // Adelantar eventos "cada N días" cuya fecha ya pasó
 render();
+announceAutoReset(_bootAutoReset);
 setTimeout(function(){
   var sp=document.getElementById('splash');
   if(sp){sp.classList.add('hide');setTimeout(function(){sp.remove();},600);}
