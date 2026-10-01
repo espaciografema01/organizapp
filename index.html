@@ -321,6 +321,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 .flbl{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
 .fsec{background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:12px;}
 .frow{display:flex;align-items:center;justify-content:space-between;}
+.cal-cell:active{transform:scale(.93);}
 .sec-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 7px;display:flex;align-items:center;}
 .seg{display:flex;gap:2px;background:var(--bg);border:1.5px solid var(--line);border-radius:11px;padding:3px;}
 .seg-b{flex:1;min-width:0;border:none;background:transparent;border-radius:8px;padding:8px 3px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;transition:background .15s,color .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -1999,7 +2000,7 @@ function isDone(t){
 // (hoisted) ya existe para cuando esto realmente se ejecuta.
 function clItemRatio(item){
   var q = clItemQty(item);
-  if(q>1) return Math.min((item.prog||0)/q, 1);
+  if(q>1) return Math.min((Number(item.prog)||0)/q, 1);
   return item.done ? 1 : 0;
 }
 function tRatio(t){
@@ -2393,6 +2394,7 @@ function awardTrackXP(task, pts){
     if(!taskQualifiesForTrack(task, track)) return;
     var oldLvl = getLevel(track.xp||0);
     track.xp = (track.xp||0) + pts;
+    track.log = (track.log||[]).concat([{d:todayStr(), x:pts, n:task.text||''}]).slice(-150);
     var newLvl = getLevel(track.xp);
     if(newLvl > oldLvl){
       setTimeout(function(){
@@ -7678,7 +7680,7 @@ function openCategoryManager(){
 
 function chkSVG(){return '<svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
 function miniChkSVG(){return '<svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
-function mpHTML(r,h){h=h||4;return '<div class="mpbar" style="height:'+h+'px"><div class="mpbar-fill" style="width:'+Math.min(100,Math.round(r*100))+'%;height:100%;"></div></div>';}
+function mpHTML(r,h){h=h||4;r=isFinite(r)?r:0;return '<div class="mpbar" style="height:'+h+'px"><div class="mpbar-fill" style="width:'+Math.min(100,Math.round(r*100))+'%;height:100%;"></div></div>';}
 
 function taskHTML(t,showPeriod){
   if(SEL.active && SEL.type==='tasks') return taskHTMLSelectable(t,showPeriod);
@@ -7691,8 +7693,12 @@ function taskHTML(t,showPeriod){
   // así se ve de un vistazo cuánto falta para la meta real, no cuánto falta
   // para marcar TODO.
   var clKofN = hasCL && t.clRule && t.clRule.mode==='kofn';
-  var clGoal = clKofN ? Math.max(1,Math.min(t.clRule.k||1,t.checklist.length)) : (hasCL?t.checklist.length:0);
-  var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:700;color:var(--accent);">'+(t.prog||0)+'</span>':(r>0&&hasCL?'<span style="font-size:7px;font-weight:700;color:var(--accent);">'+clDone+'</span>':''));
+  // Pedido: si el checklist tiene ítems con cantidad (ej. Kindle 2/4), el
+  // contador "0/3" (ítems completos) engañaba — la barra avanzaba pero el
+  // número seguía en 0. En ese caso se muestra el porcentaje real.
+    var clGoal = clKofN ? Math.max(1,Math.min(t.clRule.k||1,t.checklist.length)) : (hasCL?t.checklist.length:0);
+  var clHasQtyItems = hasCL && !clKofN && t.checklist.some(function(i){return clItemQty(i)>1;});
+var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:700;color:var(--accent);">'+(t.prog||0)+'</span>':(r>0&&hasCL&&!clHasQtyItems?'<span style="font-size:7px;font-weight:700;color:var(--accent);">'+clDone+'</span>':''));
   // Pedido: las tareas con cantidad usan la misma casilla cuadrada
   // redondeada que el resto (antes eran un círculo aparte, sin motivo para
   // diferenciarse visualmente del resto de las tareas).
@@ -7752,7 +7758,7 @@ function taskHTML(t,showPeriod){
           // círculo repetidas veces) — útil cuando la meta es un número
           // grande, ej. una meta de 100.
           (hasQty?'<input type="number" inputmode="numeric" min="0" max="'+t.qty+'" value="'+(t.prog||0)+'" onclick="event.stopPropagation()" onchange="event.stopPropagation();setTaskProg(\''+t.id+'\',this.value)" style="width:22px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:11px;font-weight:700;color:var(--muted);font-family:Inter,sans-serif;padding:0;flex-shrink:0;"/><span style="font-size:11px;color:var(--muted);flex-shrink:0;">/'+t.qty+'</span>':'')+
-          (hasCL?'<span onclick="event.stopPropagation();openCLSheet(\''+t.id+'\')" title="'+(clKofN?('Con '+clGoal+' de '+t.checklist.length+' alcanza — abrir checklist'):'Abrir checklist')+'" style="font-size:11px;color:var(--muted);flex-shrink:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">'+clDone+'/'+clGoal+(clKofN?' ✦':'')+'</span>':'')+
+          (hasCL?'<span onclick="event.stopPropagation();openCLSheet(\''+t.id+'\')" title="'+(clKofN?('Con '+clGoal+' de '+t.checklist.length+' alcanza — abrir checklist'):'Abrir checklist')+'" style="font-size:11px;color:var(--muted);flex-shrink:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;">'+(clHasQtyItems?(Math.round(r*100)+'%'):(clDone+'/'+clGoal+(clKofN?' ✦':'')))+'</span>':'')+
         '</div>'+
         ((hasQty||hasCL)?mpHTML(r):'')+tagHTML+
       '</div>'+
@@ -8809,13 +8815,10 @@ function trackGemPath(level){
   return {outer:outer, facets:facets, innerStar:innerStar};
 }
 var _trackGemSeq=0;
-function levelTrackGemHTML(track, idx, size){
-  size = size||44;
-  var info = lvlInfo(track.xp||0);
-  var col = levelTrackColor(track, idx);
-  var shape = trackGemPath(info.lvl);
-  var clipId = 'tgclip'+String(track.id||'x').replace(/[^a-zA-Z0-9]/g,'')+(_trackGemSeq++);
-  var fillY = 100-(info.ratio*100);
+function trackGemSVG(level, ratio, col, size, seed){
+  var shape = trackGemPath(level);
+  var clipId = 'tgclip'+String(seed||'x').replace(/[^a-zA-Z0-9]/g,'')+(_trackGemSeq++);
+  var fillY = 100-(ratio*100);
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 100 100" style="flex-shrink:0;overflow:visible;">'+
     '<defs><clipPath id="'+clipId+'"><path d="'+shape.outer+'"/></clipPath></defs>'+
     '<path d="'+shape.outer+'" fill="'+col+'" opacity=".14"/>'+
@@ -8828,9 +8831,13 @@ function levelTrackGemHTML(track, idx, size){
     (shape.facets?'<path d="'+shape.facets+'" stroke="'+col+'" stroke-width=".8" opacity=".5" fill="none"/>':'')+
   '</svg>';
 }
+function levelTrackGemHTML(track, idx, size){
+  var info = lvlInfo(track.xp||0);
+  return trackGemSVG(info.lvl, info.ratio, levelTrackColor(track, idx), size||44, track.id);
+}
 function levelTrackCardHTML(track, idx, editable){
   var info = lvlInfo(track.xp||0);
-  return '<div '+(editable?'onclick="openTrackEditor(\''+track.id+'\')"':'')+' style="display:flex;align-items:center;gap:12px;padding:9px 2px;'+(editable?'cursor:pointer;':'')+'">'+
+  return '<div onclick="openTrackDetail(\''+track.id+'\')" style="display:flex;align-items:center;gap:12px;padding:9px 2px;cursor:pointer;">'+
     levelTrackGemHTML(track, idx, 42)+
     '<div style="flex:1;min-width:0;">'+
       '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</div>'+
@@ -8840,7 +8847,7 @@ function levelTrackCardHTML(track, idx, editable){
     '<div style="text-align:right;flex-shrink:0;">'+
       '<div style="font-size:11px;font-weight:700;color:var(--ink-soft);">'+(track.xp||0)+' XP</div>'+
     '</div>'+
-    (editable?'<span style="font-size:16px;color:var(--muted);flex-shrink:0;">›</span>':'')+
+    '<span style="font-size:16px;color:var(--muted);flex-shrink:0;">›</span>'+
   '</div>';
 }
 // Tarjeta para Plan → Progreso: con gestión (crear/editar/borrar).
@@ -8855,15 +8862,22 @@ function renderLevelTracksSection(){
   if(tracks.length){
     html += tracks.map(function(t,i){return levelTrackCardHTML(t,i,true);}).join('<div style="height:1px;background:var(--line-soft);margin:0 2px;"></div>');
   } else {
-    html += '<div style="font-size:12px;color:var(--muted);line-height:1.5;padding:6px 2px 10px;">Crea un seguimiento para subir de nivel en algo específico — por ejemplo "Deporte" — con todas las tareas de una categoría, o eligiendo tú mismo cuáles cuentan.</div>';
+    html += '<div style="font-size:12px;color:var(--muted);line-height:1.5;padding:6px 2px 10px;">Sube de nivel en algo específico — por ejemplo "Deporte" — con las tareas de una categoría o las que tú elijas.</div>';
   }
-  if(tracks.length < maxSlots){
-    html += '<button onclick="openTrackEditor(null)" style="width:100%;margin-top:'+(tracks.length?10:0)+'px;background:var(--bg);border:1.5px dashed var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">+ Nuevo seguimiento</button>';
-  } else {
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.45;">Llegaste al máximo de tu plan'+(isPremium()?'':' gratuito')+' ('+maxSlots+'). '+(isPremium()?'':'Con acceso completo son hasta 3, y ')+'nivel 8 o la medalla 🏔️ "Cima constante" dan +1 cupo cada uno.</div>';
-  }
+  // El botón siempre está; si ya no hay cupo, el aviso del plan aparece recién al tocarlo.
+  html += '<button onclick="openTrackEditor(null)" style="width:100%;margin-top:'+(tracks.length?10:0)+'px;background:var(--bg);border:1.5px dashed var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">+ Nuevo seguimiento</button>';
   html += '</div>';
   return html;
+}
+function trackLimitMessage(){
+  var max = maxLevelTrackSlots(), prem = isPremium();
+  var parts = [(prem?'Tu acceso completo permite ':'Tu plan gratuito permite ')+max+' seguimiento'+(max===1?'':'s')+'.'];
+  if(!prem) parts.push('Con acceso completo son hasta 3.');
+  var lv8 = getLevel(S.xp||0)>=8, medal = (S.bonusTrackSlots||0)>0;
+  if(!lv8 || !medal){
+    parts.push('Puedes desbloquear 1 cupo extra '+(!lv8&&!medal?'llegando al nivel 8, y otro con la medalla 🏔️ "Cima constante"':(!lv8?'llegando al nivel 8':'con la medalla 🏔️ "Cima constante"'))+'.');
+  }
+  return parts.join(' ');
 }
 // Tarjeta de solo lectura para Yo → Estadísticas.
 function renderLevelTracksStatsCard(){
@@ -8875,10 +8889,77 @@ function renderLevelTracksStatsCard(){
     '<div style="font-size:11px;color:var(--accent);margin-top:8px;cursor:pointer;font-weight:600;" onclick="setTab(\'progreso\')">Gestionar en Progreso ›</div>'+
   '</div>';
 }
+// ── Detalle de un seguimiento: figura grande, avance, camino de niveles ─────
+function trackWeekXP(track){
+  var from = localDateStr(addDaysLocal(new Date(), -6));
+  return (track.log||[]).filter(function(e){return e.d>=from;}).reduce(function(s,e){return s+e.x;},0);
+}
+function trackDetailBodyHTML(track){
+  var idx = Math.max(0,(S.levelTracks||[]).findIndex(function(t){return t.id===track.id;}));
+  var info = lvlInfo(track.xp||0), col = levelTrackColor(track, idx);
+  var log = track.log||[];
+  // XP por día, últimos 14 días
+  var bars = [];
+  for(var i=13;i>=0;i--){
+    var k = localDateStr(addDaysLocal(new Date(), -i));
+    bars.push({k:k, v:log.filter(function(e){return e.d===k;}).reduce(function(s,e){return s+e.x;},0)});
+  }
+  var bmax = Math.max.apply(null, bars.map(function(b){return b.v;}).concat([1]));
+  var barsSVG = '<svg viewBox="0 0 280 54" width="100%" height="54" style="display:block;">'+bars.map(function(b,i){
+    var h = Math.max(b.v>0?4:2, 46*b.v/bmax);
+    return '<rect x="'+(i*20+3)+'" y="'+(50-h)+'" width="14" height="'+h+'" rx="3" fill="'+(b.v>0?col:'var(--line)')+'" opacity="'+(b.v>0?1:.5)+'"/>';
+  }).join('')+'</svg>';
+  // Camino de niveles: hasta 3 por delante
+  var path = '';
+  for(var l=1; l<=info.lvl+3; l++){
+    var done = l<info.lvl, cur = l===info.lvl;
+    path += '<div onclick="trackLevelTip(\''+track.id+'\','+l+')" style="flex-shrink:0;width:64px;text-align:center;cursor:pointer;opacity:'+(done||cur?1:.4)+';">'+
+      trackGemSVG(l, done?1:(cur?info.ratio:0), col, 46, track.id+'p'+l)+
+      '<div style="font-size:10px;font-weight:700;color:'+(cur?col:'var(--muted)')+';margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(done?'✓ ':'')+esc(trackLevelName(track,l))+'</div>'+
+    '</div>';
+  }
+  function stat(label, val){ return '<div style="flex:1;background:var(--bg);border-radius:11px;padding:9px 6px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--ink);">'+val+'</div><div style="font-size:10px;color:var(--muted);margin-top:1px;">'+label+'</div></div>'; }
+  var recent = log.slice(-8).reverse();
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
+      '<span class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</span>'+
+      '<div style="display:flex;gap:4px;flex-shrink:0;">'+
+        '<button onclick="removeOverlay(\'track-detail\');openTrackEditor(\''+track.id+'\')" title="Editar seguimiento" style="background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;">⚙</button>'+
+        '<button onclick="removeOverlay(\'track-detail\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">'+esc(levelTrackSourceLabel(track))+'</div>'+
+    '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:14px;">'+
+      trackGemSVG(info.lvl, info.ratio, col, 128, track.id+'big')+
+      '<div class="serif" style="font-size:20px;font-weight:700;color:var(--ink);margin-top:8px;">Nivel '+info.lvl+' · '+esc(trackLevelName(track,info.lvl))+'</div>'+
+      '<div style="width:70%;height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden;margin:10px 0 5px;"><div style="width:'+Math.round(info.ratio*100)+'%;height:100%;background:'+col+';border-radius:4px;"></div></div>'+
+      '<div style="font-size:11.5px;color:var(--muted);">'+info.inLvl+' / '+info.needed+' XP · faltan '+(info.needed-info.inLvl)+' para <b style="color:var(--ink-soft);">'+esc(trackLevelName(track,info.lvl+1))+'</b></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:16px;">'+stat('XP total',track.xp||0)+stat('Esta semana','+'+trackWeekXP(track))+stat('Contribuciones',log.length)+'</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Últimos 14 días</div>'+barsSVG+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px;">Camino de niveles</div>'+
+    '<div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;">'+path+'</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 4px;">Últimas contribuciones</div>'+
+    (recent.length ? recent.map(function(e){
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line-soft);"><span style="font-size:11px;color:var(--muted);width:44px;flex-shrink:0;">'+fmtShortDate(e.d)+'</span><span style="flex:1;min-width:0;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(e.n||'Tarea')+'</span><b style="font-size:12px;color:'+col+';">+'+e.x+' XP</b></div>';
+    }).join('') : '<div style="font-size:12px;color:var(--muted);padding:8px 0;">Aquí aparecerá cada tarea que sume a este seguimiento.</div>');
+}
+function openTrackDetail(id){
+  var track = (S.levelTracks||[]).find(function(t){return t.id===id;}); if(!track) return;
+  removeOverlay('track-detail');
+  var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='track-detail';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) removeOverlay('track-detail'); });
+  overlay.innerHTML = '<div class="sheet" style="min-height:60vh;">'+trackDetailBodyHTML(track)+'</div>';
+  document.body.appendChild(overlay);
+}
+function trackLevelTip(id, lvl){
+  var track = (S.levelTracks||[]).find(function(t){return t.id===id;}); if(!track) return;
+  var info = lvlInfo(track.xp||0);
+  toast('Nivel '+lvl+' · '+trackLevelName(track,lvl)+' — desde '+lvlThresh(lvl)+' XP'+(lvl>info.lvl?' (por desbloquear)':''));
+}
 function openTrackEditor(trackId){
   var isNew = !trackId;
   if(isNew && (S.levelTracks||[]).length >= maxLevelTrackSlots()){
-    showInfoModal('Límite de seguimientos','Ya tienes el máximo de seguimientos para tu plan actual. Sube de nivel, consigue la medalla correspondiente, o pásate a acceso completo para desbloquear más cupos.','Entendido');
+    showInfoModal('Límite de seguimientos', trackLimitMessage(), 'Entendido');
     return;
   }
   var firstCat = (S.categories||[])[0];
@@ -9569,10 +9650,187 @@ function renderProgress(){
 function calHasDatedTask(key){
   return S.tasks.some(function(t){return t.period==='dia' && t.date===key;});
 }
-function calGoToday(){ S.calendarOffset = 0; render(); }
-// Pedido: al elegir un día en el calendario mensual, no abrir un modal —
-// se actualiza la agenda de abajo en el momento, como cualquier calendario
-// de celular o de Google Calendar.
+// ── Calendario rediseñado ───────────────────────────────────────────────────
+// Celdas cuadradas con fondo propio, "hoy" marcado en el número, puntitos de
+// color por tarea (rellenos = hechas) para ver de un vistazo qué hay cada día
+// —incluidas las semanas siguientes—, agenda jerarquizada (con horario /
+// durante el día por categoría / se repite) y una vista previa de los días
+// que vienen. Toda la lógica de datos vive en calAgendaData().
+function calCatColor(t){
+  var c = t.categoryId && (S.categories||[]).find(function(x){return x.id===t.categoryId;});
+  return c ? c.color : 'var(--accent)';
+}
+// Tareas de un día: interactivas (se pueden marcar) y "fantasma" (recurrentes
+// de semanas futuras, solo informativas).
+function calAgendaData(dateKey){
+  var d = parseLocalDate(dateKey), wIdx = dayIdxFromDate(d), inCur = isSameWeekAsToday(d);
+  var t0 = new Date(); t0.setHours(0,0,0,0);
+  var isFuture = d > t0;
+  var dated = S.tasks.filter(function(t){return t.period==='dia' && t.date===dateKey;});
+  var rec = S.tasks.filter(function(t){return t.period==='dia' && !t.date && t.day===wIdx;});
+  var hideRec = !!S.calAgendaHideRecurring;
+  var interactive = dated.concat(inCur && !hideRec ? rec : []);
+  var ghost = (!inCur && isFuture && !hideRec) ? rec.filter(function(t){return !t.oneShotWeek;}) : [];
+  return {date:d, isFuture:isFuture, inCur:inCur, interactive:interactive, ghost:ghost, hasRecurring:rec.length>0};
+}
+function calGroupSort(list){
+  return list.slice().sort(function(a,b){
+    var da = isDone(a)?1:0, db = isDone(b)?1:0; if(da!==db) return da-db;
+    var ca = a.crucial?0:1, cb = b.crucial?0:1; if(ca!==cb) return ca-cb;
+    return 0;
+  });
+}
+function calCellHTML(key, opts){
+  opts = opts || {};
+  var hist = S.dailyHistory || {}, data = hist[key];
+  var d = parseLocalDate(key);
+  var todayKey = todayStr();
+  var isToday = key===todayKey, isSelected = key===S.calendarSelectedDay;
+  var t0 = new Date(); t0.setHours(0,0,0,0);
+  var isFuture = d > t0;
+  var reached = data && data.streakReached;
+  var A = calAgendaData(key);
+  var all = A.interactive.concat(A.ghost);
+  var dots = all.slice(0,3).map(function(t){
+    var gh = A.ghost.indexOf(t)!==-1, dn = !gh && isDone(t), col = calCatColor(t);
+    return '<span style="width:5px;height:5px;border-radius:50%;background:'+(dn?col:'transparent')+';border:1.3px solid '+col+';opacity:'+(gh?.45:1)+';box-sizing:border-box;"></span>';
+  }).join('');
+  var more = all.length>3 ? '<span style="font-size:8px;line-height:5px;color:var(--muted);font-weight:700;">+'+(all.length-3)+'</span>' : '';
+  var bg, border, numColor = isFuture ? 'var(--muted)' : 'var(--ink-soft)';
+  if(isSelected){ bg='var(--accent-bg)'; border='2px solid var(--accent)'; numColor='var(--accent)'; }
+  else if(reached){ bg='linear-gradient(160deg,#fff3d1,#fbd989)'; border='1.5px solid #f5c25a'; numColor='#8a5a00'; }
+  else { bg='var(--paper)'; border='1.5px solid var(--line-soft)'; }
+  var numStyle = isToday
+    ? 'background:var(--accent);color:#fff;'
+    : 'color:'+numColor+';';
+  var tall = opts.tall;
+  return '<div class="cal-cell" onclick="selectCalendarDay(\''+key+'\')" style="min-height:'+(tall?66:54)+'px;border-radius:13px;padding:5px 2px 4px;display:flex;flex-direction:column;align-items:center;gap:'+(tall?5:4)+'px;cursor:pointer;background:'+bg+';border:'+border+';position:relative;transition:transform .12s;">'+
+    (opts.bonus?'<span style="position:absolute;top:-6px;right:-3px;font-size:11px;line-height:1;" title="¡Bono de racha!">'+opts.bonus+'</span>':'')+
+    (reached && !isSelected && !opts.bonus?'<span style="position:absolute;top:3px;right:5px;font-size:8px;color:#c58a1a;font-weight:800;line-height:1;">✓</span>':'')+
+    '<span style="min-width:24px;height:24px;padding:0 3px;box-sizing:border-box;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;'+numStyle+'">'+d.getDate()+'</span>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:2px;height:6px;">'+dots+more+'</div>'+
+    (tall && all.length ? '<span style="font-size:9px;color:var(--muted);font-weight:600;">'+(A.interactive.length?A.interactive.filter(isDone).length+'/'+A.interactive.length:all.length+' ↻')+'</span>' : '')+
+  '</div>';
+}
+function renderCalDayCellSimple(dateKey){ return calCellHTML(dateKey, {tall:true}); }
+function calStepDay(delta){
+  var d = addDaysLocal(parseLocalDate(S.calendarSelectedDay||todayStr()), delta);
+  S.calendarSelectedDay = localDateStr(d);
+  var t = new Date();
+  S.calendarOffset = Math.max(-24, Math.min(6, (d.getFullYear()-t.getFullYear())*12 + (d.getMonth()-t.getMonth())));
+  render();
+}
+function calGoToday(){ S.calendarOffset = 0; S.calendarSelectedDay = todayStr(); render(); }
+function calTaskRowHTML(t, canTicket, opts){
+  opts = opts || {};
+  var dn = isDone(t), hasCL = t.checklist && t.checklist.length, hasQty = (t.qty||1)>1;
+  var cat = t.categoryId && (S.categories||[]).find(function(x){return x.id===t.categoryId;});
+  var onTick = hasCL ? "openCLSheet('"+t.id+"')" : (canTicket ? "tapTask('"+t.id+"')" : "toastTicketBlocked()");
+  var prog = hasCL ? (t.checklist.some(function(i){return clItemQty(i)>1;}) ? Math.round(tRatio(t)*100)+'%' : t.checklist.filter(function(i){return i.done;}).length+'/'+t.checklist.length) : (hasQty ? (t.prog||0)+'/'+t.qty : '');
+  var meta = [];
+  if(cat && opts.showCat) meta.push('<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:6px;height:6px;border-radius:50%;background:'+cat.color+';"></span>'+esc(cat.name)+'</span>');
+  if(!t.date) meta.push('<span title="Se repite cada semana">↻</span>');
+  else if(t.repeatEveryDays) meta.push('<span title="Se repite">↻ cada '+t.repeatEveryDays+' d</span>');
+  if(prog) meta.push('<span style="font-weight:700;color:var(--ink-soft);">'+prog+'</span>');
+  if(t.hasTimer) meta.push('<span>⏱</span>');
+  if(t.registryId) meta.push('<span>📒</span>');
+  return '<div style="display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid var(--line-soft);'+(canTicket?'':'opacity:.7;')+'">'+
+    (opts.time!==undefined?'<span style="width:42px;flex-shrink:0;font-size:12.5px;font-weight:700;color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+esc(opts.time)+'</span>':'')+
+    '<div onclick="'+onTick+'" style="width:23px;height:23px;border-radius:7px;border:1.8px solid '+(dn?'var(--accent)':'var(--muted-soft)')+';background:'+(dn?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;">'+
+      (dn?'<svg width="11" height="9" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
+    '</div>'+
+    '<div onclick="openEdit(\''+t.id+'\')" style="flex:1;min-width:0;cursor:pointer;">'+
+      '<div style="font-size:14px;font-weight:'+(dn?400:600)+';color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.crucial?'<span style="color:var(--accent);">★ </span>':'')+esc(t.text)+'</div>'+
+      (meta.length?'<div style="display:flex;align-items:center;gap:9px;font-size:10.5px;color:var(--muted);margin-top:2px;">'+meta.join('')+'</div>':'')+
+    '</div>'+
+  '</div>';
+}
+function calSectionLabel(text, count){
+  return '<div style="display:flex;align-items:center;gap:8px;margin:14px 0 2px;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);">'+text+(count!=null?'<span style="background:var(--bg);border-radius:8px;padding:1px 7px;font-size:10px;letter-spacing:0;">'+count+'</span>':'')+'<span style="flex:1;height:1px;background:var(--line-soft);"></span></div>';
+}
+function renderCalMonthAgenda(dateKey){
+  var A = calAgendaData(dateKey);
+  var d = A.date, isToday = dateKey===todayStr();
+  var dayName = DAYS[dayIdxFromDate(d)];
+  var dateLabel = new Date(dateKey+'T12:00:00').toLocaleDateString('es-CL',{day:'numeric',month:'long'});
+  var daysAgo = daysAgoFromDateKey(dateKey), isPastDay = daysAgo > 0, canTicket = daysAgo <= 7;
+  var list = A.interactive;
+  var doneN = list.filter(isDone).length, pct = list.length ? Math.round(doneN/list.length*100) : 0;
+  var timed = list.filter(function(t){return !!t.hora;}).sort(function(a,b){return (isDone(a)?1:0)-(isDone(b)?1:0) || a.hora.localeCompare(b.hora);});
+  var untimed = list.filter(function(t){return !t.hora;});
+  var cats = S.categories||[];
+  var byCat = {}, noCat = [];
+  untimed.forEach(function(t){ var k = t.categoryId && cats.some(function(c){return c.id===t.categoryId;}) ? t.categoryId : null; if(k) (byCat[k]=byCat[k]||[]).push(t); else noCat.push(t); });
+  var navBtn = function(call, ch){ return '<button onclick="'+call+'" style="width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);font-size:18px;line-height:1;cursor:pointer;padding:0;flex-shrink:0;">'+ch+'</button>'; };
+  var html = '<div style="margin:16px 16px 0;padding:16px;background:var(--paper);border:1px solid var(--line-soft);border-radius:18px;">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
+      navBtn('calStepDay(-1)','‹')+
+      '<div style="flex:1;min-width:0;text-align:center;">'+
+        '<div class="serif" style="font-weight:800;font-size:18px;color:var(--ink);text-transform:capitalize;">'+dayName+' '+dateLabel+'</div>'+
+        '<div style="font-size:11px;color:'+(isToday?'var(--accent)':'var(--muted)')+';font-weight:700;margin-top:1px;">'+(isToday?'Hoy':(daysAgo===1?'Ayer':(daysAgo===-1?'Mañana':(daysAgo>0?'Hace '+daysAgo+' días':'En '+(-daysAgo)+' días'))))+'</div>'+
+      '</div>'+
+      navBtn('calStepDay(1)','›')+
+    '</div>';
+  if(list.length){
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;"><div style="flex:1;">'+mpHTML(pct/100,6)+'</div><span style="font-size:12px;font-weight:700;color:var(--ink-soft);">'+doneN+'/'+list.length+' · '+pct+'%</span></div>';
+  }
+  html += '<div style="display:flex;align-items:center;justify-content:flex-end;gap:14px;margin-top:6px;">'+
+    (A.hasRecurring?'<button onclick="toggleCalHideRecurring()" style="background:none;border:none;color:'+(S.calAgendaHideRecurring?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;padding:0;">'+(S.calAgendaHideRecurring?'↻ Mostrar recurrentes':'↻ Ocultar recurrentes')+'</button>':'')+
+    '<button onclick="openDayDetail(\''+dateKey+'\')" style="background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;padding:0;">Detalle ⤢</button>'+
+  '</div>';
+  if(!list.length && !A.ghost.length){
+    html += '<div style="text-align:center;padding:22px 0 8px;"><div style="font-size:26px;opacity:.5;margin-bottom:6px;">'+(isPastDay?'🗓️':'🌤️')+'</div><div style="font-size:13px;color:var(--muted);">'+(S.calAgendaHideRecurring&&A.hasRecurring?'Sin tareas puntuales este día.':(isPastDay?'No hubo tareas este día.':'Día libre.'))+'</div></div>';
+  }
+  if(timed.length){
+    html += calSectionLabel('Con horario', timed.length)+timed.map(function(t){return calTaskRowHTML(t, canTicket, {time:t.hora, showCat:true});}).join('');
+  }
+  var catSections = cats.filter(function(c){return byCat[c.id] && byCat[c.id].length;});
+  catSections.forEach(function(c){
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:14px 0 2px;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:'+c.color+';"><span style="width:8px;height:8px;border-radius:50%;background:'+c.color+';"></span>'+esc(c.name)+'<span style="background:'+c.color+'1f;border-radius:8px;padding:1px 7px;font-size:10px;letter-spacing:0;">'+byCat[c.id].length+'</span><span style="flex:1;height:1px;background:'+c.color+'33;"></span></div>'+
+      calGroupSort(byCat[c.id]).map(function(t){return calTaskRowHTML(t, canTicket, {});}).join('');
+  });
+  if(noCat.length){
+    html += (catSections.length||timed.length ? calSectionLabel(timed.length||catSections.length?'Durante el día':'', noCat.length) : '')+
+      calGroupSort(noCat).map(function(t){return calTaskRowHTML(t, canTicket, {});}).join('');
+  }
+  if(A.ghost.length){
+    html += calSectionLabel('Se repite cada semana', A.ghost.length)+
+      A.ghost.map(function(t){
+        return '<div onclick="openEdit(\''+t.id+'\')" style="display:flex;align-items:center;gap:11px;padding:9px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;opacity:.6;"><span style="width:23px;text-align:center;font-size:14px;color:var(--muted);">↻</span>'+
+          (t.hora?'<span style="font-size:11px;font-weight:700;color:var(--muted);width:40px;">'+esc(t.hora)+'</span>':'')+
+          '<span style="flex:1;font-size:13.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span></div>';
+      }).join('');
+  }
+  if(!isPastDay){
+    html += '<button onclick="openNewDatedTask(\''+dateKey+'\')" style="width:100%;margin-top:14px;padding:11px;border:1.5px dashed var(--line);border-radius:11px;background:transparent;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+ Agregar tarea a este día</button>';
+  } else {
+    var hEntry = (S.dailyHistory||{})[dateKey];
+    var stillGrace = streakActive() && daysAgo===1 && !(hEntry && hEntry.streakReached);
+    if(stillGrace) html += '<div style="text-align:center;padding:8px 10px;margin-top:12px;background:var(--accent-bg);border-radius:9px;font-size:11px;color:var(--accent);font-weight:600;line-height:1.5;">⏳ Todavía puedes completarlo hoy y mantener tu racha.</div>';
+  }
+  html += '</div>';
+  return html + renderCalUpcoming(dateKey);
+}
+// Vista previa de los días que vienen después del seleccionado.
+function renderCalUpcoming(dateKey){
+  var rows = '';
+  for(var i=1;i<=6;i++){
+    var k = localDateStr(addDaysLocal(parseLocalDate(dateKey), i));
+    var A = calAgendaData(k), all = A.interactive.concat(A.ghost);
+    var d = A.date;
+    var names = all.slice(0,2).map(function(t){return esc(t.text);}).join(' · ');
+    rows += '<div onclick="selectCalendarDay(\''+k+'\')" style="display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;">'+
+      '<div style="width:38px;text-align:center;flex-shrink:0;"><div style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;">'+DAYS[dayIdxFromDate(d)].slice(0,3)+'</div><div style="font-size:17px;font-weight:800;color:var(--ink);line-height:1.1;">'+d.getDate()+'</div></div>'+
+      '<div style="flex:1;min-width:0;">'+
+        (all.length ? '<div style="font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+names+(all.length>2?' <span style="color:var(--muted);">+'+(all.length-2)+'</span>':'')+'</div>'
+                    : '<div style="font-size:12.5px;color:var(--muted-soft);">Libre</div>')+
+      '</div>'+
+      (all.length?'<span style="font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0;">'+all.length+'</span>':'')+
+      '<span style="font-size:15px;color:var(--muted-soft);">›</span></div>';
+  }
+  return '<div style="margin:14px 16px 0;padding:6px 16px 4px;background:var(--paper);border:1px solid var(--line-soft);border-radius:18px;">'+
+    '<div style="font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:12px 0 2px;">Próximos días</div>'+rows+'</div>';
+}
 function selectCalendarDay(key){
   S.calendarSelectedDay = key;
   render();
@@ -9608,32 +9866,6 @@ function toggleCalHideRecurring(){
 }
 // Celda simple de un día (sin el ícono de bono de racha, que depende del
 // conteo secuencial del mes completo) — se usa en la tira semanal plegada.
-function renderCalDayCellSimple(dateKey){
-  var hist = S.dailyHistory || {};
-  var data = hist[dateKey];
-  var d = parseLocalDate(dateKey);
-  var today = new Date(); today.setHours(0,0,0,0);
-  var isFuture = d > today;
-  var isToday = dateKey === todayStr();
-  var isSelected = dateKey === S.calendarSelectedDay;
-  var streakReached = data && data.streakReached;
-  var hasDated = calHasDatedTask(dateKey);
-  var GOLD = '#f5a524', GOLD_LIGHT = '#fbc04a';
-  var bgStyle, textColor, fontWeight = '600';
-  if(streakReached){
-    bgStyle = 'background:linear-gradient(135deg,'+GOLD_LIGHT+','+GOLD+');border:2px solid '+GOLD+';';
-    textColor = '#fff'; fontWeight = '700';
-  } else if(isFuture){
-    bgStyle = 'background:transparent;'; textColor = 'var(--muted-soft)';
-  } else {
-    bgStyle = 'background:transparent;'; textColor = 'var(--muted)';
-  }
-  var ringStyle = isSelected ? 'box-shadow:0 0 0 2.5px var(--accent);' : (isToday ? 'box-shadow:0 0 0 2px var(--ink);' : '');
-  return '<div onclick="selectCalendarDay(\''+dateKey+'\')" style="aspect-ratio:1;min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;'+bgStyle+ringStyle+';position:relative;">'+
-    '<span style="font-size:15px;color:'+textColor+';font-weight:'+fontWeight+';">'+d.getDate()+'</span>'+
-    (hasDated?'<span style="position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:'+(streakReached?'#fff':'var(--accent)')+';"></span>':'')+
-  '</div>';
-}
 function renderCalendarioMensual(){
   var hist = S.dailyHistory || {};
   var today = new Date();
@@ -9671,19 +9903,17 @@ function renderCalendarioMensual(){
   var canGoForward = offset < 6;
   var navPrev = expanded ? 'calNav(-1)' : 'calNavWeek(-1)';
   var navNext = expanded ? 'calNav(1)' : 'calNavWeek(1)';
+  var navBtnStyle = function(dis){ return 'width:36px;height:36px;border-radius:50%;border:1.5px solid var(--line);background:var(--paper);color:'+(dis?'var(--muted-soft)':'var(--ink-soft)')+';font-size:19px;line-height:1;cursor:'+(dis?'default':'pointer')+';padding:0;opacity:'+(dis?.4:1)+';'; };
+  var notToday = offset!==0 || S.calendarSelectedDay!==todayKey;
   var html = '<div style="padding:0 16px;" id="streak-calendar-card">'+
-    // Pedido: se quitó el título "📅 Calendario" de acá — ya está la
-    // pestaña de arriba (ahora renombrada a "Calendario", sin plural),
-    // repetirlo era redundante. Se conserva el botón "Hoy" para volver
-    // rápido al mes actual cuando se está viendo otro.
-    (offset!==0 ? '<div style="display:flex;justify-content:flex-end;margin-bottom:14px;">'+
-      '<button onclick="calGoToday()" style="background:var(--accent-bg);color:var(--accent);border:none;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Hoy</button>'+
-    '</div>' : '')+
-    '<div style="background:var(--bg);border-radius:16px;padding:14px 10px 4px;">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'+
-        '<button onclick="'+navPrev+'" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;padding:4px 14px;line-height:1;">‹</button>'+
-        '<div style="font-weight:700;font-size:16px;color:var(--ink);text-transform:capitalize;">'+monthName+'</div>'+
-        '<button onclick="'+navNext+'" '+(expanded&&!canGoForward?'disabled':'')+' style="background:none;border:none;color:'+(expanded&&!canGoForward?'var(--muted-soft)':'var(--muted)')+';font-size:24px;cursor:'+(expanded&&!canGoForward?'default':'pointer')+';padding:4px 14px;line-height:1;opacity:'+(expanded&&!canGoForward?'.3':'1')+';">›</button>'+
+    '<div style="background:var(--bg);border-radius:20px;padding:14px 10px 4px;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px;">'+
+        '<button onclick="'+navPrev+'" style="'+navBtnStyle(false)+'">‹</button>'+
+        '<div style="text-align:center;">'+
+          '<div class="serif" style="font-weight:800;font-size:19px;color:var(--ink);text-transform:capitalize;">'+monthNames[month]+'</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:1px;">'+year+(notToday?' · <span onclick="calGoToday()" style="color:var(--accent);font-weight:700;cursor:pointer;">ir a hoy</span>':'')+'</div>'+
+        '</div>'+
+        '<button onclick="'+navNext+'" '+(expanded&&!canGoForward?'disabled':'')+' style="'+navBtnStyle(expanded&&!canGoForward)+'">›</button>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">'+
         dayLabels.map(function(l){return '<div style="text-align:center;font-size:11px;color:var(--muted-soft);font-weight:700;padding:4px 0;">'+l+'</div>';}).join('')+
@@ -9700,14 +9930,14 @@ function renderCalendarioMensual(){
     var selD = parseLocalDate(S.calendarSelectedDay);
     var selDow = (selD.getDay()+6)%7;
     var monday = addDaysLocal(selD, -selDow);
-    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">';
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">';
     for(var wi=0; wi<7; wi++){
       html += renderCalDayCellSimple(localDateStr(addDaysLocal(monday, wi)));
     }
     html += '</div>';
   } else {
     // ── Desplegado: mes completo ───────────────────────────────────────────
-    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">';
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;">';
 
     // Espacios vacíos antes del primer día
     for(var i=0;i<startDow;i++){
@@ -9745,28 +9975,7 @@ function renderCalendarioMensual(){
         else if(runningStreak % 7 === 0) bonusIcon = '✨';    // cada 7 días +5 XP
       }
 
-      var bgStyle, textColor, fontWeight = '600';
-      if(streakReached){
-        bgStyle = 'background:linear-gradient(135deg,'+GOLD_LIGHT+','+GOLD+');border:2px solid '+GOLD+';';
-        textColor = '#fff';
-        fontWeight = '700';
-      } else if(isFuture){
-        bgStyle = 'background:transparent;';
-        textColor = 'var(--muted-soft)';
-      } else {
-        bgStyle = 'background:transparent;';
-        textColor = 'var(--muted)';
-      }
-
-      // Selección (foco de la agenda de abajo) tiene prioridad visual sobre
-      // el anillo de "hoy" — si coinciden, igual se ve el de selección.
-      var ringStyle = isSelected ? 'box-shadow:0 0 0 2.5px var(--accent);' : (isToday ? 'box-shadow:0 0 0 2px var(--ink);' : '');
-
-      html += '<div onclick="selectCalendarDay(\''+key+'\')" style="aspect-ratio:1;min-height:38px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;'+bgStyle+ringStyle+';position:relative;">'+
-        (bonusIcon?'<span style="position:absolute;top:-5px;right:-5px;font-size:11px;line-height:1;" title="¡Bono de racha!">'+bonusIcon+'</span>':'')+
-        '<span style="font-size:15px;color:'+textColor+';font-weight:'+fontWeight+';">'+day+'</span>'+
-        (hasDated?'<span style="position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:'+(streakReached?'#fff':'var(--accent)')+';"></span>':'')+
-      '</div>';
+      html += calCellHTML(key, {bonus:bonusIcon});
     }
 
     html += '</div>';
@@ -9783,9 +9992,10 @@ function renderCalendarioMensual(){
   html += '</div>'; // cierre bg card
 
   if(expanded){
-    html += '<div style="display:flex;align-items:center;gap:14px;justify-content:center;margin-top:10px;font-size:10px;color:var(--muted-soft);">'+
-      '<span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,'+GOLD_LIGHT+','+GOLD+');margin-right:4px;vertical-align:middle;"></span>objetivo cumplido</span>'+
-      '<span><span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:5px;vertical-align:middle;"></span>tareas agendadas</span>'+
+    html += '<div style="display:flex;align-items:center;gap:14px;justify-content:center;margin-top:10px;font-size:10px;color:var(--muted);">'+
+      '<span><span style="display:inline-block;width:11px;height:11px;border-radius:4px;background:linear-gradient(160deg,#fff3d1,#fbd989);border:1px solid #f5c25a;margin-right:4px;vertical-align:middle;"></span>objetivo cumplido</span>'+
+      '<span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:middle;"></span>hecha</span>'+
+      '<span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;border:1.3px solid var(--accent);box-sizing:border-box;margin-right:4px;vertical-align:middle;"></span>pendiente</span>'+
     '</div>';
   }
 
@@ -9801,78 +10011,6 @@ function renderCalendarioMensual(){
 // Agenda inline del día seleccionado en el calendario mensual — mismo dato
 // que openDayDetail (recurrentes de la semana en curso + puntuales de esa
 // fecha exacta), pero incrustada bajo la grilla en vez de en un modal.
-function renderCalMonthAgenda(dateKey){
-  var d = new Date(dateKey+'T00:00:00');
-  var isToday = dateKey === todayStr();
-  var inCurrentWeek = isSameWeekAsToday(d);
-  var dLabel = new Date(dateKey+'T12:00:00');
-  var dayName = DAYS[dayIdxFromDate(d)];
-  var dateLabel = dLabel.toLocaleDateString('es-CL',{day:'numeric',month:'long'});
-  var daysAgo = daysAgoFromDateKey(dateKey);
-  var isPastDay = daysAgo > 0;
-  var canTicket = daysAgo <= 7;
-
-  var wIdx = dayIdxFromDate(d);
-  var recurring = inCurrentWeek ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx;}) : [];
-  var dated = S.tasks.filter(function(t){return t.period==='dia'&&t.date===dateKey;});
-  var combined = recurring.concat(dated).sort(function(a,b){return (a.hora||'99:99').localeCompare(b.hora||'99:99');});
-
-  // Pedido: botón para mostrar/ocultar las tareas recurrentes (sin hora
-  // específica) de la agenda — solo aparece si el día tiene alguna.
-  var hasRecurring = recurring.length>0;
-  var hideRecurring = hasRecurring && S.calAgendaHideRecurring;
-  var visible = hideRecurring ? combined.filter(function(t){return !!t.date;}) : combined;
-
-  var html = '<div style="margin:18px 16px 0;padding:16px;background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;">'+
-      '<div style="font-weight:700;font-size:14px;color:var(--ink);text-transform:capitalize;">'+dayName+' '+dateLabel+(isToday?' <span style="color:var(--accent);">· Hoy</span>':'')+'</div>'+
-      '<div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">'+
-        (hasRecurring?'<button onclick="toggleCalHideRecurring()" title="Mostrar u ocultar las recurrentes (sin hora)" style="background:none;border:none;color:'+(S.calAgendaHideRecurring?'var(--accent)':'var(--muted)')+';padding:0;cursor:pointer;line-height:1;display:flex;align-items:center;">'+
-          (S.calAgendaHideRecurring
-            ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.4 20.4 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a20.4 20.4 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>'
-            : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>')+
-        '</button>':'')+
-        '<button onclick="openDayDetail(\''+dateKey+'\')" title="Ver detalle completo" style="background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Detalle ⤢</button>'+
-      '</div>'+
-    '</div>';
-
-  if(!visible.length){
-    html += '<div style="font-size:12px;color:var(--muted-soft);padding:6px 0 4px;">'+(hideRecurring&&combined.length?'Sin tareas puntuales/con hora este día.':'Sin tareas para este día.')+'</div>';
-  } else {
-    html += visible.map(function(t){
-      var dn = isDone(t);
-      var checkOnclick = canTicket ? "tapTask('"+t.id+"')" : "toastTicketBlocked()";
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-soft);">'+
-        '<div onclick="'+checkOnclick+'" style="width:18px;height:18px;border-radius:5px;border:1.5px solid '+(dn?'var(--accent)':'var(--muted)')+';background:'+(dn?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;'+(canTicket?'':'opacity:.5;')+'">'+
-          (dn?'<svg width="9" height="7" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
-        '</div>'+
-        (t.hora?'<span style="font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;">'+esc(t.hora)+'</span>':'')+
-        '<span onclick="openEdit(\''+t.id+'\')" style="flex:1;font-size:13px;color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';cursor:pointer;">'+esc(t.text)+(t.date?'':' <span style="font-size:9px;color:var(--muted-soft);">· recurrente</span>')+'</span>'+
-      '</div>';
-    }).join('');
-  }
-
-  if(!isPastDay){
-    html += '<button onclick="openNewDatedTask(\''+dateKey+'\')" style="width:100%;margin-top:10px;padding:10px;border:1.5px dashed var(--line);border-radius:9px;background:transparent;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">+ Agregar tarea a este día</button>';
-  } else {
-    var hEntry = (S.dailyHistory||{})[dateKey];
-    var stillGrace = streakActive() && daysAgo===1 && !(hEntry && hEntry.streakReached);
-    if(stillGrace){
-      html += '<div style="text-align:center;padding:8px 10px;margin-top:10px;background:var(--accent-bg);border-radius:9px;font-size:11px;color:var(--accent);font-weight:600;line-height:1.5;">⏳ Todavía puedes completarlo hoy y mantener tu racha.</div>';
-    }
-  }
-
-  html += '</div>';
-  return html;
-}
-
-// ── Detalle de un día del calendario de racha (clickeable) ──────────────
-// Las tareas diarias pueden ser recurrentes (t.day = día de la semana, se
-// repiten cada semana) o puntuales (t.date = fecha exacta ISO, existen una
-// sola vez). El detalle de cada día combina ambos tipos: si el día cae en la
-// semana actual se ven también las recurrentes (con su estado real); para
-// cualquier otro día — pasado o futuro — se ven las tareas puntuales de esa
-// fecha exacta, y ahora sí se pueden agregar tareas a cualquier día futuro.
 function dayIdxFromDate(d){ var g=d.getDay(); return g===0?6:g-1; }
 function isSameWeekAsToday(d){
   var today=new Date(); today.setHours(0,0,0,0);
@@ -11421,6 +11559,12 @@ function sheetAddCLItem(taskId){
 function finishUpdate(updated, justCompleted, delta){
   S.tasks=S.tasks.map(function(t){return t.id===updated.id?updated:t;});
   S._justCompletedId = justCompleted ? updated.id : null;
+  // BUGFIX: antes la propagación hacia tareas/ítems vinculados (propagate)
+  // corría DESPUÉS de guardar y renderizar — el padre se modificaba "por
+  // detrás": la barra/estado de la tarea de período mayor no se actualizaba
+  // en pantalla ni quedaba guardado hasta el próximo render. Ahora se
+  // propaga primero, y recién después se guarda y se dibuja, una sola vez.
+  propagate(updated, justCompleted, delta||0);
   // Pedido: si esto completa a toda la categoría del check y el modo de
   // plegado es "smart", no se pliega en este mismo render (ver
   // isCatCollapsed) — se marca para plegarse recién un rato después, ya con
@@ -11458,8 +11602,6 @@ function finishUpdate(updated, justCompleted, delta){
       setTimeout(function(){ openRegEntryForTask(_rtid, true); }, 500);
     }
   }
-  // Propagar según el modo de vinculación
-  propagate(updated, justCompleted, delta||0);
   if(justCompleted) checkStreakNow();
 }
 // Pliega una categoría sin pasar por render() completo — usado por el
@@ -12877,7 +13019,7 @@ function mRememberLastCL(){
 // para tareas de período mayor a diario — un ítem puede vincularse a un
 // ítem de una tarea de un período más específico, de forma que avanzar
 // ahí suma automáticamente acá arriba.
-function clItemQty(i){ return (i&&i.qty)||1; }
+function clItemQty(i){ var q=Number(i&&i.qty); return q>0?q:1; }
 function clItemIsQty(i){ return clItemQty(i)>1; }
 function clItemsHTML(){
   return M.checklist.map(function(item){
