@@ -1092,6 +1092,7 @@ async function syncWithCloud(){
         levelTracks: S.levelTracks||[],
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
+        registries: S.registries||[],
         timerCfg: S.timerCfg||{},
         autoReset: S.autoReset||{},
         lastAutoReset: S.lastAutoReset||null,
@@ -1168,6 +1169,7 @@ function mergeMedalsAndTracks(cloud){
 function applySyncResult(cloud, useCloud){
   try {
     mergeMedalsAndTracks(cloud);
+    mergeRegistries(cloud);
     if(useCloud){
       if(cloud.xp !== undefined) S.xp = Math.max(S.xp || 0, cloud.xp || 0);
       if(cloud.streak) S.streak = cloud.streak;
@@ -1300,6 +1302,7 @@ function pushToCloud(){
       levelTracks: S.levelTracks||[],
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
+      registries: S.registries||[],
       timerCfg: S.timerCfg||{},
       autoReset: S.autoReset||{},
       lastAutoReset: S.lastAutoReset||null,
@@ -1710,6 +1713,8 @@ var S = {
   // aplica a TODAS las tareas con temporizador, no por tarea, porque son
   // preferencias personales de sonido (ver openYoTimerScreen).
   timerCfg:{countdownBeepSec:3, volume:1, sounds:{start:true,work:true,rest:true,countdown:true,finish:true}, keepScreenOn:true},
+  // Registros (finanzas y marcas) — ver openRegEditor / mergeRegistries
+  registries:[],
   streak:{days:0,lastDate:null,total:0},
   streakCfg:{threshold:0.8},
   // Pedido: se puede desactivar SOLO la racha (mantiene niveles/XP activos),
@@ -2056,6 +2061,7 @@ function loadState(){
     var vc=localStorage.getItem('og6-vacaciones');if(vc)S.vacaciones=Object.assign({},S.vacaciones,JSON.parse(vc));
     var ac=localStorage.getItem('og6-achievements');if(ac)S.achievements=JSON.parse(ac);
     var md=localStorage.getItem('og6-medals');if(md)S.medals=JSON.parse(md);
+    try{var rg=localStorage.getItem('og6-registries');if(rg)S.registries=JSON.parse(rg)||[];}catch(e){}
     var lt=localStorage.getItem('og6-leveltracks');if(lt)S.levelTracks=JSON.parse(lt);
     var bts=localStorage.getItem('og6-bonustrackslots');if(bts)S.bonusTrackSlots=Number(bts)||0;
     var tcfg=localStorage.getItem('og6-timercfg');if(tcfg){try{S.timerCfg=Object.assign({},S.timerCfg,JSON.parse(tcfg));}catch(e){}}
@@ -2144,6 +2150,7 @@ function saveState(){
     localStorage.setItem('og6-vacaciones',JSON.stringify(S.vacaciones||{}));
     localStorage.setItem('og6-achievements',JSON.stringify(S.achievements||[]));
     localStorage.setItem('og6-medals',JSON.stringify(S.medals||[]));
+    localStorage.setItem('og6-registries',JSON.stringify(S.registries||[]));
     localStorage.setItem('og6-leveltracks',JSON.stringify(S.levelTracks||[]));
     localStorage.setItem('og6-bonustrackslots',String(S.bonusTrackSlots||0));
     localStorage.setItem('og6-timercfg',JSON.stringify(S.timerCfg||{}));
@@ -4828,6 +4835,7 @@ function renderYoEstadisticasScreen(){
   '</div>';
 
   html += renderLevelTracksStatsCard();
+  html += renderRegistriesStatsCard();
 
   return html;
 }
@@ -4893,6 +4901,12 @@ function faqItems(){
       ['¿Cómo vinculo una tarea a otra?', T.linkup],
       ['¿Y si la tarea tiene checklist?', T.linkcl],
       ['¿Qué son las conexiones de un proyecto?', T.projlinks]
+    ]],
+    ['Registros', [
+      ['¿Qué son los registros?', 'Libretas con entradas fechadas, dentro de Proyectos y registros: de Finanzas (ingresos y gastos, por tarea o sueltos como sueldo) o de Marcas (kilos, kilómetros, tiempos, bloques...). Las estadísticas y récords aparecen dentro de cada registro y en Yo → Estadísticas.'],
+      ['¿Cuántos registros puedo tener?', T.reglimit],
+      ['¿Cómo ligo una tarea a un registro?', T.regtask],
+      ['¿Cómo funcionan las métricas y los récords?', T.regmet]
     ]],
     ['Avisos', [
       ['¿Cómo funcionan los recordatorios de tareas?', T.notifdef],
@@ -5036,14 +5050,603 @@ function maxProjects(){
   return PROJECT_MAX[getPlan()] || 1;
 }
 
-// ── Pestaña Proyectos ──────────────────────────────────────────────────────
+// ── Registros: finanzas y marcas (pestaña "Proyectos y registros") ──────────
+// Un registro es una libreta con entradas fechadas, de dos tipos:
+//  · finance: ingresos/gastos (monto, concepto). Ligados a una tarea o sueltos.
+//  · metrics: marcas con unidad (kg, km, min, bloques...) y récords por métrica.
+// Una tarea puede asociarse a UN registro (t.registryId): al completarla se abre
+// una hoja rápida para anotar (se puede omitir, la tarea queda completa igual).
+// Borrado "suave" (del:true) en registros y entradas, para que la fusión con la
+// nube no los resucite. Ver mergeRegistries.
+var REG_TEMPLATES = {
+  fuerza:  {label:'Fuerza',   labelHint:'Ejercicio (ej. Press de banca)', metrics:[{name:'Peso',unit:'kg',better:'high'},{name:'Repeticiones',unit:'reps',better:'high'}]},
+  carrera: {label:'Carrera',  labelHint:'Actividad (opcional)',           metrics:[{name:'Distancia',unit:'km',better:'high'},{name:'Tiempo',unit:'min',better:'low'}]},
+  escalada:{label:'Escalada', labelHint:'Lugar o tipo (opcional)',        metrics:[{name:'Bloques',unit:'bloques',better:'high'},{name:'Grado',unit:'V',better:'high'}]},
+  libre:   {label:'Libre',    labelHint:'Concepto (opcional)',            metrics:[]}
+};
+var REG_MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function regList(){ return (S.registries||[]).filter(function(r){return !r.del;}); }
+function regEntries(r){ return (r.entries||[]).filter(function(e){return !e.del;}); }
+function regById(id){ return regList().find(function(r){return r.id===id;}) || null; }
+function regIcon(r){ return r.kind==='finance' ? '💲' : '📈'; }
+function fmtShortDate(d){ if(!d) return ''; var p=d.split('-'); return parseInt(p[2],10)+' '+REG_MONTHS[parseInt(p[1],10)-1]; }
+function parseNumInput(str){
+  if(typeof str==='number') return str;
+  var s = String(str||'').trim().replace(/\s/g,'').replace(/[^\d.,-]/g,'');
+  if(!s) return NaN;
+  if(s.indexOf('.')!==-1 && s.indexOf(',')!==-1) s = s.replace(/\./g,'').replace(',','.');
+  else if(s.indexOf(',')!==-1) s = s.replace(',','.');
+  else if(/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,'');
+  return parseFloat(s);
+}
+function fmtNum(n){
+  if(n==null || isNaN(n)) return '—';
+  var neg = n<0; n = Math.abs(n);
+  var s = Math.abs(n-Math.round(n))<1e-9 ? String(Math.round(n)) : n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+  var parts = s.split('.'); parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+  return (neg?'-':'')+parts.join(',');
+}
+function fmtMoney(n, cur){ return (n<0?'−':'')+(cur||'$')+fmtNum(Math.abs(n)); }
+
+// ── Cupos: gratis = 1 de finanzas + 1 de marcas; acceso completo = 5; nivel 10 = +1 ──
+function registryBonusSlots(){ return getLevel(S.xp||0)>=10 ? 1 : 0; }
+function registryCap(){ return (isPremium()?5:2)+registryBonusSlots(); }
+function canCreateRegistry(kind){
+  var list = regList(), total = list.length, bonus = registryBonusSlots();
+  if(isPremium()) return total < 5+bonus;
+  var cnt = list.filter(function(r){return r.kind===kind;}).length;
+  var reservedUsed = Math.min(list.filter(function(r){return r.kind==='finance';}).length,1)+Math.min(list.filter(function(r){return r.kind==='metrics';}).length,1);
+  return cnt===0 || (total-reservedUsed) < bonus;
+}
+function canCreateAnyRegistry(){ return canCreateRegistry('finance') || canCreateRegistry('metrics'); }
+
+// ── Sección "Registros" dentro de la pestaña ────────────────────────────────
+function setProjView(v){ S._projView = v; render(); }
+function regSummaryLine(r){
+  var es = regEntries(r);
+  if(!es.length) return 'Sin registros todavía';
+  if(r.kind==='finance'){
+    var mk = todayStr().slice(0,7), inc=0, out=0;
+    es.forEach(function(e){ if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
+    return 'Este mes: '+fmtMoney(inc-out, r.currency);
+  }
+  var last = es.slice().sort(function(a,b){return (b.date+(b.ts||0)).toString().localeCompare((a.date+(a.ts||0)).toString());})[0];
+  var parts = (r.metrics||[]).filter(function(m){return last.values && last.values[m.id]!=null;}).map(function(m){return fmtNum(last.values[m.id])+' '+m.unit;});
+  return 'Último: '+(last.label?last.label+' · ':'')+(parts.join(' · ')||fmtShortDate(last.date));
+}
+function renderRegistriesSection(){
+  var list = regList();
+  var html = '<div style="padding:10px 16px 90px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'+
+      '<span style="font-size:12.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Mis registros'+infoBtn('reglimit')+'</span>'+
+      '<span style="font-size:12px;color:var(--muted);">'+list.length+' / '+registryCap()+'</span>'+
+    '</div>';
+  if(!list.length){
+    html += '<div style="text-align:center;padding:36px 0 20px;">'+
+      '<div style="font-size:40px;opacity:.55;margin-bottom:10px;">📒</div>'+
+      '<div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;">Sin registros</div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.6;">Anota gastos e ingresos, o marcas<br>como kilos, kilómetros o tiempos.</div>'+
+    '</div>';
+  }
+  list.forEach(function(r){
+    html += '<div onclick="openRegistryView(\''+r.id+'\')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
+      '<div style="width:38px;height:38px;border-radius:11px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;">'+regIcon(r)+'</div>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(regSummaryLine(r))+'</div>'+
+      '</div>'+
+      '<span style="font-size:16px;color:var(--muted);flex-shrink:0;">›</span>'+
+    '</div>';
+  });
+  if(canCreateAnyRegistry()){
+    html += '<button onclick="openRegEditor(null)" style="width:100%;background:var(--accent);color:white;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;margin-top:8px;">+ Nuevo registro</button>';
+  } else {
+    html += '<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);">Llegaste al límite de tu plan ('+registryCap()+').</div>';
+  }
+  return html+'</div>';
+}
+
+// ── Editor de registro ──────────────────────────────────────────────────────
+var RE = null;
+function openRegEditor(regId){
+  var isNew = !regId;
+  var reg;
+  if(isNew){
+    if(!canCreateAnyRegistry()){ showInfoModal('Límite de registros','Ya tienes el máximo de registros de tu plan. Con acceso completo son hasta 5, y al llegar al nivel 10 se suma uno más.','Entendido'); return; }
+    var kind = canCreateRegistry('finance') ? 'finance' : 'metrics';
+    reg = {id:uid(), kind:kind, name:'', color:CATEGORY_COLORS[regList().length%CATEGORY_COLORS.length], currency:'$', labelHint:'', metrics:[], entries:[], createdAt:new Date().toISOString()};
+  } else {
+    reg = JSON.parse(JSON.stringify(regById(regId)||{}));
+    if(!reg.id) return;
+  }
+  RE = {isNew:isNew, reg:reg};
+  removeOverlay('reg-editor');
+  var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-editor';
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) removeOverlay('reg-editor'); });
+  overlay.innerHTML = '<div class="sheet" id="re-sheet">'+regEditorBodyHTML()+'</div>';
+  document.body.appendChild(overlay);
+}
+function regEditorBodyHTML(){
+  var r = RE.reg, isFin = r.kind==='finance';
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
+      '<span class="serif" style="font-weight:700;font-size:18px;">'+(RE.isNew?'Nuevo registro':'Editar registro')+'</span>'+
+      '<button onclick="removeOverlay(\'reg-editor\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    '<input id="re-name" class="finp" type="text" placeholder="Nombre (ej. Finanzas, Escalada)" value="'+esc(r.name||'')+'" oninput="RE.reg.name=this.value;" style="margin-bottom:16px;"/>';
+  if(RE.isNew){
+    var items = [];
+    if(canCreateRegistry('finance')) items.push(['finance','💲 Finanzas']);
+    if(canCreateRegistry('metrics')) items.push(['metrics','📈 Marcas']);
+    if(items.length>1){
+      html += mSecLabel('Tipo')+mSegHTML('re-kind-seg', items, r.kind, 'reSetKind')+'<div style="height:16px;"></div>';
+    }
+  }
+  if(isFin){
+    html += mSecLabel('Símbolo de moneda')+
+      '<input id="re-cur" class="finp" type="text" maxlength="4" value="'+esc(r.currency||'$')+'" oninput="RE.reg.currency=this.value||\'$\';" style="width:80px;margin-bottom:16px;"/>';
+  } else {
+    if(RE.isNew){
+      html += mSecLabel('Plantilla')+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">'+
+        Object.keys(REG_TEMPLATES).map(function(k){
+          return '<button type="button" onclick="reApplyTemplate(\''+k+'\')" style="padding:6px 12px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+REG_TEMPLATES[k].label+'</button>';
+        }).join('')+'</div>';
+    }
+    html += mSecLabel('Métricas','regmet')+'<div id="re-metrics">';
+    (r.metrics||[]).forEach(function(m){
+      var bt = m.better==='high'?'↑ más alto':(m.better==='low'?'↓ más bajo':'— sin récord');
+      html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'+
+        '<input type="text" placeholder="Nombre" value="'+esc(m.name||'')+'" oninput="reSetMetric(\''+m.id+'\',\'name\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:6px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+        '<input type="text" placeholder="unidad" maxlength="10" value="'+esc(m.unit||'')+'" oninput="reSetMetric(\''+m.id+'\',\'unit\',this.value)" style="width:62px;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:6px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+        '<button type="button" onclick="reCycleBetter(\''+m.id+'\')" style="flex-shrink:0;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);border-radius:9px;padding:5px 7px;font-size:10.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+bt+'</button>'+
+        '<button type="button" onclick="reRemoveMetric(\''+m.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:18px;cursor:pointer;line-height:1;flex-shrink:0;">×</button>'+
+      '</div>';
+    });
+    html += '</div><button type="button" onclick="reAddMetric()" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:16px;">+ Agregar métrica</button>';
+  }
+  html += mSecLabel('Color')+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'+
+    CATEGORY_COLORS.map(function(c){
+      return '<button type="button" onclick="reSetColor(\''+c+'\')" style="width:28px;height:28px;border-radius:50%;border:'+(r.color===c?'3px solid var(--ink)':'2px solid transparent')+';background:'+c+';cursor:pointer;padding:0;"></button>';
+    }).join('')+'</div>'+
+    '<div style="display:flex;gap:8px;margin-top:20px;">'+
+      (RE.isNew?'':'<button onclick="confirmDeleteRegistry(\''+r.id+'\')" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+
+      '<button onclick="saveRegEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button>'+
+    '</div>';
+  return html;
+}
+function reRerender(){ var s=document.getElementById('re-sheet'); if(s) s.innerHTML = regEditorBodyHTML(); }
+function reSetKind(k){
+  RE.reg.kind = k;
+  if(k==='finance'){ RE.reg.metrics = []; }
+  reRerender();
+}
+function reApplyTemplate(key){
+  var t = REG_TEMPLATES[key]; if(!t) return;
+  RE.reg.metrics = t.metrics.map(function(m){return {id:uid(), name:m.name, unit:m.unit, better:m.better};});
+  RE.reg.labelHint = t.labelHint;
+  if(!RE.reg.name) RE.reg.name = t.label==='Libre' ? '' : t.label;
+  reRerender();
+}
+function reAddMetric(){
+  if((RE.reg.metrics||[]).length>=6){ toast('Máximo 6 métricas'); return; }
+  RE.reg.metrics = (RE.reg.metrics||[]).concat([{id:uid(), name:'', unit:'', better:'high'}]);
+  reRerender();
+}
+function reRemoveMetric(id){ RE.reg.metrics = RE.reg.metrics.filter(function(m){return m.id!==id;}); reRerender(); }
+function reSetMetric(id, f, v){ RE.reg.metrics.forEach(function(m){ if(m.id===id) m[f]=v; }); }
+function reCycleBetter(id){
+  RE.reg.metrics.forEach(function(m){ if(m.id===id) m.better = m.better==='high'?'low':(m.better==='low'?'none':'high'); });
+  reRerender();
+}
+function reSetColor(c){ RE.reg.color = c; reRerender(); }
+function saveRegEditor(){
+  var r = RE.reg;
+  var nameInp = document.getElementById('re-name');
+  r.name = ((nameInp&&nameInp.value.trim())||r.name||'').trim();
+  if(!r.name){ toast('Ponle un nombre al registro'); return; }
+  if(r.kind==='metrics'){
+    r.metrics = (r.metrics||[]).filter(function(m){return (m.name||'').trim();}).map(function(m){return {id:m.id,name:m.name.trim(),unit:(m.unit||'').trim(),better:m.better||'high'};});
+    if(!r.metrics.length){ toast('Agrega al menos una métrica'); return; }
+  }
+  r.updatedAt = new Date().toISOString();
+  if(!S.registries) S.registries = [];
+  if(RE.isNew) S.registries.push(r);
+  else S.registries = S.registries.map(function(x){ return x.id===r.id ? Object.assign({},r,{entries:x.entries||[]}) : x; });
+  saveState();
+  removeOverlay('reg-editor');
+  refreshRegViews();
+  toast('✓ Registro guardado');
+}
+function confirmDeleteRegistry(id){
+  var r = regById(id); if(!r) return;
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner">'+
+    '<div style="text-align:center;margin-bottom:14px;"><div style="font-size:38px;margin-bottom:8px;">🗑️</div>'+
+    '<div class="serif" style="font-weight:800;font-size:17px;color:var(--ink);">¿Eliminar "'+esc(r.name)+'"?</div></div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">Se borran sus '+regEntries(r).length+' entradas. Las tareas asociadas no se borran, solo dejan de estar ligadas.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button onclick="this.closest(\'.conf-box\').remove();deleteRegistry(\''+id+'\');" style="flex:1;background:var(--bad);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>'+
+      '<button onclick="this.closest(\'.conf-box\').remove()" style="flex:1;background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function deleteRegistry(id){
+  S.registries = (S.registries||[]).map(function(r){ return r.id===id ? Object.assign({},r,{del:true,updatedAt:new Date().toISOString()}) : r; });
+  S.tasks = S.tasks.map(function(t){ return t.registryId===id ? Object.assign({},t,{registryId:null}) : t; });
+  saveState();
+  removeOverlay('reg-editor'); removeOverlay('reg-view');
+  refreshRegViews();
+}
+
+// ── Hoja para anotar una entrada ────────────────────────────────────────────
+var EN = null;
+function regLastEntry(reg, taskId){
+  var es = regEntries(reg).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  if(taskId){ var f = es.find(function(e){return e.taskId===taskId;}); if(f) return f; }
+  return es[0] || null;
+}
+function openRegEntryForTask(taskId, fromCompletion){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.registryId) return;
+  var reg = regById(t.registryId); if(!reg) return;
+  openRegEntry(reg.id, {taskId:taskId, fromTask:!!fromCompletion});
+}
+function openRegEntry(regId, opts){
+  opts = opts || {};
+  var reg = regById(regId); if(!reg) return;
+  var existing = opts.entryId ? regEntries(reg).find(function(e){return e.id===opts.entryId;}) : null;
+  var last = existing || regLastEntry(reg, opts.taskId||null);
+  EN = {regId:regId, entryId:existing?existing.id:null, taskId:existing?(existing.taskId||null):(opts.taskId||null), fromTask:!!opts.fromTask,
+        dir: existing?existing.dir:(last&&last.dir?last.dir:'out'), existing:existing, last:last};
+  removeOverlay('reg-entry');
+  var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-entry';
+  overlay.style.zIndex = 620;
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) removeOverlay('reg-entry'); });
+  overlay.innerHTML = '<div class="sheet" id="en-sheet">'+regEntryBodyHTML()+'</div>';
+  document.body.appendChild(overlay);
+}
+function regEntryBodyHTML(){
+  var reg = regById(EN.regId), isFin = reg.kind==='finance', ex = EN.existing, last = EN.last;
+  var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null;
+  var labels = {}; regEntries(reg).forEach(function(e){ if(e.label) labels[e.label]=1; });
+  var labelVal = ex ? (ex.label||'') : (last && last.label ? last.label : '');
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
+      '<span class="serif" style="font-weight:700;font-size:18px;">'+regIcon(reg)+' '+esc(reg.name)+'</span>'+
+      '<button onclick="removeOverlay(\'reg-entry\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+
+    (task?'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Tarea: '+esc(task.text)+'</div>':'<div style="height:10px;"></div>');
+  if(isFin){
+    html += mSegHTML('en-dir-seg',[['out','Gasto'],['in','Ingreso']], EN.dir, 'enSetDir')+
+      '<div style="height:14px;"></div>'+
+      mSecLabel('Monto')+
+      '<input id="en-amount" class="finp" type="text" inputmode="decimal" placeholder="'+(last&&last.amount?('Último: '+fmtNum(last.amount)):'0')+'" value="'+(ex?fmtNum(ex.amount).replace(/\./g,''):'')+'" style="font-size:22px;font-weight:700;margin-bottom:14px;"/>'+
+      mSecLabel('Concepto (opcional)')+
+      '<input id="en-label" class="finp" type="text" list="en-labels" placeholder="Ej: Supermercado, Trabajo puntual" value="'+esc(labelVal)+'" style="margin-bottom:14px;"/>';
+  } else {
+    html += mSecLabel(reg.labelHint||'Concepto (opcional)')+
+      '<input id="en-label" class="finp" type="text" list="en-labels" placeholder="'+esc(reg.labelHint||'')+'" value="'+esc(labelVal)+'" style="margin-bottom:14px;"/>';
+    (reg.metrics||[]).forEach(function(m){
+      var cur = ex && ex.values && ex.values[m.id]!=null ? fmtNum(ex.values[m.id]).replace(/\./g,'') : '';
+      var ph = last && last.values && last.values[m.id]!=null ? ('Último: '+fmtNum(last.values[m.id])) : '0';
+      html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
+        '<span style="font-size:13px;font-weight:600;color:var(--ink);flex:1;min-width:0;">'+esc(m.name)+'</span>'+
+        '<input id="en-m-'+m.id+'" class="finp" type="text" inputmode="decimal" placeholder="'+ph+'" value="'+cur+'" style="width:110px;margin:0;text-align:right;font-size:16px;font-weight:700;"/>'+
+        '<span style="font-size:12px;color:var(--muted);width:46px;">'+esc(m.unit||'')+'</span>'+
+      '</div>';
+    });
+    html += mSecLabel('Nota (opcional)')+
+      '<input id="en-note" class="finp" type="text" value="'+esc(ex?(ex.note||''):'')+'" style="margin-bottom:14px;"/>';
+  }
+  html += '<datalist id="en-labels">'+Object.keys(labels).map(function(l){return '<option value="'+esc(l)+'">';}).join('')+'</datalist>'+
+    mSecLabel('Fecha')+
+    '<input id="en-date" class="finp" type="text" readonly onclick="openCustomDatePicker(\'en-date\',false)" style="cursor:pointer;margin-bottom:18px;" value="'+(ex?ex.date:todayStr())+'"/>'+
+    '<div style="display:flex;gap:8px;">'+
+      (ex?'<button onclick="confirmDeleteRegEntry()" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>':
+         (EN.fromTask?'<button onclick="removeOverlay(\'reg-entry\')" style="background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Omitir</button>':''))+
+      '<button onclick="saveRegEntry()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button>'+
+    '</div>';
+  return html;
+}
+function enSetDir(k){ EN.dir = k; mRefreshSeg('en-dir-seg', k); }
+function saveRegEntry(){
+  var reg = regById(EN.regId); if(!reg) return;
+  var g = function(id){ var e=document.getElementById(id); return e?e.value:''; };
+  var date = g('en-date') || todayStr();
+  var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null;
+  var entry = {id:EN.entryId||uid(), date:date, label:g('en-label').trim(), taskId:EN.taskId||null, taskName:task?task.text:(EN.existing?(EN.existing.taskName||null):null), ts:Date.now()};
+  if(reg.kind==='finance'){
+    var amt = parseNumInput(g('en-amount'));
+    if(!(amt>0)){ toast('Escribe un monto'); return; }
+    entry.dir = EN.dir; entry.amount = amt;
+  } else {
+    var vals = {}, any = false;
+    (reg.metrics||[]).forEach(function(m){ var v=parseNumInput(g('en-m-'+m.id)); if(!isNaN(v)){ vals[m.id]=v; any=true; } });
+    if(!any){ toast('Escribe al menos un valor'); return; }
+    entry.values = vals; entry.note = g('en-note').trim();
+  }
+  var prev = regEntries(reg);
+  var wasRecord = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
+  reg.entries = (reg.entries||[]).filter(function(e){return e.id!==entry.id;}).concat([entry]);
+  reg.updatedAt = new Date().toISOString();
+  saveState();
+  removeOverlay('reg-entry');
+  refreshRegViews();
+  if(wasRecord.length){ setTimeout(function(){ playSound('achievement'); showRewardToast('🏆 ¡Nuevo récord!', wasRecord.join(' · ')); }, 350); }
+  else toast('✓ Registrado');
+}
+// Devuelve los nombres de métricas cuyo récord supera esta entrada (vs. lo previo del mismo concepto).
+function regRecordsBroken(reg, entry){
+  var out = [];
+  (reg.metrics||[]).forEach(function(m){
+    if(m.better==='none' || !entry.values || entry.values[m.id]==null) return;
+    var same = regEntries(reg).filter(function(e){ return e.id!==entry.id && (e.label||'')===(entry.label||'') && e.values && e.values[m.id]!=null; });
+    if(!same.length) return; // el primer dato no cuenta como "récord"
+    var best = same.reduce(function(b,e){ var v=e.values[m.id]; return m.better==='high' ? Math.max(b,v) : Math.min(b,v); }, same[0].values[m.id]);
+    var v = entry.values[m.id];
+    if((m.better==='high' && v>best) || (m.better==='low' && v<best)) out.push(m.name+' '+fmtNum(v)+' '+m.unit);
+  });
+  return out;
+}
+function confirmDeleteRegEntry(){
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:14px;">¿Eliminar esta entrada?</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button onclick="this.closest(\'.conf-box\').remove();deleteRegEntry();" style="flex:1;background:var(--bad);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>'+
+      '<button onclick="this.closest(\'.conf-box\').remove()" style="flex:1;background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function deleteRegEntry(){
+  var reg = regById(EN.regId); if(!reg||!EN.entryId) return;
+  reg.entries = (reg.entries||[]).map(function(e){ return e.id===EN.entryId ? Object.assign({},e,{del:true,ts:Date.now()}) : e; });
+  reg.updatedAt = new Date().toISOString();
+  saveState(); removeOverlay('reg-entry'); refreshRegViews();
+}
+
+// ── Gráficos simples (SVG) ──────────────────────────────────────────────────
+function svgLine(points, color){
+  if(!points.length) return '';
+  var W=300, H=84, pad=10, vs=points.map(function(p){return p.v;});
+  var mn=Math.min.apply(null,vs), mx=Math.max.apply(null,vs); if(mn===mx){ mn-=1; mx+=1; }
+  var n=points.length;
+  var xy = points.map(function(p,i){ return [n===1?W/2:pad+(W-2*pad)*i/(n-1), H-pad-(H-2*pad)*(p.v-mn)/(mx-mn)]; });
+  var path = xy.map(function(q,i){return (i?'L':'M')+q[0].toFixed(1)+','+q[1].toFixed(1);}).join('');
+  var dots = xy.map(function(q,i){ var last=i===n-1; return '<circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r="'+(last?4:2.6)+'" fill="'+(last?color:'var(--paper)')+'" stroke="'+color+'" stroke-width="1.6"/>'; }).join('');
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" preserveAspectRatio="none" style="display:block;overflow:visible;">'+
+    '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'+dots+'</svg>';
+}
+function svgBars2(groups){
+  var W=300, H=110, pad=18, base=H-18;
+  var mx = Math.max.apply(null, groups.map(function(g){return Math.max(g.a,g.b);}).concat([1]));
+  var gw = (W-2*4)/groups.length, bw = Math.min(16, gw/2-4);
+  var out = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" style="display:block;">';
+  groups.forEach(function(g,i){
+    var cx = 4+gw*i+gw/2;
+    var ha = (base-pad)*g.a/mx, hb = (base-pad)*g.b/mx;
+    out += '<rect x="'+(cx-bw-1)+'" y="'+(base-ha).toFixed(1)+'" width="'+bw+'" height="'+Math.max(ha,g.a>0?1.5:0).toFixed(1)+'" rx="2" fill="#4a8f6b"/>'+
+           '<rect x="'+(cx+1)+'" y="'+(base-hb).toFixed(1)+'" width="'+bw+'" height="'+Math.max(hb,g.b>0?1.5:0).toFixed(1)+'" rx="2" fill="#c0503a"/>'+
+           '<text x="'+cx+'" y="'+(H-4)+'" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="Inter,sans-serif">'+g.label+'</text>';
+  });
+  return out+'</svg>';
+}
+
+// ── Estadísticas por registro ───────────────────────────────────────────────
+function financeStatsHTML(reg){
+  var es = regEntries(reg), cur = reg.currency||'$';
+  var now = new Date();
+  function sum(list,dir){ return list.filter(function(e){return e.dir===dir;}).reduce(function(s,e){return s+e.amount;},0); }
+  var mk = todayStr().slice(0,7);
+  var mEs = es.filter(function(e){return e.date.slice(0,7)===mk;});
+  var inc = sum(mEs,'in'), out = sum(mEs,'out'), net = inc-out, totalNet = sum(es,'in')-sum(es,'out');
+  var groups = [];
+  for(var i=5;i>=0;i--){
+    var d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    var ms = es.filter(function(e){return e.date.slice(0,7)===key;});
+    groups.push({label:REG_MONTHS[d.getMonth()], a:sum(ms,'in'), b:sum(ms,'out')});
+  }
+  var byLabel = {};
+  mEs.filter(function(e){return e.dir==='out';}).forEach(function(e){ var k=e.label||e.taskName||'Sin concepto'; byLabel[k]=(byLabel[k]||0)+e.amount; });
+  var top = Object.keys(byLabel).map(function(k){return [k,byLabel[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+  function stat(l,v,c){ return '<div style="flex:1;text-align:center;"><div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;">'+l+'</div><div style="font-size:14px;font-weight:800;color:'+c+';">'+v+'</div></div>'; }
+  var html = '<div style="display:flex;gap:6px;margin-bottom:14px;">'+
+    stat('Ingresos', fmtMoney(inc,cur), '#4a8f6b')+stat('Gastos', fmtMoney(out,cur), '#c0503a')+stat('Neto del mes', fmtMoney(net,cur), net>=0?'var(--ink)':'#c0503a')+
+  '</div>'+
+  '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">Últimos 6 meses <span style="color:#4a8f6b;">■ ingresos</span> <span style="color:#c0503a;">■ gastos</span></div>'+
+  svgBars2(groups)+
+  '<div style="font-size:11.5px;color:var(--muted);margin:6px 0 12px;">Balance total: <b style="color:'+(totalNet>=0?'var(--ink)':'#c0503a')+';">'+fmtMoney(totalNet,cur)+'</b></div>';
+  if(top.length){
+    var tmax = top[0][1];
+    html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Gastos del mes por concepto</div>'+
+      top.map(function(t){
+        return '<div style="margin-bottom:7px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink);margin-bottom:2px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;">'+esc(t[0])+'</span><b>'+fmtMoney(t[1],cur)+'</b></div>'+
+          '<div style="height:5px;background:var(--line-soft);border-radius:3px;overflow:hidden;"><div style="width:'+Math.round(t[1]/tmax*100)+'%;height:100%;background:#c0503a;"></div></div></div>';
+      }).join('');
+  }
+  return html;
+}
+function setRegLabelFilter(regId, label){
+  if(!S._regLabel) S._regLabel = {};
+  S._regLabel[regId] = label;
+  refreshRegViews();
+}
+function metricsStatsHTML(reg){
+  var es = regEntries(reg);
+  if(!es.length) return '';
+  var byRecent = es.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  var labels = []; byRecent.forEach(function(e){ if(e.label && labels.indexOf(e.label)===-1) labels.push(e.label); });
+  var sel = (S._regLabel && S._regLabel[reg.id]) || '*';
+  if(sel!=='*' && labels.indexOf(sel)===-1) sel = '*';
+  var fes = sel==='*' ? es : es.filter(function(e){return (e.label||'')===sel;});
+  var html = '';
+  if(labels.length){
+    html += '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px;">'+
+      [['*','Todo']].concat(labels.slice(0,12).map(function(l){return [l,l];})).map(function(p){
+        var on = sel===p[0];
+        return '<button type="button" onclick="setRegLabelFilter(\''+reg.id+'\',\''+p[0].replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="flex-shrink:0;padding:5px 11px;border:1.5px solid '+(on?reg.color:'var(--line)')+';background:'+(on?reg.color+'22':'transparent')+';color:'+(on?reg.color:'var(--muted)')+';border-radius:12px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+esc(p[1])+'</button>';
+      }).join('')+'</div>';
+  }
+  (reg.metrics||[]).forEach(function(m){
+    var series = fes.filter(function(e){return e.values && e.values[m.id]!=null;}).sort(function(a,b){return (a.date+(a.ts||0)).toString().localeCompare((b.date+(b.ts||0)).toString());});
+    if(!series.length) return;
+    var last = series[series.length-1], lastV = last.values[m.id];
+    var rec = null;
+    if(m.better!=='none'){ rec = series.reduce(function(b,e){ return (m.better==='high' ? e.values[m.id]>b.values[m.id] : e.values[m.id]<b.values[m.id]) ? e : b; }, series[0]); }
+    var isRec = rec && series.length>1 && rec.id===last.id;
+    html += '<div style="background:var(--bg);border-radius:12px;padding:11px 12px;margin-bottom:10px;">'+
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;">'+
+        '<span style="font-size:13px;font-weight:700;color:var(--ink);">'+esc(m.name)+'</span>'+
+        '<span style="font-size:11px;color:var(--muted);">'+series.length+' dato'+(series.length===1?'':'s')+'</span>'+
+      '</div>'+
+      '<div style="display:flex;gap:16px;margin-bottom:8px;">'+
+        '<div><div style="font-size:10.5px;color:var(--muted);">Último</div><div style="font-size:16px;font-weight:800;color:var(--ink);">'+fmtNum(lastV)+' <span style="font-size:11px;font-weight:600;color:var(--muted);">'+esc(m.unit||'')+'</span></div></div>'+
+        (rec?'<div><div style="font-size:10.5px;color:var(--muted);">🏆 Récord</div><div style="font-size:16px;font-weight:800;color:'+reg.color+';">'+fmtNum(rec.values[m.id])+' <span style="font-size:11px;font-weight:600;color:var(--muted);">'+esc(m.unit||'')+' · '+fmtShortDate(rec.date)+'</span></div></div>':'')+
+      '</div>'+
+      (isRec?'<div style="font-size:11px;font-weight:700;color:'+reg.color+';margin-bottom:6px;">¡Tu último dato es récord!</div>':'')+
+      svgLine(series.slice(-14).map(function(e){return {v:e.values[m.id]};}), reg.color)+
+    '</div>';
+  });
+  return html || '<div style="font-size:12px;color:var(--muted);padding:8px 0;">Aún no hay datos para este filtro.</div>';
+}
+function regEntryRowsHTML(reg){
+  var es = regEntries(reg).slice().sort(function(a,b){return (b.date+(b.ts||0)).toString().localeCompare((a.date+(a.ts||0)).toString());}).slice(0,60);
+  if(!es.length) return '<div style="font-size:12px;color:var(--muted);text-align:center;padding:14px 0;">Aún no hay entradas.</div>';
+  return es.map(function(e){
+    var main, right;
+    if(reg.kind==='finance'){
+      main = e.label || e.taskName || (e.dir==='in'?'Ingreso':'Gasto');
+      right = '<b style="color:'+(e.dir==='in'?'#4a8f6b':'#c0503a')+';">'+(e.dir==='in'?'+':'−')+fmtMoney(e.amount,reg.currency).replace('−','')+'</b>';
+    } else {
+      main = e.label || e.taskName || 'Registro';
+      right = '<span style="color:var(--ink-soft);font-weight:600;">'+(reg.metrics||[]).filter(function(m){return e.values&&e.values[m.id]!=null;}).map(function(m){return fmtNum(e.values[m.id])+' '+esc(m.unit||'');}).join(' · ')+'</span>';
+    }
+    return '<div onclick="openRegEntry(\''+reg.id+'\',{entryId:\''+e.id+'\'})" style="display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;">'+
+      '<span style="font-size:11px;color:var(--muted);width:44px;flex-shrink:0;">'+fmtShortDate(e.date)+'</span>'+
+      '<span style="flex:1;min-width:0;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(main)+'</span>'+
+      '<span style="font-size:12.5px;flex-shrink:0;text-align:right;">'+right+'</span>'+
+    '</div>';
+  }).join('');
+}
+
+// ── Vista de un registro (estadísticas + entradas) ──────────────────────────
+function regViewBodyHTML(reg){
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;min-width:0;">'+
+        '<div style="width:34px;height:34px;border-radius:10px;background:'+reg.color+'22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">'+regIcon(reg)+'</div>'+
+        '<span class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(reg.name)+'</span>'+
+      '</div>'+
+      '<div style="display:flex;gap:4px;flex-shrink:0;">'+
+        '<button onclick="openRegEditor(\''+reg.id+'\')" title="Editar registro" style="background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;">⚙</button>'+
+        '<button onclick="removeOverlay(\'reg-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+      '</div>'+
+    '</div>'+
+    '<button onclick="openRegEntry(\''+reg.id+'\',{})" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:16px;">+ Agregar '+(reg.kind==='finance'?'movimiento':'registro')+'</button>'+
+    (reg.kind==='finance' ? financeStatsHTML(reg) : metricsStatsHTML(reg))+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 4px;">Entradas</div>'+
+    regEntryRowsHTML(reg);
+}
+function openRegistryView(regId){
+  var reg = regById(regId); if(!reg) return;
+  removeOverlay('reg-view');
+  var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-view';
+  overlay.dataset.regId = regId;
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) removeOverlay('reg-view'); });
+  overlay.innerHTML = '<div class="sheet" id="reg-view-sheet" style="min-height:60vh;">'+regViewBodyHTML(reg)+'</div>';
+  document.body.appendChild(overlay);
+}
+// Repinta lo que dependa de los registros (vista abierta, listas y estadísticas)
+function refreshRegViews(){
+  var ov = document.getElementById('reg-view');
+  if(ov && !ov.classList.contains('closing')){
+    var reg = regById(ov.dataset.regId);
+    if(!reg){ removeOverlay('reg-view'); }
+    else { var sh = document.getElementById('reg-view-sheet'); if(sh) sh.innerHTML = regViewBodyHTML(reg); }
+  }
+  render();
+}
+// ── Tarjeta de registros en Yo → Estadísticas ───────────────────────────────
+function renderRegistriesStatsCard(){
+  var list = regList();
+  if(!list.length) return '';
+  return '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:6px;">📒 Registros</div>'+
+    list.map(function(r){
+      var es = regEntries(r), extra = '';
+      if(r.kind==='finance'){
+        var mk = todayStr().slice(0,7), inc=0, out=0;
+        es.forEach(function(e){ if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
+        extra = '<div style="display:flex;gap:12px;font-size:11px;margin-top:3px;"><span style="color:#4a8f6b;">+'+fmtMoney(inc,r.currency).replace('−','')+'</span><span style="color:#c0503a;">−'+fmtMoney(out,r.currency).replace('−','')+'</span></div>';
+      } else {
+        var recs = [];
+        (r.metrics||[]).forEach(function(m){
+          if(m.better==='none') return;
+          var vs = es.filter(function(e){return e.values&&e.values[m.id]!=null;}).map(function(e){return e.values[m.id];});
+          if(vs.length) recs.push('🏆 '+esc(m.name)+' '+fmtNum(m.better==='high'?Math.max.apply(null,vs):Math.min.apply(null,vs))+' '+esc(m.unit||''));
+        });
+        if(recs.length) extra = '<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">'+recs.slice(0,3).join(' · ')+'</div>';
+      }
+      return '<div onclick="openRegistryView(\''+r.id+'\')" style="display:flex;align-items:center;gap:11px;padding:9px 2px;border-top:1px solid var(--line-soft);cursor:pointer;">'+
+        '<div style="width:32px;height:32px;border-radius:9px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">'+regIcon(r)+'</div>'+
+        '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13.5px;color:var(--ink);">'+esc(r.name)+'</div><div style="font-size:11px;color:var(--muted);">'+es.length+' entrada'+(es.length===1?'':'s')+'</div>'+extra+'</div>'+
+        '<span style="font-size:15px;color:var(--muted);">›</span></div>';
+    }).join('')+
+  '</div>';
+}
+// ── Asociar una tarea a un registro (editor de tarea) ───────────────────────
+function mRegistrySectionHTML(){
+  var list = regList();
+  if(!list.length) return '';
+  return mSecLabel('Registro','regtask')+
+    '<div id="m-reg-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'+mRegChipsInnerHTML()+'</div>';
+}
+function mRegChipsInnerHTML(){
+  var none = !M.registryId;
+  var html = '<button type="button" onclick="mSetRegistry(null)" style="padding:5px 11px;border:1.5px solid '+(none?'var(--accent)':'var(--line)')+';background:'+(none?'var(--accent-bg)':'transparent')+';color:'+(none?'var(--accent)':'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Ninguno</button>';
+  regList().forEach(function(r){
+    var on = M.registryId===r.id;
+    html += '<button type="button" onclick="mSetRegistry(\''+r.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?r.color:'var(--line)')+';background:'+(on?r.color+'22':'transparent')+';color:'+(on?r.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+regIcon(r)+' '+esc(r.name)+'</button>';
+  });
+  return html;
+}
+function mSetRegistry(id){
+  M.registryId = id;
+  var box = document.getElementById('m-reg-chips'); if(box) box.innerHTML = mRegChipsInnerHTML();
+}
+// ── Fusión con la nube ──────────────────────────────────────────────────────
+function mergeRegistries(cloud){
+  cloud = cloud || {};
+  var map = {};
+  (S.registries||[]).forEach(function(r){ map[r.id] = r; });
+  (cloud.registries||[]).forEach(function(cr){
+    var lr = map[cr.id];
+    if(!lr){ map[cr.id] = cr; return; }
+    var meta = (cr.updatedAt||'') > (lr.updatedAt||'') ? cr : lr;
+    var em = {};
+    (lr.entries||[]).concat(cr.entries||[]).forEach(function(e){
+      var p = em[e.id];
+      if(!p){ em[e.id] = e; return; }
+      var newer = (e.ts||0) >= (p.ts||0) ? e : p;
+      em[e.id] = (e.del || p.del) ? Object.assign({}, newer, {del:true}) : newer;
+    });
+    map[cr.id] = Object.assign({}, meta, {entries:Object.keys(em).map(function(k){return em[k];}), del:!!(lr.del || cr.del)});
+  });
+  S.registries = Object.keys(map).map(function(k){ return map[k]; });
+}
+
+// ── Pestaña "Proyectos y registros" ────────────────────────────────────────
 function renderProyectosTab(){
+  var view = S._projView || 'proj';
+  var html = '<div style="padding:16px 16px 0;">'+
+    '<div class="serif" style="font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-.02em;margin-bottom:14px;">Proyectos y registros</div>'+
+    mSegHTML('proj-seg', [['proj','Proyectos'],['reg','Registros']], view, 'setProjView')+
+  '</div>';
+  return html + (view==='reg' ? renderRegistriesSection() : renderProjectsSection());
+}
+function renderProjectsSection(){
   var projects = S.projects || [];
   var can = projects.length < maxProjects();
-  var html = '<div style="padding:16px 16px 90px;">';
+  var html = '<div style="padding:12px 16px 90px;">';
 
-  html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;">'+
-    '<span class="serif" style="font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-.02em;">Proyectos</span>'+
+  html += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">'+
+    '<span style="font-size:12.5px;font-weight:600;color:var(--ink);">Mis proyectos</span>'+
     '<span style="font-size:12px;color:var(--muted);">'+projects.length+' / '+maxProjects()+'</span>'+
   '</div>';
 
@@ -7223,6 +7826,10 @@ function openTaskMenu(id, event){
       icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="11" height="9.5" rx="1.5"/><path d="M1.5 5.7h11M4.5 1v2.3M9.5 1v2.3"/></svg>',
       label:'Llevar a otro día...', action:'moveTaskToDay(\''+id+'\')'
     });
+    var _rt = S.tasks.find(function(x){return x.id===id;});
+    if(_rt && _rt.registryId && regById(_rt.registryId)){
+      items.push({icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12V5M7 12V2M12 12V8"/></svg>', label:'Registrar ahora', action:'openRegEntryForTask(\''+id+'\')'});
+    }
     items.push({divider:true});
     // Duplicar — ícono de dos hojas superpuestas
     items.push({
@@ -10845,6 +11452,11 @@ function finishUpdate(updated, justCompleted, delta){
     playSound('complete');
     vibrate(30);
     awardTaskXP(updated);
+    // Registro asociado: al completar, se ofrece anotar el monto/marca (se puede omitir).
+    if(updated.registryId && regById(updated.registryId)){
+      var _rtid = updated.id;
+      setTimeout(function(){ openRegEntryForTask(_rtid, true); }, 500);
+    }
   }
   // Propagar según el modo de vinculación
   propagate(updated, justCompleted, delta||0);
@@ -11220,7 +11832,7 @@ function openNew(period){
     showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton);
     return;
   }
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,clRule:{mode:'all',k:2},hasTimer:false,timer:defaultTimerConfig(),hasDate:false,repeatEvery:0,oneShot:false,isEvent:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:period,day:S.day,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,clRule:{mode:'all',k:2},hasTimer:false,timer:defaultTimerConfig(),hasDate:false,repeatEvery:0,oneShot:false,registryId:null,isEvent:false,crucial:false,linkMode:'unit',categoryId:null,moreOpen:false,hora:null,duracion:60,notif:null};
   showTaskModal();
 }
 // Crear una tarea puntual (con fecha específica) para un día cualquiera —
@@ -11253,7 +11865,7 @@ function openNewDatedTask(dateKey, opts){
   // duplicados, y además hacía que el back-button quedara con dos entradas
   // de historial apiladas para un solo modal.
   opts = opts || {};
-  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:opts.hora||null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,clRule:{mode:'all',k:2},hasTimer:false,timer:defaultTimerConfig(),hasDate:true,repeatEvery:0,oneShot:false,isEvent:!!opts.isEvent,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:opts.hora||null,duracion:60,notif:null};
+  M={isNew:true,task:{id:uid(),text:'',done:false,period:'dia',day:wIdx,date:dateKey,qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:opts.hora||null,duracion:60,notif:null},checklist:[],links:{},qty:1,hasQty:false,hasCL:false,clFresh:false,clRule:{mode:'all',k:2},hasTimer:false,timer:defaultTimerConfig(),hasDate:true,repeatEvery:0,oneShot:false,registryId:null,isEvent:!!opts.isEvent,crucial:false,linkMode:'unit',categoryId:null,moreOpen:true,hora:opts.hora||null,duracion:60,notif:null};
   showTaskModal();
 }
 // ── Pedido: botón flotante aparte para crear un EVENTO (fecha + hora +
@@ -11267,7 +11879,7 @@ function openNewEvent(){
 }
 function openEdit(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
-  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,clRule:t.clRule?JSON.parse(JSON.stringify(t.clRule)):{mode:'all',k:Math.max(1,(t.checklist||[]).length-1)||1},hasTimer:!!t.hasTimer,timer:t.timer?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(),oneShot:!!t.oneShotWeek,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
+  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,clRule:t.clRule?JSON.parse(JSON.stringify(t.clRule)):{mode:'all',k:Math.max(1,(t.checklist||[]).length-1)||1},hasTimer:!!t.hasTimer,timer:t.timer?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(),oneShot:!!t.oneShotWeek,registryId:(t.registryId&&regById(t.registryId))?t.registryId:null,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
   // BUGFIX: si la tarea venía de antes con Cantidad Y Checklist activos a
   // la vez (posible antes de esta regla), se normaliza acá al abrir el
   // editor en vez de esperar a que mSave() lo resuelva en silencio — así
@@ -11309,6 +11921,9 @@ var INFO_TIPS = {
   notifonly:'Te aviso solo de las tareas que tú elijas, cuando se acerque su hora. Sin spam: nada de notificaciones para todas tus tareas.',
   projlinks:'Conecta las tareas del proyecto con tus objetivos o tareas diarias. Al completar el objetivo, el % de la tarea se actualiza.',
   tplauto:'Al activar este modo, esta plantilla se aplicará automáticamente. Las tareas actuales quedarán guardadas y volverán al desactivar.',
+  regtask:'Asocia la tarea a un registro: al completarla se abre una hoja rápida para anotar el monto o la marca (puedes omitirla, la tarea queda completa igual). También desde el ⋯ de la tarea → "Registrar ahora".',
+  reglimit:'Plan gratuito: 1 registro de finanzas y 1 de marcas. Acceso completo: hasta 5. Al llegar al nivel 10 se suma 1 cupo extra.',
+  regmet:'Cada métrica lleva su unidad (kg, km, min, bloques...) y si "mejor" es más alto (peso) o más bajo (tiempo), para calcular récords. El campo "concepto" separa ejercicios distintos, ej. "Press de banca".',
   timercfg:'Estos ajustes valen para todas las tareas con temporizador. Los sonidos usan el audio del sistema, así que siguen sonando si cambias de app (depende de que el navegador mantenga la pestaña activa).'
 };
 function infoBtn(key){
@@ -11410,6 +12025,7 @@ function taskModalDayHTML(showFreshCL){
     '</div>'+
     '<div id="m-timer-area" style="display:'+(M.hasTimer?'block':'none')+';margin-top:12px;">'+timerAreaHTML()+'</div>'+
     '<div style="height:18px;"></div>'+
+    mRegistrySectionHTML()+
     mSecLabel('Cuándo','when')+
     mSegHTML('m-when-seg',[['weekly','Cada semana'],['week','Solo esta semana'],['date','Fecha puntual']], when, 'mSetWhen')+
     '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';margin-top:12px;">'+
@@ -11539,7 +12155,7 @@ function showTaskModal(){
         '</div>'+
       '</div>'+
       '</div>'
-    ))+
+    ))+(isDay?'':mRegistrySectionHTML())+
     '<div style="display:flex;gap:8px;margin-top:4px;">'+
       '<button class="sbtn" onclick="mSave()">'+(M.isNew?'Crear':'Guardar')+'</button>'+
       '<button class="cbtn" onclick="removeOverlay(\'task-modal\')">Cancelar</button>'+
@@ -12661,7 +13277,7 @@ function mSave(){
   // Pedido: la tarea COMPLETA puede estar vinculada (clLinkUp) aunque tenga
   // checklist propio — antes se borraba el vínculo acá apenas el checklist
   // tenía algún ítem; ahora se conserva siempre tal cual estaba.
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,registryId:(M.registryId&&regById(M.registryId))?M.registryId:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
