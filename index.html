@@ -15373,6 +15373,33 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     }
   });
 })();
+// ── Auto-actualización: si hay una versión nueva publicada, recargar ─────
+// Al volver de segundo plano Android reanuda la página vieja sin recargarla.
+// Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
+// Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
+// IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
+var APP_VERSION = '2026.10.01.1';
+function checkForUpdate(){
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.json(); })
+    .then(function(v){
+      if(!v || !v.version || v.version === APP_VERSION) return;
+      if(typeof TR !== 'undefined' && TR && !TR.finished) return; // no cortar un temporizador en curso
+      var ae = document.activeElement;
+      if(ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return;      // no perder lo que se está escribiendo
+      try{
+        if(sessionStorage.getItem('og6-reloaded-for') === v.version) return; // evita bucles
+        sessionStorage.setItem('og6-reloaded-for', v.version);
+      }catch(e){}
+      location.reload();
+    })
+    .catch(function(){});
+}
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible') checkForUpdate();
+});
+window.addEventListener('pageshow', function(e){ if(e.persisted) checkForUpdate(); });
+checkForUpdate();
 loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
 // Registrar el service worker — necesario para que Android considere la
 // app instalable como PWA (modo standalone sin barra de navegador) y para
