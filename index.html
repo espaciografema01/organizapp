@@ -692,15 +692,6 @@ img,svg{-webkit-user-drag:none;}
       <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </div>
-  <!-- Pedido: botón flotante aparte para crear un EVENTO (tarea con fecha y
-       hora puntuales, con o sin recurrencia cada N días) más rápido, sin
-       competir por espacio con el "+" de tarea normal — por eso va del otro
-       lado (izquierda) en vez de apilarse arriba del mismo. -->
-  <div class="fab-wrap-left" id="fab-wrap-left" style="display:none;">
-    <button class="fab-secondary fab-event" id="fab-event" onclick="openNewEvent()" title="Nuevo evento (fecha, hora y recurrencia)" aria-label="Nuevo evento">
-      <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M12 14v3M10.5 15.5h3"/></svg>
-    </button>
-  </div>
   <div id="sel-bar" style="display:none;position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1.5px solid var(--line);z-index:850;padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom));align-items:center;gap:8px;box-shadow:0 -4px 16px rgba(0,0,0,.1);"></div>
 </div>
 <script>
@@ -1094,6 +1085,7 @@ async function syncWithCloud(){
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
         registries: S.registries||[],
+        timerTemplates: S.timerTemplates||[],
         timerCfg: S.timerCfg||{},
         autoReset: S.autoReset||{},
         lastAutoReset: S.lastAutoReset||null,
@@ -1171,6 +1163,7 @@ function applySyncResult(cloud, useCloud){
   try {
     mergeMedalsAndTracks(cloud);
     mergeRegistries(cloud);
+    mergeTimerTemplates(cloud);
     if(useCloud){
       if(cloud.xp !== undefined) S.xp = Math.max(S.xp || 0, cloud.xp || 0);
       if(cloud.streak) S.streak = cloud.streak;
@@ -1304,6 +1297,7 @@ function pushToCloud(){
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
       registries: S.registries||[],
+        timerTemplates: S.timerTemplates||[],
       timerCfg: S.timerCfg||{},
       autoReset: S.autoReset||{},
       lastAutoReset: S.lastAutoReset||null,
@@ -1716,6 +1710,7 @@ var S = {
   timerCfg:{countdownBeepSec:3, volume:1, sounds:{start:true,work:true,rest:true,countdown:true,finish:true}, keepScreenOn:true},
   // Registros (finanzas y marcas) — ver openRegEditor / mergeRegistries
   registries:[],
+  timerTemplates:[], // plantillas de temporizador propias (Energía → Plantillas)
   streak:{days:0,lastDate:null,total:0},
   streakCfg:{threshold:0.8},
   // Pedido: se puede desactivar SOLO la racha (mantiene niveles/XP activos),
@@ -1827,6 +1822,25 @@ function uid(){return Math.random().toString(36).substr(2,9);}
 function todayIdx(){var d=new Date().getDay();return d===0?6:d-1;}
 // Número de día del mes (01, 02...) para un día de semana (0=Lun..6=Dom)
 // DENTRO de la semana actual — para mostrarlo junto al nombre ("Lunes 07").
+// Fecha (YYYY-MM-DD) del día de semana dowIdx (0=lunes) dentro de la semana en curso.
+function weekdayDateKey(dowIdx){
+  var today = new Date(); today.setHours(0,0,0,0);
+  var monday = new Date(today); monday.setDate(today.getDate() - todayIdx());
+  var d = new Date(monday); d.setDate(monday.getDate() + dowIdx);
+  return localDateStr(d);
+}
+// Fecha que le corresponde a una tarea: la de SU día (no la de hoy), para que registrar
+// algo de ayer proponga la fecha de ayer.
+function taskEntryDate(t){
+  if(!t) return todayStr();
+  if(t.period==='dia'){
+    if(t.date) return t.date;
+    var w = taskWeekdayThisWeek(t);
+    if(w==null) w = t.day;
+    if(w!=null) return weekdayDateKey(w);
+  }
+  return todayStr();
+}
 function weekdayDateNum(dowIdx){
   var today = new Date(); today.setHours(0,0,0,0);
   var monday = new Date(today); monday.setDate(today.getDate() - todayIdx());
@@ -1986,6 +2000,17 @@ function checklistSatisfied(t){
   }
   return doneCount === cl.length;
 }
+// Pedido: poder ignorar una tarea diaria solo por la semana en curso (t.skippedWeek
+// guarda la clave de semana). Se reactiva sola la semana siguiente porque la clave
+// deja de coincidir.
+function isSkipped(t){ return !!(t && t.period==='dia' && t.skippedWeek && t.skippedWeek===getWeekKey()); }
+function toggleSkipTaskWeek(id){
+  var t=S.tasks.find(function(x){return x.id===id;}); if(!t) return;
+  var on = isSkipped(t);
+  S.tasks = S.tasks.map(function(x){ if(x.id!==id) return x; var u=Object.assign({},x); if(on) delete u.skippedWeek; else u.skippedWeek=getWeekKey(); return u; });
+  saveState(); render(); playSound('toggle');
+  toast(on ? '✓ Tarea reactivada' : 'Tarea ignorada esta semana · vuelve sola la próxima');
+}
 function isDone(t){
   if(t.checklist&&t.checklist.length)return checklistSatisfied(t);
   if((t.qty||1)>1)return(t.prog||0)>=t.qty;
@@ -2063,6 +2088,7 @@ function loadState(){
     var ac=localStorage.getItem('og6-achievements');if(ac)S.achievements=JSON.parse(ac);
     var md=localStorage.getItem('og6-medals');if(md)S.medals=JSON.parse(md);
     try{var rg=localStorage.getItem('og6-registries');if(rg)S.registries=JSON.parse(rg)||[];}catch(e){}
+    try{var ttp=localStorage.getItem('og6-timertemplates');if(ttp)S.timerTemplates=JSON.parse(ttp)||[];}catch(e){}
     var lt=localStorage.getItem('og6-leveltracks');if(lt)S.levelTracks=JSON.parse(lt);
     var bts=localStorage.getItem('og6-bonustrackslots');if(bts)S.bonusTrackSlots=Number(bts)||0;
     var tcfg=localStorage.getItem('og6-timercfg');if(tcfg){try{S.timerCfg=Object.assign({},S.timerCfg,JSON.parse(tcfg));}catch(e){}}
@@ -2152,6 +2178,7 @@ function saveState(){
     localStorage.setItem('og6-achievements',JSON.stringify(S.achievements||[]));
     localStorage.setItem('og6-medals',JSON.stringify(S.medals||[]));
     localStorage.setItem('og6-registries',JSON.stringify(S.registries||[]));
+    localStorage.setItem('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
     localStorage.setItem('og6-leveltracks',JSON.stringify(S.levelTracks||[]));
     localStorage.setItem('og6-bonustrackslots',String(S.bonusTrackSlots||0));
     localStorage.setItem('og6-timercfg',JSON.stringify(S.timerCfg||{}));
@@ -2752,7 +2779,12 @@ function selLpStart(type, id, ev){
   clearTimeout(_selLpTimer);
   _selLpTimer = setTimeout(function(){
     _selLpFired = true;
-    enterSelectMode(type, id);
+    var tk = type==='tasks' ? S.tasks.find(function(x){return x.id===id;}) : null;
+    if(tk && tk.period==='dia' && !S._reorder){
+      vibrate(15);
+      var yy = _selLpY;
+      openTaskMenu(id, {target:{getBoundingClientRect:function(){return {bottom:yy-30};}}});
+    } else enterSelectMode(type, id);
   }, 480);
 }
 function selLpMove(ev){
@@ -3190,7 +3222,7 @@ function renderAgendaSectionContent(activeSection, tab, today){
     html += '<div style="display:flex;min-width:'+(7*140)+'px;">';
 
     for(var d=0; d<7; d++){
-      var dayTasks = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===d;});
+      var dayTasks = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===d && !isSkipped(t);});
       var done = dayTasks.filter(isDone).length;
       var isToday = d === today;
       var isSelected = d === S.day;
@@ -3304,16 +3336,10 @@ function renderHoyTasksSection(){
     '</div>';
   }
 
-  // Pedido: reordenar categorías (entre sí) y tareas (dentro de su categoría).
-  // En este modo se muestran TODAS las tareas del día (sin filtro), en filas
-  // simples con flechas — así cada flecha mueve siempre a un vecino visible.
-  if(all.length>1){
-    html += '<div style="display:flex;justify-content:flex-end;margin:-2px 0 8px;">'+
-      '<button onclick="toggleReorder()" style="background:'+(S._reorder?'var(--accent)':'none')+';border:1.5px solid '+(S._reorder?'var(--accent)':'var(--line)')+';color:'+(S._reorder?'#fff':'var(--muted)')+';border-radius:14px;padding:4px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(S._reorder?'✓ Listo':'⇅ Reordenar')+'</button>'+
-    '</div>';
-  }
+  // Reordenar ahora vive en el menú ⋮ del título del día (y al mantener presionada una tarea).
+  // En este modo se muestran TODAS las tareas del día (sin filtro), en filas simples con flechas.
   if(S._reorder && all.length>1){
-    return html + renderReorderHTML(all, cats) + '</div>';
+    return html + '<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;"><span style="font-size:12px;font-weight:700;color:var(--ink);">Reordenando</span><button onclick="toggleReorder()" style="background:var(--accent);border:none;color:#fff;border-radius:14px;padding:5px 14px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">✓ Listo</button></div>' + renderReorderHTML(all, cats) + '</div>';
   }
 
   // Pedido: agrupar también por categoría en "Pendientes" (antes solo se
@@ -3447,6 +3473,7 @@ function renderHoy(){
     '<div style="text-align:center;display:flex;align-items:center;gap:8px;">'+
       '<span class="serif" style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em;">'+DAYS[day]+' '+weekdayDateNum(day)+'</span>'+
       (day===today?'<span style="font-size:10px;background:var(--accent);color:white;border-radius:6px;padding:2px 8px;font-weight:700;letter-spacing:.02em;">Hoy</span>':'')+
+      '<button onclick="openHoyMenu(event)" aria-label="Más opciones" title="Más opciones" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px 2px;line-height:0;display:flex;align-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/></svg></button>'+
     '</div>'+
     '<button onclick="S.day=(S.day===6?0:S.day+1);var c=document.getElementById(\'content\');if(c)c.scrollTop=0;render();" '+
       'style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;padding:0 8px;line-height:1;">›</button>'+
@@ -3523,6 +3550,47 @@ function refreshHoyTasks(){
   if(sec) sec.innerHTML = renderHoyTasksSection(); else render();
 }
 function toggleReorder(){ S._reorder = !S._reorder; refreshHoyTasks(); }
+function startReorder(){
+  var all = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===S.day;});
+  if(all.length<2){ toast('Necesitas al menos 2 tareas este día para reordenar'); return; }
+  S._reorder = true;
+  if(S.tab!=='hoy' && S.tab!=='dia'){ render(); } else refreshHoyTasks();
+}
+function openHoyMenu(event){
+  var prev = document.getElementById('task-menu-popup'); if(prev) prev.remove();
+  var menu = document.createElement('div');
+  menu.id = 'task-menu-popup';
+  menu.style.cssText = 'position:fixed;right:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:800;min-width:240px;overflow:hidden;';
+  var rect = (event.currentTarget||event.target).getBoundingClientRect();
+  menu.style.top = Math.min(rect.bottom+4, window.innerHeight-300)+'px';
+  menu._t = Date.now();
+  var wkOn = S.showWeeklyMessage!==false;
+  var I = function(d){return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+d+'</svg>';};
+  var items = [
+    {icon:I('<path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/>'), label:'Reordenar tareas', action:'startReorder()'},
+    {icon:I('<rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17M12 14v3M10.5 15.5h3"/>'), label:'Agregar evento', action:'openNewEvent()'},
+    {divider:true},
+    {icon:I('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'), label:(wkOn?'Ocultar':'Mostrar')+' recordatorio de la semana', action:'toggleShowWeeklyMessage()'},
+    {icon:I('<path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>'), label:'Despliegue de categorías…', action:'goToCategoryConfig()'}
+  ];
+  menu.innerHTML = items.map(function(it){
+    if(it.divider) return '<div style="height:1px;background:var(--line);margin:3px 0;"></div>';
+    return '<button onclick="closeTaskMenu();'+it.action+'" style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);">'+it.icon+'</span><span>'+it.label+'</span></button>';
+  }).join('');
+  document.body.appendChild(menu);
+  setTimeout(function(){
+    document.addEventListener('click', function handler(e){
+      if(Date.now()-menu._t<450) return;
+      if(!menu.contains(e.target)){ menu.remove(); document.removeEventListener('click', handler); }
+    });
+  }, 50);
+}
+// Lleva a Yo → Personalización → Categorías (despliegue de categorías).
+function goToCategoryConfig(){
+  S.tab = 'yo'; S.yoScreen = null;
+  setTab('yo');
+  setTimeout(function(){ openYoScreen('categorias'); }, 30);
+}
 function _reorderArrows(upCall, downCall, canUp, canDown){
   function b(call, ok, ch){
     return '<button '+(ok?'onclick="'+call+'"':'disabled')+' style="width:30px;height:30px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);color:'+(ok?'var(--ink)':'var(--muted-soft)')+';font-size:12px;cursor:'+(ok?'pointer':'default')+';opacity:'+(ok?1:.45)+';padding:0;flex-shrink:0;">'+ch+'</button>';
@@ -4869,8 +4937,10 @@ function faqItems(){
       ['¿Qué significa "Cuándo"?', T.when],
       ['¿Cómo se repite una tarea con fecha puntual?', T.repeat],
       ['¿Para qué sirve la estrella (tarea crucial)?', T.crucial],
-      ['¿Cómo duplico, muevo o elimino una tarea?', 'Toca el ⋯ de la tarea: ahí puedes duplicarla (justo debajo, o a otro día), llevarla a otro día, añadirle un recordatorio o eliminarla.'],
-      ['¿Cómo cambio el orden de mis tareas y categorías?', 'En Hoy, toca "⇅ Reordenar" (arriba de la lista) y usa las flechas ▲▼: las categorías se ordenan entre sí y las tareas dentro de su categoría. Toca "✓ Listo" al terminar.'],
+      ['¿Cómo duplico, muevo o elimino una tarea?', 'Toca el ⋯ de la tarea (o mantenla presionada): ahí puedes duplicarla (justo debajo, o a otro día), llevarla a otro día, añadirle un recordatorio, reordenar, seleccionar varias o eliminarla.'],
+      ['¿Qué hace "Ignorar esta semana"?', 'En una tarea diaria, desde su ⋯: la deja en pausa solo durante la semana en curso (se ve atenuada, no se puede marcar y no cuenta en el calendario ni en la racha). Se reactiva sola la semana siguiente, o antes con "Reactivar esta semana".'],
+      ['¿Qué hay en los tres puntitos ⋮ de Hoy?', 'Junto al título del día: Reordenar tareas, Agregar evento, mostrar u ocultar el recordatorio de la semana, y un atajo a Yo → Personalización → Categorías para elegir cómo se pliegan las categorías.'],
+      ['¿Cómo cambio el orden de mis tareas y categorías?', 'En Hoy, toca los tres puntitos ⋮ junto al título del día y elige "Reordenar tareas" (o mantén presionada una tarea y elige "Reordenar"), y usa las flechas ▲▼: las categorías se ordenan entre sí y las tareas dentro de su categoría. Toca "✓ Listo" al terminar.'],
       ['¿Para qué sirven los botones Todas / Pendientes / categorías?', 'Filtran la lista de Hoy. Si tocas de nuevo el que ya está activo, pliega o despliega todas sus secciones.']
     ]],
     ['Checklist y temporizador', [
@@ -4908,7 +4978,12 @@ function faqItems(){
       ['¿Qué son los registros?', 'Libretas con entradas fechadas, dentro de Proyectos y registros: de Finanzas (ingresos y gastos, por tarea o sueltos como sueldo) o de Marcas (kilos, kilómetros, tiempos, bloques...). Las estadísticas y récords aparecen dentro de cada registro y en Yo → Estadísticas.'],
       ['¿Cuántos registros puedo tener?', T.reglimit],
       ['¿Cómo ligo una tarea a un registro?', T.regtask],
-      ['¿Cómo funcionan las métricas y los récords?', T.regmet]
+      ['¿Cómo funcionan las métricas y los récords?', T.regmet],
+      ['¿Qué es un monto "esperado"?', 'En Finanzas, al anotar un movimiento elige "⏳ Esperado" si aún no ocurre (ej. un pago que llegará después). Queda en Pendientes; cuando ocurra toca "Recibido" o "Pagado" y escribe el monto real. Las estadísticas comparan esperado vs. real y proyectan tu balance.'],
+      ['¿Cómo funcionan las metas de un registro?', 'En ⚙ del registro puedes definir metas semanales, mensuales o anuales (ahorro, ingresos, límite de gastos, sesiones o una métrica). Se ven como barras de progreso, y si aún no tienes una meta de Plan para ese período, la app te pregunta si quieres crearla allí; se marcará sola al lograrla.']
+    ]],
+    ['Proyectos', [
+      ['¿Cómo uso las metas de un proyecto?', 'En la pestaña Metas del proyecto defines objetivos medibles (ej. 20 capítulos) con unidad y fecha límite opcional. Registras tu avance cuando quieras y ves el estado (en ritmo, atrasada, lograda), gráficos y cuánto necesitas por día.']
     ]],
     ['Avisos', [
       ['¿Cómo funcionan los recordatorios de tareas?', T.notifdef],
@@ -5108,9 +5183,9 @@ function regSummaryLine(r){
   var es = regEntries(r);
   if(!es.length) return 'Sin registros todavía';
   if(r.kind==='finance'){
-    var mk = todayStr().slice(0,7), inc=0, out=0;
-    es.forEach(function(e){ if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
-    return 'Este mes: '+fmtMoney(inc-out, r.currency);
+    var mk = todayStr().slice(0,7), inc=0, out=0, pend=0;
+    es.forEach(function(e){ if(e.status==='expected'){ pend++; return; } if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
+    return 'Este mes: '+fmtMoney(inc-out, r.currency)+(pend?' · ⏳ '+pend+' pendiente'+(pend===1?'':'s'):'');
   }
   var last = es.slice().sort(function(a,b){return (b.date+(b.ts||0)).toString().localeCompare((a.date+(a.ts||0)).toString());})[0];
   var parts = (r.metrics||[]).filter(function(m){return last.values && last.values[m.id]!=null;}).map(function(m){return fmtNum(last.values[m.id])+' '+m.unit;});
@@ -5205,6 +5280,7 @@ function regEditorBodyHTML(){
     });
     html += '</div><button type="button" onclick="reAddMetric()" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:16px;">+ Agregar métrica</button>';
   }
+  html += mSecLabel('Metas')+'<div id="re-goals">'+reGoalsHTML()+'</div><div style="height:14px;"></div>';
   html += mSecLabel('Color')+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'+
     CATEGORY_COLORS.map(function(c){
       return '<button type="button" onclick="reSetColor(\''+c+'\')" style="width:28px;height:28px;border-radius:50%;border:'+(r.color===c?'3px solid var(--ink)':'2px solid transparent')+';background:'+c+';cursor:pointer;padding:0;"></button>';
@@ -5215,10 +5291,43 @@ function regEditorBodyHTML(){
     '</div>';
   return html;
 }
+function reGoalsHTML(){
+  var r = RE.reg, isFin = r.kind==='finance';
+  if(!RE.gd) RE.gd = {period:'mes', what:isFin?'net':'__count', agg:'sum'};
+  var gd = RE.gd;
+  if(isFin && ['in','out','net'].indexOf(gd.what)===-1) gd.what='net';
+  if(!isFin && gd.what!=='__count' && !(r.metrics||[]).some(function(m){return m.id===gd.what;})) gd.what='__count';
+  var html = '';
+  (r.goals||[]).forEach(function(g){
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:10px;margin-bottom:6px;font-size:12.5px;color:var(--ink);"><span>🎯</span><span style="flex:1;min-width:0;">'+esc(regGoalTitle(r,g))+' · <b>'+regGoalFmt(r,g,g.target)+'</b></span><button type="button" onclick="reRemoveGoal(\''+g.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:18px;cursor:pointer;line-height:1;">×</button></div>';
+  });
+  var whatOpts = isFin ? [['net','Ahorro neto'],['in','Ingresos'],['out','Límite de gastos']]
+    : [['__count','Cantidad de sesiones']].concat((r.metrics||[]).filter(function(m){return (m.name||'').trim();}).map(function(m){return [m.id,m.name];}));
+  html += '<div style="border:1.5px dashed var(--line);border-radius:10px;padding:10px;">'+
+    mSegHTML('re-gp-seg',[['semana','Semanal'],['mes','Mensual'],['año','Anual']], gd.period,'reGoalPeriod')+
+    '<div style="display:flex;gap:6px;margin-top:8px;">'+
+      '<select class="finp" onchange="RE.gd.what=this.value;" style="flex:1;margin:0;font-size:13px;">'+whatOpts.map(function(o){return '<option value="'+o[0]+'"'+(gd.what===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>'+
+      (!isFin?'<select class="finp" onchange="RE.gd.agg=this.value;" style="width:118px;margin:0;font-size:13px;"><option value="sum"'+(gd.agg==='sum'?' selected':'')+'>Acumulado</option><option value="max"'+(gd.agg==='max'?' selected':'')+'>Mejor marca</option></select>':'')+
+    '</div>'+
+    '<div style="display:flex;gap:6px;margin-top:8px;"><input id="re-g-target" class="finp" type="text" inputmode="decimal" placeholder="Objetivo (número)" style="flex:1;margin:0;"/><button type="button" onclick="reAddGoal()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Meta</button></div>'+
+  '</div>';
+  return html;
+}
+function reGoalPeriod(k){ RE.gd.period = k; mRefreshSeg('re-gp-seg',k); }
+function reAddGoal(){
+  var el = document.getElementById('re-g-target');
+  var t = parseNumInput(el?el.value:'');
+  if(!(t>0)){ toast('Escribe un objetivo mayor que 0'); return; }
+  var gd = RE.gd;
+  RE.reg.goals = (RE.reg.goals||[]).concat([{id:uid(), period:gd.period, what:gd.what, agg:RE.reg.kind==='finance'?'sum':(gd.what==='__count'?'sum':gd.agg), target:t, _new:true}]);
+  reRerender();
+}
+function reRemoveGoal(id){ RE.reg.goals = (RE.reg.goals||[]).filter(function(g){return g.id!==id;}); reRerender(); }
 function reRerender(){ var s=document.getElementById('re-sheet'); if(s) s.innerHTML = regEditorBodyHTML(); }
 function reSetKind(k){
   RE.reg.kind = k;
   if(k==='finance'){ RE.reg.metrics = []; }
+  RE.reg.goals = []; RE.gd = null;
   reRerender();
 }
 function reApplyTemplate(key){
@@ -5249,6 +5358,8 @@ function saveRegEditor(){
     r.metrics = (r.metrics||[]).filter(function(m){return (m.name||'').trim();}).map(function(m){return {id:m.id,name:m.name.trim(),unit:(m.unit||'').trim(),better:m.better||'high'};});
     if(!r.metrics.length){ toast('Agrega al menos una métrica'); return; }
   }
+  var _newG = (r.goals||[]).filter(function(g){return g._new;}).map(function(g){return g.id;});
+  (r.goals||[]).forEach(function(g){ delete g._new; });
   r.updatedAt = new Date().toISOString();
   if(!S.registries) S.registries = [];
   if(RE.isNew) S.registries.push(r);
@@ -5257,6 +5368,7 @@ function saveRegEditor(){
   removeOverlay('reg-editor');
   refreshRegViews();
   toast('✓ Registro guardado');
+  if(_newG.length) setTimeout(function(){ offerPlanGoals(r.id, _newG); }, 450);
 }
 function confirmDeleteRegistry(id){
   var r = regById(id); if(!r) return;
@@ -5286,18 +5398,30 @@ function regLastEntry(reg, taskId){
   if(taskId){ var f = es.find(function(e){return e.taskId===taskId;}); if(f) return f; }
   return es[0] || null;
 }
-function openRegEntryForTask(taskId, fromCompletion){
+function openRegEntryForTask(taskId, fromCompletion, extra){
   var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.registryId) return;
   var reg = regById(t.registryId); if(!reg) return;
-  openRegEntry(reg.id, {taskId:taskId, fromTask:!!fromCompletion});
+  extra = extra || {};
+  openRegEntry(reg.id, {taskId:taskId, fromTask:!!fromCompletion, date:taskEntryDate(t), itemId:extra.itemId||null, label:extra.label||null});
+}
+function regLastByLabel(reg, label){
+  var es = regEntries(reg).filter(function(e){return (e.label||'')===label && e.status!=='expected';}).sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+  return es[0] || null;
 }
 function openRegEntry(regId, opts){
   opts = opts || {};
   var reg = regById(regId); if(!reg) return;
   var existing = opts.entryId ? regEntries(reg).find(function(e){return e.id===opts.entryId;}) : null;
-  var last = existing || regLastEntry(reg, opts.taskId||null);
-  EN = {regId:regId, entryId:existing?existing.id:null, taskId:existing?(existing.taskId||null):(opts.taskId||null), fromTask:!!opts.fromTask,
-        dir: existing?existing.dir:(last&&last.dir?last.dir:'out'), existing:existing, last:last};
+  var last = existing || (opts.label ? regLastByLabel(reg, opts.label) : null) || regLastEntry(reg, opts.taskId||null);
+  var confirming = !!(opts.confirm && existing && existing.status==='expected');
+  EN = {regId:regId, entryId:existing?existing.id:null, taskId:existing?(existing.taskId||null):(opts.taskId||null),
+        itemId:existing?(existing.itemId||null):(opts.itemId||null), fromTask:!!opts.fromTask,
+        dir: existing?existing.dir:(last&&last.dir?last.dir:'out'),
+        status: confirming ? 'done' : (existing ? (existing.status||'done') : 'done'),
+        confirming: confirming,
+        // Fecha propuesta: la del día al que pertenece lo que se registra (editable).
+        date: existing ? (confirming ? todayStr() : existing.date) : (opts.date || todayStr()),
+        presetLabel: opts.label || null, existing:existing, last:last};
   removeOverlay('reg-entry');
   var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-entry';
   overlay.style.zIndex = 620;
@@ -5305,20 +5429,28 @@ function openRegEntry(regId, opts){
   overlay.innerHTML = '<div class="sheet" id="en-sheet">'+regEntryBodyHTML()+'</div>';
   document.body.appendChild(overlay);
 }
+function enAmtLabel(){
+  if(EN.confirming) return EN.dir==='in' ? 'Monto recibido (real)' : 'Monto pagado (real)';
+  return EN.status==='expected' ? 'Monto esperado' : 'Monto';
+}
 function regEntryBodyHTML(){
   var reg = regById(EN.regId), isFin = reg.kind==='finance', ex = EN.existing, last = EN.last;
   var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null;
   var labels = {}; regEntries(reg).forEach(function(e){ if(e.label) labels[e.label]=1; });
-  var labelVal = ex ? (ex.label||'') : (last && last.label ? last.label : '');
+  var labelVal = ex ? (ex.label||'') : (EN.presetLabel || (last && last.label ? last.label : ''));
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
       '<span class="serif" style="font-weight:700;font-size:18px;">'+regIcon(reg)+' '+esc(reg.name)+'</span>'+
       '<button onclick="removeOverlay(\'reg-entry\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
-    (task?'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Tarea: '+esc(task.text)+'</div>':'<div style="height:10px;"></div>');
+    (task?'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Tarea: '+esc(task.text)+(EN.presetLabel?' · ítem: '+esc(EN.presetLabel):'')+'</div>':'<div style="height:10px;"></div>');
   if(isFin){
+    var cur = reg.currency||'$';
     html += mSegHTML('en-dir-seg',[['out','Gasto'],['in','Ingreso']], EN.dir, 'enSetDir')+
-      '<div style="height:14px;"></div>'+
-      mSecLabel('Monto')+
+      '<div style="height:12px;"></div>'+
+      (EN.confirming?'':mSegHTML('en-st-seg',[['done','Ya ocurrió'],['expected','⏳ Esperado']], EN.status, 'enSetStatus')+'<div style="height:14px;"></div>')+
+      '<div id="en-amt-lbl">'+mSecLabel(enAmtLabel())+'</div>'+
+      (EN.confirming?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperabas <b>'+fmtMoney(ex.amount,cur)+'</b>. Escribe lo que realmente '+(EN.dir==='in'?'recibiste':'pagaste')+'.</div>':'')+
+      (!EN.confirming && ex && ex.status!=='expected' && ex.expectedAmount!=null?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperado: <b>'+fmtMoney(ex.expectedAmount,cur)+'</b> · diferencia: <b>'+fmtMoney(ex.amount-ex.expectedAmount,cur)+'</b></div>':'')+
       '<input id="en-amount" class="finp" type="text" inputmode="decimal" placeholder="'+(last&&last.amount?('Último: '+fmtNum(last.amount)):'0')+'" value="'+(ex?fmtNum(ex.amount).replace(/\./g,''):'')+'" style="font-size:22px;font-weight:700;margin-bottom:14px;"/>'+
       mSecLabel('Concepto (opcional)')+
       '<input id="en-label" class="finp" type="text" list="en-labels" placeholder="Ej: Supermercado, Trabajo puntual" value="'+esc(labelVal)+'" style="margin-bottom:14px;"/>';
@@ -5326,11 +5458,11 @@ function regEntryBodyHTML(){
     html += mSecLabel(reg.labelHint||'Concepto (opcional)')+
       '<input id="en-label" class="finp" type="text" list="en-labels" placeholder="'+esc(reg.labelHint||'')+'" value="'+esc(labelVal)+'" style="margin-bottom:14px;"/>';
     (reg.metrics||[]).forEach(function(m){
-      var cur = ex && ex.values && ex.values[m.id]!=null ? fmtNum(ex.values[m.id]).replace(/\./g,'') : '';
+      var cur2 = ex && ex.values && ex.values[m.id]!=null ? fmtNum(ex.values[m.id]).replace(/\./g,'') : '';
       var ph = last && last.values && last.values[m.id]!=null ? ('Último: '+fmtNum(last.values[m.id])) : '0';
       html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
         '<span style="font-size:13px;font-weight:600;color:var(--ink);flex:1;min-width:0;">'+esc(m.name)+'</span>'+
-        '<input id="en-m-'+m.id+'" class="finp" type="text" inputmode="decimal" placeholder="'+ph+'" value="'+cur+'" style="width:110px;margin:0;text-align:right;font-size:16px;font-weight:700;"/>'+
+        '<input id="en-m-'+m.id+'" class="finp" type="text" inputmode="decimal" placeholder="'+ph+'" value="'+cur2+'" style="width:110px;margin:0;text-align:right;font-size:16px;font-weight:700;"/>'+
         '<span style="font-size:12px;color:var(--muted);width:46px;">'+esc(m.unit||'')+'</span>'+
       '</div>';
     });
@@ -5338,41 +5470,57 @@ function regEntryBodyHTML(){
       '<input id="en-note" class="finp" type="text" value="'+esc(ex?(ex.note||''):'')+'" style="margin-bottom:14px;"/>';
   }
   html += '<datalist id="en-labels">'+Object.keys(labels).map(function(l){return '<option value="'+esc(l)+'">';}).join('')+'</datalist>'+
-    mSecLabel('Fecha')+
-    '<input id="en-date" class="finp" type="text" readonly onclick="openCustomDatePicker(\'en-date\',false)" style="cursor:pointer;margin-bottom:18px;" value="'+(ex?ex.date:todayStr())+'"/>'+
+    '<div id="en-date-lbl">'+mSecLabel(isFin && EN.status==='expected' ? 'Fecha estimada' : 'Fecha')+'</div>'+
+    '<input id="en-date" class="finp" type="text" readonly onclick="openCustomDatePicker(\'en-date\',false)" style="cursor:pointer;margin-bottom:18px;" value="'+EN.date+'"/>'+
     '<div style="display:flex;gap:8px;">'+
       (ex?'<button onclick="confirmDeleteRegEntry()" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>':
          (EN.fromTask?'<button onclick="removeOverlay(\'reg-entry\')" style="background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Omitir</button>':''))+
-      '<button onclick="saveRegEntry()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button>'+
+      '<button onclick="saveRegEntry()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">'+(EN.confirming?'Confirmar':'Guardar')+'</button>'+
     '</div>';
   return html;
 }
-function enSetDir(k){ EN.dir = k; mRefreshSeg('en-dir-seg', k); }
+function enSetStatus(k){
+  EN.status = k; mRefreshSeg('en-st-seg', k);
+  var a = document.getElementById('en-amt-lbl'); if(a) a.innerHTML = mSecLabel(enAmtLabel());
+  var d = document.getElementById('en-date-lbl'); if(d) d.innerHTML = mSecLabel(k==='expected'?'Fecha estimada':'Fecha');
+}
+function enSetDir(k){ EN.dir = k; mRefreshSeg('en-dir-seg', k); var a=document.getElementById('en-amt-lbl'); if(a) a.innerHTML=mSecLabel(enAmtLabel()); }
 function saveRegEntry(){
   var reg = regById(EN.regId); if(!reg) return;
   var g = function(id){ var e=document.getElementById(id); return e?e.value:''; };
   var date = g('en-date') || todayStr();
   var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null;
-  var entry = {id:EN.entryId||uid(), date:date, label:g('en-label').trim(), taskId:EN.taskId||null, taskName:task?task.text:(EN.existing?(EN.existing.taskName||null):null), ts:Date.now()};
+  var entry = {id:EN.entryId||uid(), date:date, label:g('en-label').trim(), taskId:EN.taskId||null, itemId:EN.itemId||null, taskName:task?task.text:(EN.existing?(EN.existing.taskName||null):null), ts:Date.now()};
+  var toastMsg = '✓ Registrado';
   if(reg.kind==='finance'){
     var amt = parseNumInput(g('en-amount'));
     if(!(amt>0)){ toast('Escribe un monto'); return; }
-    entry.dir = EN.dir; entry.amount = amt;
+    entry.dir = EN.dir; entry.amount = amt; entry.status = EN.status;
+    var ex = EN.existing;
+    if(EN.status==='expected'){ entry.expectedAmount = amt; toastMsg = '⏳ Guardado como esperado'; }
+    else if(ex){
+      if(EN.confirming){
+        entry.expectedAmount = ex.expectedAmount!=null ? ex.expectedAmount : ex.amount;
+        entry.expectedDate = ex.expectedDate || ex.date;
+        var diff = amt - entry.expectedAmount;
+        toastMsg = diff===0 ? '✓ Confirmado' : ('✓ Confirmado ('+(diff>0?'+':'−')+fmtMoney(Math.abs(diff),reg.currency).replace('−','')+' vs esperado)');
+      } else if(ex.expectedAmount!=null){ entry.expectedAmount = ex.expectedAmount; entry.expectedDate = ex.expectedDate||null; }
+    }
   } else {
     var vals = {}, any = false;
     (reg.metrics||[]).forEach(function(m){ var v=parseNumInput(g('en-m-'+m.id)); if(!isNaN(v)){ vals[m.id]=v; any=true; } });
     if(!any){ toast('Escribe al menos un valor'); return; }
     entry.values = vals; entry.note = g('en-note').trim();
   }
-  var prev = regEntries(reg);
   var wasRecord = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
   reg.entries = (reg.entries||[]).filter(function(e){return e.id!==entry.id;}).concat([entry]);
   reg.updatedAt = new Date().toISOString();
+  syncRegGoalsToPlan(reg);
   saveState();
   removeOverlay('reg-entry');
   refreshRegViews();
   if(wasRecord.length){ setTimeout(function(){ playSound('achievement'); showRewardToast('🏆 ¡Nuevo récord!', wasRecord.join(' · ')); }, 350); }
-  else toast('✓ Registrado');
+  else toast(toastMsg);
 }
 // Devuelve los nombres de métricas cuyo récord supera esta entrada (vs. lo previo del mismo concepto).
 function regRecordsBroken(reg, entry){
@@ -5404,16 +5552,31 @@ function deleteRegEntry(){
 }
 
 // ── Gráficos simples (SVG) ──────────────────────────────────────────────────
-function svgLine(points, color){
+function svgLine(points, color, target){
   if(!points.length) return '';
   var W=300, H=84, pad=10, vs=points.map(function(p){return p.v;});
+  if(target!=null) vs = vs.concat([target]);
   var mn=Math.min.apply(null,vs), mx=Math.max.apply(null,vs); if(mn===mx){ mn-=1; mx+=1; }
   var n=points.length;
   var xy = points.map(function(p,i){ return [n===1?W/2:pad+(W-2*pad)*i/(n-1), H-pad-(H-2*pad)*(p.v-mn)/(mx-mn)]; });
   var path = xy.map(function(q,i){return (i?'L':'M')+q[0].toFixed(1)+','+q[1].toFixed(1);}).join('');
   var dots = xy.map(function(q,i){ var last=i===n-1; return '<circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r="'+(last?4:2.6)+'" fill="'+(last?color:'var(--paper)')+'" stroke="'+color+'" stroke-width="1.6"/>'; }).join('');
-  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" preserveAspectRatio="none" style="display:block;overflow:visible;">'+
+  var tl = '';
+  if(target!=null){ var ty = H-pad-(H-2*pad)*(target-mn)/(mx-mn); tl = '<line x1="0" x2="'+W+'" y1="'+ty.toFixed(1)+'" y2="'+ty.toFixed(1)+'" stroke="#c97842" stroke-width="1.3" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/><text x="'+(W-2)+'" y="'+(ty-3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#c97842" font-family="Inter,sans-serif">🎯 meta</text>'; }
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" preserveAspectRatio="none" style="display:block;overflow:visible;">'+tl+
     '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'+dots+'</svg>';
+}
+function svgBars1(groups, color, fixedMax){
+  var W=300, H=96, base=H-16, pad=14;
+  var mx = fixedMax || Math.max.apply(null, groups.map(function(g){return g.v;}).concat([1]));
+  var gw = (W-8)/groups.length, bw = Math.min(26, gw-6);
+  var out = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" style="display:block;">';
+  groups.forEach(function(g,i){
+    var cx = 4+gw*i+gw/2, h = (base-pad)*g.v/mx;
+    out += '<rect x="'+(cx-bw/2)+'" y="'+(base-h).toFixed(1)+'" width="'+bw+'" height="'+Math.max(h,g.v>0?1.5:0).toFixed(1)+'" rx="3" fill="'+color+'"/>'+
+      '<text x="'+cx+'" y="'+(H-3)+'" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="Inter,sans-serif">'+g.label+'</text>';
+  });
+  return out+'</svg>';
 }
 function svgBars2(groups){
   var W=300, H=110, pad=18, base=H-18;
@@ -5431,39 +5594,261 @@ function svgBars2(groups){
 }
 
 // ── Estadísticas por registro ───────────────────────────────────────────────
+
+var GOAL_PER = {semana:'semanal', mes:'mensual', 'año':'anual'};
+function goalRange(period){
+  var now = new Date(), y=now.getFullYear(), m=now.getMonth();
+  if(period==='semana'){
+    var mon = new Date(now.getFullYear(), now.getMonth(), now.getDate()-todayIdx());
+    var sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+6);
+    return {from:localDateStr(mon), to:localDateStr(sun), end:sun};
+  }
+  if(period==='año') return {from:localDateStr(new Date(y,0,1)), to:localDateStr(new Date(y,11,31)), end:new Date(y,11,31)};
+  return {from:localDateStr(new Date(y,m,1)), to:localDateStr(new Date(y,m+1,0)), end:new Date(y,m+1,0)};
+}
+function regGoalValue(reg, g){
+  var R = goalRange(g.period);
+  var es = regEntries(reg).filter(function(e){return e.status!=='expected' && e.date>=R.from && e.date<=R.to;});
+  if(reg.kind==='finance'){
+    var inc=0,out=0; es.forEach(function(e){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; });
+    return g.what==='in'?inc:(g.what==='out'?out:inc-out);
+  }
+  if(g.what==='__count') return es.length;
+  var vs = es.filter(function(e){return e.values&&e.values[g.what]!=null;}).map(function(e){return e.values[g.what];});
+  if(!vs.length) return 0;
+  return g.agg==='max' ? Math.max.apply(null,vs) : vs.reduce(function(a,b){return a+b;},0);
+}
+function regGoalTitle(reg, g){
+  var per = GOAL_PER[g.period]||g.period;
+  if(reg.kind==='finance') return (g.what==='in'?'Ingresos':(g.what==='out'?'Límite de gastos':'Ahorro neto'))+' '+per;
+  if(g.what==='__count') return 'Sesiones '+per+'es';
+  var m = (reg.metrics||[]).find(function(x){return x.id===g.what;});
+  return (g.agg==='max'?'Mejor ':'Total de ')+(m?m.name:'métrica')+' '+per;
+}
+function regGoalUnit(reg, g){
+  if(reg.kind==='finance') return reg.currency||'$';
+  if(g.what==='__count') return 'ses.';
+  var m = (reg.metrics||[]).find(function(x){return x.id===g.what;}); return m?(m.unit||''):'';
+}
+function regGoalFmt(reg, g, v){
+  return reg.kind==='finance' ? fmtMoney(v, reg.currency) : (fmtNum(v)+' '+regGoalUnit(reg,g));
+}
+// Ítem 'maxTarget' para dibujar la meta en el gráfico de una métrica
+function regMetricTarget(reg, metricId){
+  var g = (reg.goals||[]).find(function(x){return x.what===metricId && x.agg==='max';});
+  return g ? g.target : null;
+}
+function regGoalsHTML(reg){
+  var goals = reg.goals||[];
+  var planTasks = S.tasks.filter(function(t){return t.registryId===reg.id && t.period!=='dia' && !(goals.some(function(g){return g.planTaskId===t.id;}));});
+  var head = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 8px;display:flex;justify-content:space-between;align-items:center;"><span>🎯 Metas</span><span onclick="openRegEditor(\''+reg.id+'\')" style="color:var(--accent);text-transform:none;letter-spacing:0;cursor:pointer;font-size:11.5px;">+ Agregar</span></div>';
+  if(!goals.length && !planTasks.length) return head+'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Aún no hay metas. Agrégalas desde ⚙ (semanales, mensuales o anuales).</div>';
+  var html = head;
+  goals.forEach(function(g){
+    var v = regGoalValue(reg,g), pct = g.target>0 ? Math.min(100, Math.round(v/g.target*100)) : 0;
+    var limit = reg.kind==='finance' && g.what==='out';
+    var over = limit && v>g.target;
+    var col = over ? '#c0503a' : (pct>=100 ? '#4a8f6b' : reg.color);
+    var R = goalRange(g.period), left = Math.max(0, Math.ceil((R.end - new Date())/86400000));
+    html += '<div style="background:var(--bg);border-radius:12px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;"><span style="font-size:12.5px;font-weight:700;color:var(--ink);">'+esc(regGoalTitle(reg,g))+(g.planTaskId?' <span title="También está en Plan" style="font-size:10px;">📌</span>':'')+'</span><span style="font-size:11.5px;font-weight:800;color:'+col+';">'+pct+'%</span></div>'+
+      '<div style="height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-bottom:5px;"><div style="width:'+pct+'%;height:100%;background:'+col+';"></div></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);"><span>'+regGoalFmt(reg,g,v)+' de '+regGoalFmt(reg,g,g.target)+'</span><span>'+(over?'⚠ te pasaste por '+regGoalFmt(reg,g,v-g.target):(pct>=100?'¡Meta lograda!':(limit?'quedan ':'faltan ')+regGoalFmt(reg,g,Math.max(0,g.target-v))+' · '+left+' d'))+'</span></div>'+
+    '</div>';
+  });
+  planTasks.forEach(function(t){
+    var r = Math.round(tRatio(t)*100), d = isDone(t);
+    html += '<div style="background:var(--bg);border-radius:12px;padding:10px 12px;margin-bottom:8px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;"><span style="font-size:12.5px;font-weight:700;color:var(--ink);">'+esc(t.text)+' <span style="font-size:10px;font-weight:600;color:var(--muted);">· meta '+(GOAL_PER[t.period]||PL[t.period])+' de Plan</span></span><span style="font-size:11.5px;font-weight:800;color:'+(d?'#4a8f6b':reg.color)+';">'+(d?'✓':r+'%')+'</span></div>'+
+      '<div style="height:6px;background:var(--line);border-radius:3px;overflow:hidden;"><div style="width:'+(d?100:r)+'%;height:100%;background:'+(d?'#4a8f6b':reg.color)+';"></div></div></div>';
+  });
+  return html+'<div style="height:8px;"></div>';
+}
+// Mantiene las metas "conectadas" a Plan al día: la tarea de Plan queda hecha al lograr la meta.
+function syncRegGoalsToPlan(reg){
+  var changed = false;
+  (reg.goals||[]).forEach(function(g){
+    if(!g.planTaskId) return;
+    var t = S.tasks.find(function(x){return x.id===g.planTaskId;});
+    if(!t){ return; }
+    var v = regGoalValue(reg,g);
+    var ok = (reg.kind==='finance' && g.what==='out') ? false : v>=g.target;
+    if(ok && !t.done){ S.tasks = S.tasks.map(function(x){return x.id===t.id?Object.assign({},x,{done:true,prog:1}):x;}); changed = true; }
+  });
+  return changed;
+}
+// Al guardar metas nuevas: si no hay ya una meta de Plan asociada a ese período, preguntar.
+function offerPlanGoals(regId, ids){
+  var reg = regById(regId); if(!reg || !ids.length) return;
+  var gid = ids[0], rest = ids.slice(1);
+  var g = (reg.goals||[]).find(function(x){return x.id===gid;});
+  var next = function(){ if(rest.length) offerPlanGoals(regId, rest); };
+  if(!g){ next(); return; }
+  var existing = S.tasks.find(function(t){return t.registryId===regId && t.period===g.period;});
+  if(existing){ g.planTaskId = existing.id; saveState(); next(); return; }
+  var perName = (PL[g.period]||g.period);
+  window._ogNext = next;
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner">'+
+    '<div style="text-align:center;margin-bottom:12px;"><div style="font-size:36px;margin-bottom:6px;">🎯</div>'+
+    '<div class="serif" style="font-weight:800;font-size:17px;color:var(--ink);">¿Agregarla también a Plan?</div></div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">Esta meta de <b>'+esc(regGoalTitle(reg,g))+'</b> ('+regGoalFmt(reg,g,g.target)+') no tiene ninguna meta asociada en Plan. ¿Quieres crearla en Objetivos → <b>'+esc(perName)+'</b>? Se marcará sola al lograrla.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button onclick="this.closest(\'.conf-box\').remove();addRegGoalToPlan(\''+regId+'\',\''+gid+'\');window._ogNext&&window._ogNext();" style="flex:1;background:var(--accent);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Sí, agregar</button>'+
+      '<button onclick="this.closest(\'.conf-box\').remove();window._ogNext&&window._ogNext();" style="flex:1;background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">No, solo aquí</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function addRegGoalToPlan(regId, gid){
+  var reg = regById(regId); if(!reg) return;
+  var g = (reg.goals||[]).find(function(x){return x.id===gid;}); if(!g) return;
+  var limit = currentTaskLimits()[g.period]||999;
+  if(S.tasks.filter(function(t){return t.period===g.period;}).length >= limit){ toast('No hay espacio para más tareas en '+(PL[g.period]||g.period)); return; }
+  var t = {id:uid(), text:regGoalTitle(reg,g)+': '+regGoalFmt(reg,g,g.target), done:false, period:g.period, day:S.day, qty:1, prog:0, checklist:[], links:{}, crucial:false, linkMode:'unit', categoryId:null, hora:null, duracion:60, notif:null, registryId:regId, regGoalId:gid};
+  S.tasks.push(t); g.planTaskId = t.id; reg.updatedAt = new Date().toISOString();
+  saveState(); render(); toast('✓ Meta agregada a Plan → '+(PL[g.period]||g.period));
+}
+
+function setRegPeriod(regId, per){ if(!S._regPeriod) S._regPeriod={}; S._regPeriod[regId]=per; refreshRegViews(); }
+function regPeriodChips(reg, per){
+  return '<div style="display:flex;gap:6px;margin-bottom:12px;">'+[['mes','Mes'],['3m','3 meses'],['año','Año'],['todo','Todo']].map(function(p){
+    var on = per===p[0];
+    return '<button type="button" onclick="setRegPeriod(\''+reg.id+'\',\''+p[0]+'\')" style="flex:1;padding:6px 4px;border:1.5px solid '+(on?reg.color:'var(--line)')+';background:'+(on?reg.color+'22':'transparent')+';color:'+(on?reg.color:'var(--muted)')+';border-radius:12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+p[1]+'</button>';
+  }).join('')+'</div>';
+}
+function regPeriodRange(per){
+  var now=new Date(), y=now.getFullYear(), m=now.getMonth();
+  function k(d){return localDateStr(d);}
+  if(per==='3m') return {from:k(new Date(y,m-2,1)), to:k(new Date(y,m+1,0)), pf:k(new Date(y,m-5,1)), pt:k(new Date(y,m-2,0)), label:'3 meses'};
+  if(per==='año') return {from:k(new Date(y,0,1)), to:k(new Date(y,11,31)), pf:k(new Date(y-1,0,1)), pt:k(new Date(y-1,11,31)), label:'año'};
+  if(per==='todo') return {from:'0000-01-01', to:'9999-12-31', pf:null, pt:null, label:'todo'};
+  return {from:k(new Date(y,m,1)), to:k(new Date(y,m+1,0)), pf:k(new Date(y,m-1,1)), pt:k(new Date(y,m,0)), label:'mes'};
+}
 function financeStatsHTML(reg){
-  var es = regEntries(reg), cur = reg.currency||'$';
+  var cur = reg.currency||'$', all = regEntries(reg);
+  var act = all.filter(function(e){return e.status!=='expected';});
+  var pend = all.filter(function(e){return e.status==='expected';});
+  var per = (S._regPeriod && S._regPeriod[reg.id]) || 'mes';
+  var R = regPeriodRange(per);
   var now = new Date();
   function sum(list,dir){ return list.filter(function(e){return e.dir===dir;}).reduce(function(s,e){return s+e.amount;},0); }
-  var mk = todayStr().slice(0,7);
-  var mEs = es.filter(function(e){return e.date.slice(0,7)===mk;});
-  var inc = sum(mEs,'in'), out = sum(mEs,'out'), net = inc-out, totalNet = sum(es,'in')-sum(es,'out');
+  function between(list,a,b){ return list.filter(function(e){return e.date>=a && e.date<=b;}); }
+  var pe = between(act, R.from, R.to);
+  var pv = R.pf ? between(act, R.pf, R.pt) : null;
+  var inc = sum(pe,'in'), out = sum(pe,'out'), net = inc-out;
+  var totalNet = sum(act,'in')-sum(act,'out');
+  // días transcurridos del período (para promedio diario)
+  var firstDate = per==='todo' && pe.length ? pe.map(function(e){return e.date;}).sort()[0] : R.from;
+  var startD = new Date(firstDate+'T00:00:00'), endD = new Date(Math.min(now.getTime(), new Date(R.to==='9999-12-31'?localDateStr(now):R.to).getTime()+86399000));
+  var days = Math.max(1, Math.round((endD-startD)/86400000)+1);
+  function dlt(c,p,goodUp){
+    if(p==null || !p) return '';
+    var d = Math.round((c-p)/Math.abs(p)*100);
+    if(!d) return '<div style="font-size:9.5px;color:var(--muted);">= que antes</div>';
+    var good = goodUp ? d>0 : d<0;
+    return '<div style="font-size:9.5px;font-weight:700;color:'+(good?'#4a8f6b':'#c0503a')+';">'+(d>0?'▲':'▼')+' '+Math.abs(d)+'% vs anterior</div>';
+  }
+  function kpi(l,v,c,sub){ return '<div style="flex:1 1 30%;min-width:90px;background:var(--bg);border-radius:11px;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">'+l+'</div><div style="font-size:14px;font-weight:800;color:'+c+';">'+v+'</div>'+(sub||'')+'</div>'; }
+  var pInc = pv?sum(pv,'in'):null, pOut = pv?sum(pv,'out'):null;
+  var savings = inc>0 ? Math.round(net/inc*100) : null;
+  var html = regPeriodChips(reg, per)+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">'+
+      kpi('Ingresos', fmtMoney(inc,cur), '#4a8f6b', dlt(inc,pInc,true))+
+      kpi('Gastos', fmtMoney(out,cur), '#c0503a', dlt(out,pOut,false))+
+      kpi('Neto', fmtMoney(net,cur), net>=0?'var(--ink)':'#c0503a', pv?dlt(net,sum(pv,'in')-sum(pv,'out'),true):'')+
+      kpi('Tasa de ahorro', savings==null?'—':(savings+'%'), savings!=null&&savings<0?'#c0503a':'var(--ink)')+
+      kpi('Gasto diario', fmtMoney(out/days,cur), 'var(--ink)')+
+      kpi('Movimientos', String(pe.length), 'var(--ink)', pe.length?'<div style="font-size:9.5px;color:var(--muted);">prom. '+fmtMoney((inc+out)/pe.length,cur)+'</div>':'')+
+    '</div>';
+  // Pendientes (esperados)
+  if(pend.length){
+    var pIn = sum(pend,'in'), pOutP = sum(pend,'out');
+    html += '<div style="background:var(--accent-bg);border:1px solid var(--accent-soft);border-radius:12px;padding:10px 12px;margin-bottom:14px;">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">⏳ Pendiente ('+pend.length+')</div>'+
+      '<div style="display:flex;gap:6px;text-align:center;">'+
+        '<div style="flex:1;"><div style="font-size:10px;color:var(--muted);">Por cobrar</div><div style="font-size:13.5px;font-weight:800;color:#4a8f6b;">'+fmtMoney(pIn,cur)+'</div></div>'+
+        '<div style="flex:1;"><div style="font-size:10px;color:var(--muted);">Por pagar</div><div style="font-size:13.5px;font-weight:800;color:#c0503a;">'+fmtMoney(pOutP,cur)+'</div></div>'+
+        '<div style="flex:1;"><div style="font-size:10px;color:var(--muted);">Balance proyectado</div><div style="font-size:13.5px;font-weight:800;color:var(--ink);">'+fmtMoney(totalNet+pIn-pOutP,cur)+'</div></div>'+
+      '</div></div>';
+  }
+  // Esperado vs real
+  var cmp = pe.filter(function(e){return e.expectedAmount!=null;});
+  if(cmp.length){
+    function ev(dir){ var l=cmp.filter(function(e){return e.dir===dir;}); return {n:l.length, exp:l.reduce(function(s,e){return s+e.expectedAmount;},0), real:l.reduce(function(s,e){return s+e.amount;},0)}; }
+    var ei = ev('in'), eo = ev('out');
+    function line(lbl,o,goodUp){
+      if(!o.n) return '';
+      var d = o.real-o.exp, pc = o.exp? Math.round(d/o.exp*100):0, good = goodUp? d>=0 : d<=0;
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px;"><span style="color:var(--ink-soft);">'+lbl+' ('+o.n+')</span><span>esperado '+fmtMoney(o.exp,cur)+' → real <b>'+fmtMoney(o.real,cur)+'</b> <b style="color:'+(d===0?'var(--muted)':(good?'#4a8f6b':'#c0503a'))+';">'+(d>0?'+':'')+pc+'%</b></span></div>';
+    }
+    html += '<div style="background:var(--bg);border-radius:12px;padding:10px 12px;margin-bottom:14px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Esperado vs. real</div>'+line('Ingresos',ei,true)+line('Gastos',eo,false)+'</div>';
+  }
+  html += regGoalsHTML(reg);
+  // Últimos 6 meses
   var groups = [];
   for(var i=5;i>=0;i--){
     var d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    var ms = es.filter(function(e){return e.date.slice(0,7)===key;});
+    var ms = act.filter(function(e){return e.date.slice(0,7)===key;});
     groups.push({label:REG_MONTHS[d.getMonth()], a:sum(ms,'in'), b:sum(ms,'out')});
   }
-  var byLabel = {};
-  mEs.filter(function(e){return e.dir==='out';}).forEach(function(e){ var k=e.label||e.taskName||'Sin concepto'; byLabel[k]=(byLabel[k]||0)+e.amount; });
-  var top = Object.keys(byLabel).map(function(k){return [k,byLabel[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
-  function stat(l,v,c){ return '<div style="flex:1;text-align:center;"><div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;">'+l+'</div><div style="font-size:14px;font-weight:800;color:'+c+';">'+v+'</div></div>'; }
-  var html = '<div style="display:flex;gap:6px;margin-bottom:14px;">'+
-    stat('Ingresos', fmtMoney(inc,cur), '#4a8f6b')+stat('Gastos', fmtMoney(out,cur), '#c0503a')+stat('Neto del mes', fmtMoney(net,cur), net>=0?'var(--ink)':'#c0503a')+
-  '</div>'+
-  '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">Últimos 6 meses <span style="color:#4a8f6b;">■ ingresos</span> <span style="color:#c0503a;">■ gastos</span></div>'+
-  svgBars2(groups)+
-  '<div style="font-size:11.5px;color:var(--muted);margin:6px 0 12px;">Balance total: <b style="color:'+(totalNet>=0?'var(--ink)':'#c0503a')+';">'+fmtMoney(totalNet,cur)+'</b></div>';
-  if(top.length){
-    var tmax = top[0][1];
-    html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Gastos del mes por concepto</div>'+
+  html += '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">Últimos 6 meses <span style="color:#4a8f6b;">■ ingresos</span> <span style="color:#c0503a;">■ gastos</span></div>'+svgBars2(groups)+
+    '<div style="font-size:11.5px;color:var(--muted);margin:6px 0 14px;">Balance total: <b style="color:'+(totalNet>=0?'var(--ink)':'#c0503a')+';">'+fmtMoney(totalNet,cur)+'</b></div>';
+  // Evolución del balance
+  var sorted = act.slice().sort(function(a,b){return (a.date+(a.ts||0)).toString().localeCompare((b.date+(b.ts||0)).toString());});
+  if(sorted.length>=2){
+    var run=0, pts=sorted.map(function(e){ run += e.dir==='in'?e.amount:-e.amount; return {v:run}; }).slice(-30);
+    html += '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">Evolución del balance (últimos '+pts.length+' movimientos)</div>'+svgLine(pts, reg.color)+'<div style="height:14px;"></div>';
+  }
+  // Gasto por día de la semana
+  var outs = pe.filter(function(e){return e.dir==='out';});
+  if(outs.length>=2){
+    var wd=[0,0,0,0,0,0,0]; outs.forEach(function(e){ wd[(new Date(e.date+'T00:00:00').getDay()+6)%7]+=e.amount; });
+    var lbl=['L','M','M','J','V','S','D'], topI=wd.indexOf(Math.max.apply(null,wd));
+    html += '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">Gasto por día de la semana · más alto: <b>'+['lunes','martes','miércoles','jueves','viernes','sábado','domingo'][topI]+'</b></div>'+svgBars1(wd.map(function(v,i){return {label:lbl[i],v:v};}),'#c0503a')+'<div style="height:12px;"></div>';
+  }
+  // Por concepto
+  function topBy(list,dir,color,title){
+    var by={}; list.filter(function(e){return e.dir===dir;}).forEach(function(e){ var k=e.label||e.taskName||'Sin concepto'; by[k]=(by[k]||0)+e.amount; });
+    var top = Object.keys(by).map(function(k){return [k,by[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,6);
+    if(!top.length) return '';
+    var tot = top.reduce(function(s,t){return s+t[1];},0)||1, tmax = top[0][1];
+    return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:6px 0;">'+title+'</div>'+
       top.map(function(t){
-        return '<div style="margin-bottom:7px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink);margin-bottom:2px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;">'+esc(t[0])+'</span><b>'+fmtMoney(t[1],cur)+'</b></div>'+
-          '<div style="height:5px;background:var(--line-soft);border-radius:3px;overflow:hidden;"><div style="width:'+Math.round(t[1]/tmax*100)+'%;height:100%;background:#c0503a;"></div></div></div>';
+        return '<div style="margin-bottom:7px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink);margin-bottom:2px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;">'+esc(t[0])+'</span><span><b>'+fmtMoney(t[1],cur)+'</b> <span style="color:var(--muted);font-size:10.5px;">'+Math.round(t[1]/tot*100)+'%</span></span></div>'+
+          '<div style="height:5px;background:var(--line-soft);border-radius:3px;overflow:hidden;"><div style="width:'+Math.round(t[1]/tmax*100)+'%;height:100%;background:'+color+';"></div></div></div>';
       }).join('');
   }
+  html += topBy(pe,'out','#c0503a','Gastos por concepto')+topBy(pe,'in','#4a8f6b','Ingresos por concepto');
+  // Mayores movimientos
+  var bigOut = outs.slice().sort(function(a,b){return b.amount-a.amount;})[0];
+  var bigIn = pe.filter(function(e){return e.dir==='in';}).sort(function(a,b){return b.amount-a.amount;})[0];
+  if(bigOut||bigIn){
+    html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px;">Mayores movimientos</div>'+
+      (bigOut?'<div style="font-size:12px;color:var(--ink);margin-bottom:3px;">Gasto: <b style="color:#c0503a;">'+fmtMoney(bigOut.amount,cur)+'</b> · '+esc(bigOut.label||bigOut.taskName||'Sin concepto')+' · '+fmtShortDate(bigOut.date)+'</div>':'')+
+      (bigIn?'<div style="font-size:12px;color:var(--ink);">Ingreso: <b style="color:#4a8f6b;">'+fmtMoney(bigIn.amount,cur)+'</b> · '+esc(bigIn.label||bigIn.taskName||'Sin concepto')+' · '+fmtShortDate(bigIn.date)+'</div>':'');
+  }
   return html;
+}
+function regActivityHTML(reg, es){
+  if(!es.length) return '';
+  var dates = {}; es.forEach(function(e){ dates[e.date]=1; });
+  var now = new Date(); now.setHours(0,0,0,0);
+  // semanas (últimas 8)
+  var weeks=[]; for(var w=7; w>=0; w--){
+    var mon = new Date(now.getFullYear(), now.getMonth(), now.getDate()-todayIdx()-7*w), sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+6);
+    var a=localDateStr(mon), b=localDateStr(sun);
+    weeks.push({label:String(mon.getDate()), v:es.filter(function(e){return e.date>=a&&e.date<=b;}).length});
+  }
+  // mejor racha de días consecutivos y racha actual
+  var ds = Object.keys(dates).sort(), best=0, run=0, prev=null;
+  ds.forEach(function(d){ var cur=new Date(d+'T00:00:00'); if(prev && Math.round((cur-prev)/86400000)===1) run++; else run=1; if(run>best) best=run; prev=cur; });
+  var last = ds[ds.length-1], since = Math.round((now - new Date(last+'T00:00:00'))/86400000);
+  var mk = todayStr().slice(0,7), thisMonth = es.filter(function(e){return e.date.slice(0,7)===mk;}).length;
+  function k(l,v){ return '<div style="flex:1;background:var(--bg);border-radius:10px;padding:7px 4px;text-align:center;"><div style="font-size:9.5px;color:var(--muted);">'+l+'</div><div style="font-size:13px;font-weight:800;color:var(--ink);">'+v+'</div></div>'; }
+  return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 8px;">Constancia</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:8px;">'+k('Este mes',thisMonth+' reg.')+k('Mejor racha',best+' d')+k('Último hace',since===0?'hoy':since+' d')+k('Total',es.length)+'</div>'+
+    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:2px;">Registros por semana (últimas 8)</div>'+svgBars1(weeks, reg.color)+'<div style="height:14px;"></div>';
 }
 function setRegLabelFilter(regId, label){
   if(!S._regLabel) S._regLabel = {};
@@ -5486,6 +5871,7 @@ function metricsStatsHTML(reg){
         return '<button type="button" onclick="setRegLabelFilter(\''+reg.id+'\',\''+p[0].replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="flex-shrink:0;padding:5px 11px;border:1.5px solid '+(on?reg.color:'var(--line)')+';background:'+(on?reg.color+'22':'transparent')+';color:'+(on?reg.color:'var(--muted)')+';border-radius:12px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+esc(p[1])+'</button>';
       }).join('')+'</div>';
   }
+  html = regGoalsHTML(reg)+regActivityHTML(reg, es)+html;
   (reg.metrics||[]).forEach(function(m){
     var series = fes.filter(function(e){return e.values && e.values[m.id]!=null;}).sort(function(a,b){return (a.date+(a.ts||0)).toString().localeCompare((b.date+(b.ts||0)).toString());});
     if(!series.length) return;
@@ -5493,6 +5879,14 @@ function metricsStatsHTML(reg){
     var rec = null;
     if(m.better!=='none'){ rec = series.reduce(function(b,e){ return (m.better==='high' ? e.values[m.id]>b.values[m.id] : e.values[m.id]<b.values[m.id]) ? e : b; }, series[0]); }
     var isRec = rec && series.length>1 && rec.id===last.id;
+    var vsAll = series.map(function(e){return e.values[m.id];});
+    var avg = vsAll.reduce(function(a,b){return a+b;},0)/vsAll.length, mnV = Math.min.apply(null,vsAll), mxV = Math.max.apply(null,vsAll), totV = vsAll.reduce(function(a,b){return a+b;},0);
+    var firstV = vsAll[0], chg = (vsAll.length>1 && firstV) ? Math.round((lastV-firstV)/Math.abs(firstV)*100) : null;
+    var chgGood = chg==null ? true : (m.better==='low' ? chg<=0 : chg>=0);
+    var miniStats = '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">'+
+      [['Promedio',fmtNum(Math.round(avg*100)/100)],['Mín',fmtNum(mnV)],['Máx',fmtNum(mxV)],['Total',fmtNum(Math.round(totV*100)/100)]].map(function(x){return '<div style="flex:1;min-width:58px;background:var(--paper);border-radius:8px;padding:5px 6px;text-align:center;"><div style="font-size:9.5px;color:var(--muted);">'+x[0]+'</div><div style="font-size:12px;font-weight:800;color:var(--ink);">'+x[1]+'</div></div>';}).join('')+
+      (chg!=null?'<div style="flex:1;min-width:58px;background:var(--paper);border-radius:8px;padding:5px 6px;text-align:center;"><div style="font-size:9.5px;color:var(--muted);">Desde el inicio</div><div style="font-size:12px;font-weight:800;color:'+(chg===0?'var(--muted)':(chgGood?'#4a8f6b':'#c0503a'))+';">'+(chg>0?'+':'')+chg+'%</div></div>':'')+
+    '</div>';
     html += '<div style="background:var(--bg);border-radius:12px;padding:11px 12px;margin-bottom:10px;">'+
       '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;">'+
         '<span style="font-size:13px;font-weight:700;color:var(--ink);">'+esc(m.name)+'</span>'+
@@ -5503,19 +5897,38 @@ function metricsStatsHTML(reg){
         (rec?'<div><div style="font-size:10.5px;color:var(--muted);">🏆 Récord</div><div style="font-size:16px;font-weight:800;color:'+reg.color+';">'+fmtNum(rec.values[m.id])+' <span style="font-size:11px;font-weight:600;color:var(--muted);">'+esc(m.unit||'')+' · '+fmtShortDate(rec.date)+'</span></div></div>':'')+
       '</div>'+
       (isRec?'<div style="font-size:11px;font-weight:700;color:'+reg.color+';margin-bottom:6px;">¡Tu último dato es récord!</div>':'')+
-      svgLine(series.slice(-14).map(function(e){return {v:e.values[m.id]};}), reg.color)+
+      miniStats+
+      svgLine(series.slice(-14).map(function(e){return {v:e.values[m.id]};}), reg.color, regMetricTarget(reg,m.id))+
     '</div>';
   });
   return html || '<div style="font-size:12px;color:var(--muted);padding:8px 0;">Aún no hay datos para este filtro.</div>';
 }
+function regPendingHTML(reg){
+  if(reg.kind!=='finance') return '';
+  var ps = regEntries(reg).filter(function(e){return e.status==='expected';}).sort(function(a,b){return a.date.localeCompare(b.date);});
+  if(!ps.length) return '';
+  return '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 4px;">⏳ Pendientes</div>'+
+    ps.map(function(e){
+      var late = e.date < todayStr();
+      return '<div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line-soft);">'+
+        '<div onclick="openRegEntry(\''+reg.id+'\',{entryId:\''+e.id+'\'})" style="flex:1;min-width:0;cursor:pointer;"><div style="font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(e.label||e.taskName||(e.dir==='in'?'Ingreso esperado':'Gasto esperado'))+'</div>'+
+        '<div style="font-size:10.5px;color:'+(late?'#c0503a':'var(--muted)')+';">'+(late?'Vencido · ':'Para el ')+fmtShortDate(e.date)+'</div></div>'+
+        '<b style="font-size:12.5px;color:'+(e.dir==='in'?'#4a8f6b':'#c0503a')+';">~'+(e.dir==='in'?'+':'−')+fmtMoney(e.amount,reg.currency).replace('−','')+'</b>'+
+        '<button onclick="openRegEntry(\''+reg.id+'\',{entryId:\''+e.id+'\',confirm:true})" style="background:var(--accent);color:#fff;border:none;border-radius:9px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;flex-shrink:0;">'+(e.dir==='in'?'Recibido':'Pagado')+'</button>'+
+      '</div>';
+    }).join('');
+}
 function regEntryRowsHTML(reg){
-  var es = regEntries(reg).slice().sort(function(a,b){return (b.date+(b.ts||0)).toString().localeCompare((a.date+(a.ts||0)).toString());}).slice(0,60);
+  var base = regEntries(reg);
+  if(reg.kind==='finance') base = base.filter(function(e){return e.status!=='expected';});
+  var es = base.slice().sort(function(a,b){return (b.date+(b.ts||0)).toString().localeCompare((a.date+(a.ts||0)).toString());}).slice(0,60);
   if(!es.length) return '<div style="font-size:12px;color:var(--muted);text-align:center;padding:14px 0;">Aún no hay entradas.</div>';
   return es.map(function(e){
     var main, right;
     if(reg.kind==='finance'){
       main = e.label || e.taskName || (e.dir==='in'?'Ingreso':'Gasto');
-      right = '<b style="color:'+(e.dir==='in'?'#4a8f6b':'#c0503a')+';">'+(e.dir==='in'?'+':'−')+fmtMoney(e.amount,reg.currency).replace('−','')+'</b>';
+      right = '<b style="color:'+(e.dir==='in'?'#4a8f6b':'#c0503a')+';">'+(e.dir==='in'?'+':'−')+fmtMoney(e.amount,reg.currency).replace('−','')+'</b>'+
+        (e.expectedAmount!=null && e.expectedAmount!==e.amount?'<div style="font-size:9.5px;color:var(--muted);font-weight:500;">esperado '+fmtMoney(e.expectedAmount,reg.currency)+'</div>':'');
     } else {
       main = e.label || e.taskName || 'Registro';
       right = '<span style="color:var(--ink-soft);font-weight:600;">'+(reg.metrics||[]).filter(function(m){return e.values&&e.values[m.id]!=null;}).map(function(m){return fmtNum(e.values[m.id])+' '+esc(m.unit||'');}).join(' · ')+'</span>';
@@ -5541,6 +5954,8 @@ function regViewBodyHTML(reg){
       '</div>'+
     '</div>'+
     '<button onclick="openRegEntry(\''+reg.id+'\',{})" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:16px;">+ Agregar '+(reg.kind==='finance'?'movimiento':'registro')+'</button>'+
+    regPendingHTML(reg)+
+    '<div style="height:12px;"></div>'+
     (reg.kind==='finance' ? financeStatsHTML(reg) : metricsStatsHTML(reg))+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 4px;">Entradas</div>'+
     regEntryRowsHTML(reg);
@@ -5574,7 +5989,7 @@ function renderRegistriesStatsCard(){
       var es = regEntries(r), extra = '';
       if(r.kind==='finance'){
         var mk = todayStr().slice(0,7), inc=0, out=0;
-        es.forEach(function(e){ if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
+        es.forEach(function(e){ if(e.status==='expected') return; if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
         extra = '<div style="display:flex;gap:12px;font-size:11px;margin-top:3px;"><span style="color:#4a8f6b;">+'+fmtMoney(inc,r.currency).replace('−','')+'</span><span style="color:#c0503a;">−'+fmtMoney(out,r.currency).replace('−','')+'</span></div>';
       } else {
         var recs = [];
@@ -5597,7 +6012,8 @@ function mRegistrySectionHTML(){
   var list = regList();
   if(!list.length) return '';
   return mSecLabel('Registro','regtask')+
-    '<div id="m-reg-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'+mRegChipsInnerHTML()+'</div>';
+    '<div id="m-reg-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+mRegChipsInnerHTML()+'</div>'+
+    '<div id="m-reg-peritem" style="margin-bottom:18px;">'+mRegPerItemHTML()+'</div>';
 }
 function mRegChipsInnerHTML(){
   var none = !M.registryId;
@@ -5608,8 +6024,22 @@ function mRegChipsInnerHTML(){
   });
   return html;
 }
+function mRegPerItemHTML(){
+  if(!M.registryId) return '';
+  var on = !!M.regPerItem;
+  return '<div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:10px;padding:9px 12px;">'+
+    '<div style="flex:1;"><div style="font-size:12.5px;font-weight:600;color:var(--ink);">Registrar por ítem del checklist</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Al marcar cada ítem se abre el registro con su nombre (ej. “Gasto común”). Requiere checklist.</div></div>'+
+    '<button type="button" class="tog" onclick="mToggleRegPerItem()" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button></div>';
+}
+function mToggleRegPerItem(){
+  M.regPerItem = !M.regPerItem;
+  var b = document.getElementById('m-reg-peritem'); if(b) b.innerHTML = mRegPerItemHTML();
+}
 function mSetRegistry(id){
   M.registryId = id;
+  if(!id) M.regPerItem = false;
+  var pb = document.getElementById('m-reg-peritem'); if(pb) pb.innerHTML = mRegPerItemHTML();
   var box = document.getElementById('m-reg-chips'); if(box) box.innerHTML = mRegChipsInnerHTML();
 }
 // ── Fusión con la nube ──────────────────────────────────────────────────────
@@ -6016,6 +6446,7 @@ function renderProjectContent(){
     '<button onclick="S._projectView=\'gantt\';renderProjectContent();" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px;border:none;border-bottom:2.5px solid '+(view==='gantt'?p.color:'transparent')+';background:transparent;cursor:pointer;font-family:Inter,sans-serif;font-size:12px;font-weight:700;color:'+(view==='gantt'?p.color:'var(--muted)')+';">'+ICON_GANTT+'Gantt</button>'+
     '<button onclick="S._projectView=\'lista\';renderProjectContent();" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px;border:none;border-bottom:2.5px solid '+(view==='lista'?p.color:'transparent')+';background:transparent;cursor:pointer;font-family:Inter,sans-serif;font-size:12px;font-weight:700;color:'+(view==='lista'?p.color:'var(--muted)')+';">'+ICON_LIST+'Tareas</button>'+
     '<button onclick="S._projectView=\'conexiones\';renderProjectContent();" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px;border:none;border-bottom:2.5px solid '+(view==='conexiones'?p.color:'transparent')+';background:transparent;cursor:pointer;font-family:Inter,sans-serif;font-size:12px;font-weight:700;color:'+(view==='conexiones'?p.color:'var(--muted)')+';">'+ICON_LINK+'Conexiones</button>'+
+    '<button onclick="S._projectView=\'metas\';renderProjectContent();" style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:10px;border:none;border-bottom:2.5px solid '+(view==='metas'?p.color:'transparent')+';background:transparent;cursor:pointer;font-family:Inter,sans-serif;font-size:12px;font-weight:700;color:'+(view==='metas'?p.color:'var(--muted)')+';"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg>Metas'+((p.goals||[]).length?' <span style="font-size:10px;opacity:.8;">'+(p.goals||[]).length+'</span>':'')+'</button>'+
   '</div>'+
   // Contenido
   '<div id="pv-content" style="flex:1;overflow-y:auto;overflow-x:'+(view==='gantt'?'auto':'hidden')+';">'+
@@ -6176,7 +6607,126 @@ function buildProjectContent(p, view){
   if(view==='gantt') return buildGanttView(p);
   if(view==='lista') return buildListaView(p);
   if(view==='conexiones') return buildConexionesView(p);
+  if(view==='metas') return buildMetasView(p);
   return '';
+}
+
+// ── Metas del proyecto ─────────────────────────────────────────────────────
+function projGoalPct(g){ return g.target>0 ? Math.max(0,Math.min(100,Math.round((g.current||0)/g.target*100))) : 0; }
+function projGoalStatus(g){
+  var pct = projGoalPct(g);
+  if(pct>=100) return {k:'done', txt:'✓ Lograda', col:'#4a8f6b'};
+  if(!g.due) return {k:'open', txt:'En curso', col:'var(--muted)'};
+  var due = new Date(g.due+'T23:59:59'), now = new Date();
+  if(now>due) return {k:'late', txt:'Vencida', col:'#c0503a'};
+  var start = new Date((g.start||g.due)+'T00:00:00'), total = due-start;
+  var elapsed = total>0 ? Math.max(0,Math.min(1,(now-start)/total))*100 : 100;
+  return pct+10>=elapsed ? {k:'ok', txt:'En ritmo', col:'#4a8f6b'} : {k:'behind', txt:'Atrasada', col:'#d08a2e'};
+}
+function buildMetasView(p){
+  var goals = p.goals||[];
+  var html = '<div style="padding:14px 16px 110px;">'+
+    '<button onclick="openProjGoalEditor(\''+p.id+'\',null)" style="width:100%;background:'+p.color+';color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:14px;">+ Nueva meta</button>';
+  if(!goals.length){
+    return html+'<div style="text-align:center;padding:30px 10px;"><div style="font-size:38px;opacity:.5;margin-bottom:8px;">🎯</div><div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:4px;">Sin metas todavía</div><div style="font-size:12px;color:var(--muted);line-height:1.6;">Define metas medibles para este proyecto (ej. 20 capítulos, 5.000 palabras, 10 entrevistas) y sigue su avance con gráficos.</div></div></div>';
+  }
+  var done = goals.filter(function(g){return projGoalPct(g)>=100;}).length;
+  var avg = Math.round(goals.reduce(function(a,g){return a+projGoalPct(g);},0)/goals.length);
+  var late = goals.filter(function(g){var st=projGoalStatus(g).k; return st==='late'||st==='behind';}).length;
+  function k(l,v,c){ return '<div style="flex:1;background:var(--bg);border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:10px;color:var(--muted);">'+l+'</div><div style="font-size:15px;font-weight:800;color:'+c+';">'+v+'</div></div>'; }
+  html += '<div style="display:flex;gap:6px;margin-bottom:14px;">'+k('Avance medio',avg+'%',p.color)+k('Logradas',done+'/'+goals.length,'#4a8f6b')+k('Con atraso',String(late),late?'#c0503a':'var(--ink)')+'</div>'+
+    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">% de avance por meta</div>'+
+    svgBars1(goals.map(function(g){ var n=(g.name||'').trim(); return {label:(n.length>5?n.slice(0,4)+'…':n), v:projGoalPct(g)}; }), p.color, 100)+'<div style="height:14px;"></div>';
+  goals.forEach(function(g){
+    var pct = projGoalPct(g), st = projGoalStatus(g), u = g.unit?(' '+esc(g.unit)):'';
+    var extra = '';
+    if(g.due){
+      var left = Math.ceil((new Date(g.due+'T23:59:59')-new Date())/86400000);
+      extra = '<div style="font-size:11px;color:var(--muted);margin-top:4px;">'+(left>=0?('vence el '+formatDateShort(g.due)+' · '+left+' día'+(left===1?'':'s')):('venció el '+formatDateShort(g.due)))+
+        (left>0 && pct<100 ? ' · necesitas ~'+fmtNum(Math.round(((g.target-(g.current||0))/left)*100)/100)+u+'/día':'')+'</div>';
+    }
+    var pts = (g.log||[]).map(function(x){return {v:x.v};});
+    html += '<div style="background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+p.color+';border-radius:12px;padding:11px 12px;margin-bottom:10px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;"><span style="font-weight:700;font-size:14px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(g.name)+'</span><span style="font-size:10px;font-weight:700;color:'+st.col+';flex-shrink:0;">'+st.txt+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;"><span><b>'+fmtNum(g.current||0)+'</b> / '+fmtNum(g.target)+u+'</span><b style="color:'+(pct>=100?'#4a8f6b':p.color)+';">'+pct+'%</b></div>'+
+      '<div style="height:7px;background:var(--line);border-radius:4px;overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:'+(pct>=100?'#4a8f6b':p.color)+';border-radius:4px;"></div></div>'+
+      extra+
+      (pts.length>=2?'<div style="margin-top:8px;">'+svgLine(pts, p.color, g.target)+'</div>':'')+
+      '<div style="display:flex;gap:6px;margin-top:10px;">'+
+        '<button onclick="openProjGoalProgress(\''+p.id+'\',\''+g.id+'\')" style="flex:1;background:'+p.color+'22;border:none;color:'+p.color+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Registrar avance</button>'+
+        '<button onclick="openProjGoalEditor(\''+p.id+'\',\''+g.id+'\')" style="background:none;border:1.5px solid var(--line);color:var(--muted);border-radius:9px;padding:8px 12px;font-size:12px;cursor:pointer;">Editar</button>'+
+      '</div></div>';
+  });
+  return html+'</div>';
+}
+function _pgProj(pid){ return (S.projects||[]).find(function(x){return x.id===pid;}); }
+function openProjGoalEditor(pid, gid){
+  var p = _pgProj(pid); if(!p) return;
+  var g = gid ? (p.goals||[]).find(function(x){return x.id===gid;}) : null;
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner" style="max-width:340px;">'+
+    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:12px;">'+(g?'Editar meta':'Nueva meta')+'</div>'+
+    '<label class="flbl">Nombre</label><input id="pg-name" class="finp" placeholder="Ej: Capítulos escritos" value="'+esc(g?g.name:'')+'"/>'+
+    '<div style="display:flex;gap:8px;margin-top:10px;"><div style="flex:1;"><label class="flbl">Objetivo</label><input id="pg-target" class="finp" inputmode="decimal" placeholder="20" value="'+(g?fmtNum(g.target).replace(/\./g,''):'')+'"/></div>'+
+    '<div style="width:96px;"><label class="flbl">Unidad</label><input id="pg-unit" class="finp" maxlength="10" placeholder="cap." value="'+esc(g?(g.unit||''):'')+'"/></div></div>'+
+    '<div style="margin-top:10px;"><label class="flbl">Fecha límite (opcional)</label><input id="pg-due" class="finp" type="text" readonly onclick="openCustomDatePicker(\'pg-due\',false)" style="cursor:pointer;" placeholder="Sin fecha" value="'+(g&&g.due?g.due:'')+'"/></div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+
+      (g?'<button onclick="deleteProjGoal(\''+pid+'\',\''+g.id+'\')" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;">Borrar</button>':'')+
+      '<button class="sbtn" onclick="saveProjGoal(\''+pid+'\','+(g?'\''+g.id+'\'':'null')+')">Guardar</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '</div></div>';
+  pRoot().appendChild(box);
+}
+function saveProjGoal(pid, gid){
+  var p = _pgProj(pid); if(!p) return;
+  var v = function(id){ var e=document.getElementById(id); return e?e.value.trim():''; };
+  var name = v('pg-name'), target = parseNumInput(v('pg-target'));
+  if(!name){ toast('Ponle un nombre a la meta'); return; }
+  if(!(target>0)){ toast('El objetivo debe ser mayor que 0'); return; }
+  if(!p.goals) p.goals = [];
+  if(gid){
+    p.goals = p.goals.map(function(g){ return g.id===gid ? Object.assign({},g,{name:name,target:target,unit:v('pg-unit'),due:v('pg-due')||null}) : g; });
+  } else {
+    if(p.goals.length>=12){ toast('Máximo 12 metas por proyecto'); return; }
+    p.goals.push({id:uid(), name:name, target:target, unit:v('pg-unit'), due:v('pg-due')||null, current:0, start:todayStr(), log:[{d:todayStr(),v:0}]});
+  }
+  saveState();
+  var b = document.querySelector('.conf-box'); if(b) b.remove();
+  renderProjectContent(); toast('✓ Meta guardada');
+}
+function deleteProjGoal(pid, gid){
+  var p = _pgProj(pid); if(!p) return;
+  p.goals = (p.goals||[]).filter(function(g){return g.id!==gid;});
+  saveState();
+  var b = document.querySelector('.conf-box'); if(b) b.remove();
+  renderProjectContent();
+}
+function openProjGoalProgress(pid, gid){
+  var p = _pgProj(pid); if(!p) return;
+  var g = (p.goals||[]).find(function(x){return x.id===gid;}); if(!g) return;
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:4px;">'+esc(g.name)+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Llevas '+fmtNum(g.current||0)+' de '+fmtNum(g.target)+(g.unit?' '+esc(g.unit):'')+'</div>'+
+    '<label class="flbl">Valor actual</label><input id="pg-cur" class="finp" inputmode="decimal" value="'+fmtNum(g.current||0).replace(/\./g,'')+'"/>'+
+    '<div style="display:flex;gap:6px;margin-top:8px;">'+[1,5,10].map(function(n){return '<button type="button" onclick="pgBump('+n+')" style="flex:1;background:var(--bg);border:1.5px solid var(--line);border-radius:9px;padding:7px;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;">+'+n+'</button>';}).join('')+'</div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="saveProjGoalProgress(\''+pid+'\',\''+gid+'\')">Guardar</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button></div></div>';
+  pRoot().appendChild(box);
+}
+function pgBump(n){ var e=document.getElementById('pg-cur'); if(!e) return; var c=parseNumInput(e.value); e.value = String(((isNaN(c)?0:c)+n)); }
+function saveProjGoalProgress(pid, gid){
+  var p = _pgProj(pid); if(!p) return;
+  var e = document.getElementById('pg-cur'); var val = parseNumInput(e?e.value:'');
+  if(isNaN(val) || val<0){ toast('Escribe un número válido'); return; }
+  p.goals = (p.goals||[]).map(function(g){
+    if(g.id!==gid) return g;
+    var log = (g.log||[]).filter(function(x){return x.d!==todayStr();}).concat([{d:todayStr(),v:val}]).slice(-60);
+    return Object.assign({},g,{current:val,log:log});
+  });
+  var g2 = p.goals.find(function(g){return g.id===gid;});
+  saveState();
+  var b = document.querySelector('.conf-box'); if(b) b.remove();
+  renderProjectContent();
+  if(g2 && projGoalPct(g2)>=100){ playSound('achievement'); toast('🎯 ¡Meta lograda!'); } else toast('✓ Avance guardado');
 }
 
 // ── Vista GANTT ────────────────────────────────────────────────────────────
@@ -7745,14 +8295,16 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
   // (ver SEL / selLpStart) — no interfiere con los toques normales, ya que
   // solo dispara tras ~480ms sin moverse.
   var lpAttrs = 'ontouchstart="selLpStart(\'tasks\',\''+t.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'tasks\',\''+t.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()"';
-  return '<div class="task-item'+(justPopped?' row-glow':'')+'" id="ti-'+t.id+'" '+lpAttrs+'>'+
+  var skipped = isSkipped(t);
+  var skipTag = skipped ? '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:var(--line);color:var(--muted);font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;" title="Ignorada esta semana">⏸ Ignorada</span>' : '';
+  return '<div class="task-item'+(justPopped?' row-glow':'')+'" id="ti-'+t.id+'" '+lpAttrs+(skipped?' style="opacity:.5;"':'')+'>'+
     '<div class="task-row">'+
       '<div class="'+chkCls+'" onclick="tapTask(\''+t.id+'\')">'+innerChk+'</div>'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="display:flex;align-items:center;gap:6px;">'+
           crucialMark+
           '<span ondblclick="startInlineEdit(\''+t.id+'\')" id="tt-'+t.id+'" style="font-size:14px;color:'+(done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(done?'line-through':'none')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;flex:1;min-width:0;" title="Doble click para editar">'+esc(t.text)+'</span>'+
-          categoryTag+
+          skipTag+categoryTag+
           horaTag+
           // Pedido: poder escribir el avance directo (no solo tocando el
           // círculo repetidas veces) — útil cuando la meta es un número
@@ -7817,8 +8369,10 @@ function openTaskMenu(id, event){
   
   // Posición vertical aproximada
   var rect = event.target.getBoundingClientRect();
-  var top = Math.min(rect.bottom + 4, window.innerHeight - 360);
+  var top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 440));
   menu.style.top = top + 'px';
+  menu.style.maxHeight = (window.innerHeight - top - 12) + 'px'; menu.style.overflowY = 'auto';
+  menu._t = Date.now();
   
   var items = [];
   
@@ -7836,6 +8390,18 @@ function openTaskMenu(id, event){
     if(_rt && _rt.registryId && regById(_rt.registryId)){
       items.push({icon:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 12V5M7 12V2M12 12V8"/></svg>', label:'Registrar ahora', action:'openRegEntryForTask(\''+id+'\')'});
     }
+    items.push({
+      icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
+      label: isSkipped(t) ? 'Reactivar esta semana' : 'Ignorar esta semana', action:'toggleSkipTaskWeek(\''+id+'\')'
+    });
+    items.push({
+      icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/></svg>',
+      label:'Reordenar', action:'startReorder()'
+    });
+    items.push({
+      icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>',
+      label:'Seleccionar varias', action:'enterSelectMode(\'tasks\',\''+id+'\')'
+    });
     items.push({divider:true});
     // Duplicar — ícono de dos hojas superpuestas
     items.push({
@@ -7879,6 +8445,7 @@ function openTaskMenu(id, event){
   // Cerrar al tocar fuera
   setTimeout(function(){
     document.addEventListener('click', function handler(e){
+      if(Date.now()-menu._t<450) return; // ignora el click que sigue al soltar tras mantener presionado
       if(!menu.contains(e.target)){
         menu.remove();
         document.removeEventListener('click', handler);
@@ -10935,6 +11502,8 @@ function renderTemplates(){
     html+='<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;">Plan gratuito: máx '+FREE_LIMITS.templates+' plantillas.</div>';
   }
   
+  html+=renderTimerTemplatesSection();
+  
   // Programación de semanas que vienen
   html+=renderWeekSchedule();
   
@@ -11327,6 +11896,7 @@ function mmSave(){
 
 function tapTask(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
+  if(isSkipped(t)){ toast('Esta tarea está ignorada esta semana · reactívala desde ⋯'); return; }
   if(t.checklist&&t.checklist.length){expCL(id);return;}
   var wasDone=isDone(t),updated;
   var oldProg = t.prog||0;
@@ -11401,6 +11971,10 @@ function tapCL(taskId,itemId){
   // el vínculo usa el modo "completar").
   if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, delta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, delta);
+  // Registro POR ítem: al marcar un ítem se ofrece anotar ese movimiento por separado.
+  if(toggledItem && toggledItem.done && t.regPerItem && t.registryId && regById(t.registryId)){
+    (function(tid,iid,txt){ setTimeout(function(){ openRegEntryForTask(tid, true, {itemId:iid, label:txt}); }, 450); })(t.id, toggledItem.id, toggledItem.text||'');
+  }
 }
 // Sumar/restar de a 1 unidad en un ítem de checklist con cantidad, desde la
 // vista rápida del día a día (sin tener que abrir el editor de la tarea).
@@ -11597,7 +12171,7 @@ function finishUpdate(updated, justCompleted, delta){
     vibrate(30);
     awardTaskXP(updated);
     // Registro asociado: al completar, se ofrece anotar el monto/marca (se puede omitir).
-    if(updated.registryId && regById(updated.registryId)){
+    if(updated.registryId && regById(updated.registryId) && !updated.regPerItem){
       var _rtid = updated.id;
       setTimeout(function(){ openRegEntryForTask(_rtid, true); }, 500);
     }
@@ -12021,7 +12595,7 @@ function openNewEvent(){
 }
 function openEdit(id){
   var t=S.tasks.find(function(t){return t.id===id;});if(!t)return;
-  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,clRule:t.clRule?JSON.parse(JSON.stringify(t.clRule)):{mode:'all',k:Math.max(1,(t.checklist||[]).length-1)||1},hasTimer:!!t.hasTimer,timer:t.timer?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(),oneShot:!!t.oneShotWeek,registryId:(t.registryId&&regById(t.registryId))?t.registryId:null,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
+  M={isNew:false,task:JSON.parse(JSON.stringify(t)),checklist:JSON.parse(JSON.stringify(t.checklist||[])),links:JSON.parse(JSON.stringify(t.links||{})),qty:t.qty||1,hasQty:(t.qty||1)>1,hasCL:!!(t.hasCL||(t.checklist||[]).length>0),clFresh:!!t.clFresh,clRule:t.clRule?JSON.parse(JSON.stringify(t.clRule)):{mode:'all',k:Math.max(1,(t.checklist||[]).length-1)||1},hasTimer:!!t.hasTimer,timer:t.timer?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(),oneShot:!!t.oneShotWeek,registryId:(t.registryId&&regById(t.registryId))?t.registryId:null,regPerItem:!!t.regPerItem,crucial:!!t.crucial,linkMode:t.linkMode||'unit',categoryId:t.categoryId||null,hora:t.hora||null,hasDate:!!t.date,repeatEvery:t.repeatEveryDays||0,isEvent:!!t.repeatEveryDays,notif:t.notif?JSON.parse(JSON.stringify(t.notif)):null};
   // BUGFIX: si la tarea venía de antes con Cantidad Y Checklist activos a
   // la vez (posible antes de esta regla), se normaliza acá al abrir el
   // editor en vez de esperar a que mSave() lo resuelva en silencio — así
@@ -12041,7 +12615,7 @@ var INFO_TIPS = {
   repeat:'Al pasar la fecha, la tarea salta sola a la próxima que le toque (con su checklist reiniciado si es "único cada vez"). Sin repetición es solo para ese día.',
   clfresh:'Al reiniciarse la tarea, el checklist empieza vacío en vez de repetir los mismos ítems (útil para listas que cambian, como "qué comprar"). Queda el botón para recordar el último.',
   clrule:'"Con algunos alcanza": la tarea se completa al marcar K ítems cualquiera de los N, no todos. Con K=1 basta uno ("este o este o este").',
-  timer:'Cada ejercicio tiene su propio ⚙ con vueltas y descansos propios (si no los tocas, usa los generales). La tarea también se puede marcar a mano, sin usar el temporizador.',
+  timer:'Cada ejercicio tiene su propio ⚙ con vueltas y descansos propios (si no los tocas, usa los generales). Parte desde una plantilla (Estudio, Entrenamiento o las tuyas) y puedes guardar lo que armes con "＋ Plantilla" o crearlas en Energía → Plantillas. La tarea también se puede marcar a mano, sin usar el temporizador.',
   crucial:'Las tareas cruciales se destacan con una estrella y son las que siguen visibles en los modos que muestran solo lo esencial.',
   periods:'Desactiva los períodos que no uses: desaparecen de Objetivos y de las opciones al vincular tareas.',
   autoreset:'Si no reinicias un período a tiempo, la app puede hacerlo sola al vencer el plazo, y solo con las tareas de ese período. Si lo apagas, ese período no avanza (sus tareas quedan como están) hasta que lo reinicies tú.',
@@ -12063,7 +12637,7 @@ var INFO_TIPS = {
   notifonly:'Te aviso solo de las tareas que tú elijas, cuando se acerque su hora. Sin spam: nada de notificaciones para todas tus tareas.',
   projlinks:'Conecta las tareas del proyecto con tus objetivos o tareas diarias. Al completar el objetivo, el % de la tarea se actualiza.',
   tplauto:'Al activar este modo, esta plantilla se aplicará automáticamente. Las tareas actuales quedarán guardadas y volverán al desactivar.',
-  regtask:'Asocia la tarea a un registro: al completarla se abre una hoja rápida para anotar el monto o la marca (puedes omitirla, la tarea queda completa igual). También desde el ⋯ de la tarea → "Registrar ahora".',
+  regtask:'Asocia la tarea a un registro: al completarla se abre una hoja rápida para anotar el monto o la marca (puedes omitirla, la tarea queda completa igual). Si la tarea tiene checklist, activa "Registrar por ítem" para anotar cada ítem por separado al marcarlo. La fecha propuesta es la del día de la tarea (editable). También desde el ⋯ de la tarea → "Registrar ahora".',
   reglimit:'Plan gratuito: 1 registro de finanzas y 1 de marcas. Acceso completo: hasta 5. Al llegar al nivel 10 se suma 1 cupo extra.',
   regmet:'Cada métrica lleva su unidad (kg, km, min, bloques...) y si "mejor" es más alto (peso) o más bajo (tiempo), para calcular récords. El campo "concepto" separa ejercicios distintos, ej. "Press de banca".',
   timercfg:'Estos ajustes valen para todas las tareas con temporizador. Los sonidos usan el audio del sistema, así que siguen sonando si cambias de app (depende de que el navegador mantenga la pestaña activa).'
@@ -12758,7 +13332,7 @@ function mToggleTimerSection(){
 }
 // ── Duraciones cómodas para tiempos largos (estudio, pomodoro...) ───────────
 // Cada duración se edita como "min : seg" (ej. 45 min = 45 : 00), con atajos
-// de un toque (5, 10, 25, 45, 60, 90 min) y plantillas (Pomodoro, Estudio, HIIT).
+// de un toque (5, 10, 25, 45, 60, 90 min) y plantillas (Estudio, Entrenamiento y las tuyas).
 var TIMER_MAX_SEC = 21600; // 6 horas por tramo
 function fmtDur(sec){
   sec = Math.max(0, Math.round(sec||0));
@@ -12796,20 +13370,121 @@ function mAddDur(setId, addSec){
   mSetTimerDur('set', setId, 'sec', Math.min(TIMER_MAX_SEC, (s.sec||0)+addSec));
 }
 var TIMER_PRESETS = {
-  pomodoro:{label:'🍅 Pomodoro', make:function(){return {sets:[{id:uid(),name:'Foco',sec:1500,color:CATEGORY_COLORS[1]}],rounds:4,restBetween:0,restBetweenRounds:300};}},
-  estudio:{label:'📚 Estudio 45+10', make:function(){return {sets:[{id:uid(),name:'Estudio',sec:2700,color:CATEGORY_COLORS[2]}],rounds:2,restBetween:0,restBetweenRounds:600};}},
-  hiit:{label:'🔥 HIIT 40/20', make:function(){return {sets:[{id:uid(),name:'Trabajo',sec:40,color:CATEGORY_COLORS[0]}],rounds:8,restBetween:0,restBetweenRounds:20};}}
+  estudio:{label:'📚 Estudio', make:function(){return {sets:[{id:uid(),name:'Estudio',sec:2700,color:CATEGORY_COLORS[2]}],rounds:2,restBetween:0,restBetweenRounds:600};}},
+  entrenamiento:{label:'🏋️ Entrenamiento', make:function(){return {sets:[{id:uid(),name:'Ejercicio',sec:40,color:CATEGORY_COLORS[0]}],rounds:8,restBetween:0,restBetweenRounds:20};}}
 };
+function timerTplList(){ return (S.timerTemplates||[]).filter(function(t){return !t.del;}); }
+function cloneTimerFresh(timer){
+  var c = JSON.parse(JSON.stringify(timer));
+  (c.sets||[]).forEach(function(x){ x.id = uid(); });
+  return c;
+}
 function mApplyTimerPreset(key){
-  var p = TIMER_PRESETS[key]; if(!p) return;
-  M.timer = p.make(); M._timerOpenSet = null;
+  var t;
+  if(key.indexOf('tpl:')===0){
+    var tp = timerTplList().find(function(x){return x.id===key.slice(4);}); if(!tp) return;
+    t = cloneTimerFresh(tp.timer);
+  } else {
+    var p = TIMER_PRESETS[key]; if(!p) return;
+    t = p.make();
+  }
+  M.timer = t; M._timerOpenSet = null;
   mRerenderTimerArea();
   playSound('toggle');
 }
 function timerPresetsHTML(){
-  return '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;">'+Object.keys(TIMER_PRESETS).map(function(k){
-    return '<button type="button" onclick="mApplyTimerPreset(\''+k+'\')" style="flex-shrink:0;padding:6px 11px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);border-radius:14px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+TIMER_PRESETS[k].label+'</button>';
-  }).join('')+'</div>';
+  var chip = 'flex-shrink:0;padding:6px 11px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);border-radius:14px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;';
+  var html = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;">'+
+    Object.keys(TIMER_PRESETS).map(function(k){
+      return '<button type="button" onclick="mApplyTimerPreset(\''+k+'\')" style="'+chip+'">'+TIMER_PRESETS[k].label+'</button>';
+    }).join('')+
+    timerTplList().map(function(t){
+      return '<button type="button" onclick="mApplyTimerPreset(\'tpl:'+t.id+'\')" style="'+chip+'border-color:var(--accent-soft);">⏱ '+esc(t.name)+'</button>';
+    }).join('');
+  // "＋ Plantilla": guarda lo que estás armando como plantilla reutilizable (no aparece dentro del editor de plantillas)
+  if(!M._tplEdit) html += '<button type="button" onclick="saveCurrentTimerAsTemplate()" style="'+chip+'border:1.5px dashed var(--accent);color:var(--accent);background:transparent;">＋ Plantilla</button>';
+  return html+'</div>';
+}
+function saveCurrentTimerAsTemplate(){
+  if(timerTplList().length>=12){ toast('Máximo 12 plantillas de temporizador'); return; }
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:6px;">Guardar como plantilla</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Quedará disponible en todos tus temporizadores y en Energía → Plantillas.</div>'+
+    '<input id="tt-name" class="finp" placeholder="Nombre (ej. Lectura 30/5)" maxlength="30"/>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="confirmSaveTimerTemplate()">Guardar</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button></div></div>';
+  document.body.appendChild(box);
+  setTimeout(function(){ var i=document.getElementById('tt-name'); if(i) i.focus(); },50);
+}
+function confirmSaveTimerTemplate(){
+  var el = document.getElementById('tt-name'); var name = (el&&el.value||'').trim();
+  if(!name){ toast('Ponle un nombre'); return; }
+  if(!S.timerTemplates) S.timerTemplates = [];
+  S.timerTemplates.push({id:uid(), name:name, timer:cloneTimerFresh(M.timer), updatedAt:Date.now()});
+  var b = document.querySelector('.conf-box'); if(b) b.remove();
+  saveState(); mRerenderTimerArea(); toast('✓ Plantilla guardada');
+}
+function mergeTimerTemplates(cloud){
+  var map = {};
+  (S.timerTemplates||[]).forEach(function(t){ map[t.id]=t; });
+  (cloud.timerTemplates||[]).forEach(function(c){
+    var l = map[c.id];
+    if(!l || (c.updatedAt||0) > (l.updatedAt||0)) map[c.id] = c;
+  });
+  S.timerTemplates = Object.keys(map).map(function(k){return map[k];});
+}
+// ── Energía → Plantillas: sección de plantillas de temporizador ─────────────
+function renderTimerTemplatesSection(){
+  var list = timerTplList();
+  var html = '<div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:26px 0 8px;">Plantillas de temporizador ('+list.length+')</div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Rutinas de tiempo que luego eliges con un toque al agregar un temporizador a una tarea.</div>';
+  list.forEach(function(t){
+    var tm = t.timer||{sets:[],rounds:1}, total = 0;
+    try{ total = timerEstimateTotalSec(tm); }catch(e){}
+    html += '<div class="card" style="display:flex;align-items:center;gap:10px;">'+
+      '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">⏱ '+esc(t.name)+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(tm.sets||[]).length+' ejercicio'+((tm.sets||[]).length===1?'':'s')+' · '+(tm.rounds||1)+' vuelta'+((tm.rounds||1)===1?'':'s')+' · '+fmtDur(total)+'</div></div>'+
+      '<button onclick="openTimerTplEditor(\''+t.id+'\')" style="background:none;border:1.5px solid var(--line);border-radius:7px;padding:4px 10px;font-size:11px;color:var(--muted);cursor:pointer;">Editar</button>'+
+      '<button onclick="deleteTimerTemplate(\''+t.id+'\')" style="background:none;border:1.5px solid var(--line);border-radius:7px;padding:4px 10px;font-size:11px;color:var(--bad);cursor:pointer;">×</button>'+
+    '</div>';
+  });
+  if(!list.length) html += '<div style="text-align:center;font-size:12px;color:var(--muted);padding:10px 0 4px;">Aún no tienes plantillas propias. Ya vienen “Estudio” y “Entrenamiento” al crear un temporizador.</div>';
+  html += '<button onclick="openTimerTplEditor(null)" style="width:100%;background:var(--accent-bg);border:1.5px dashed var(--accent);color:var(--accent);border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-top:6px;">＋ Nueva plantilla de temporizador</button>';
+  return html;
+}
+var TTE = null;
+function openTimerTplEditor(id){
+  if(!id && timerTplList().length>=12){ toast('Máximo 12 plantillas de temporizador'); return; }
+  var t = id ? timerTplList().find(function(x){return x.id===id;}) : null;
+  TTE = {id:id||null, name:t?t.name:'', prevM:(typeof M!=='undefined'?M:null)};
+  M = {isNew:true, _tplEdit:true, task:{}, clFresh:false, timer:t?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(), _timerOpenSet:null};
+  removeOverlay('tpl-timer');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='tpl-timer';
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeTimerTplEditor(); });
+  ov.innerHTML = '<div class="sheet">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(id?'Editar':'Nueva')+' plantilla de temporizador</span>'+
+    '<button onclick="closeTimerTplEditor()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<input id="tte-name" class="finp" placeholder="Nombre (ej. Lectura 30/5)" maxlength="30" value="'+esc(TTE.name)+'" oninput="TTE.name=this.value" style="margin-bottom:14px;"/>'+
+    '<div id="m-timer-area">'+timerAreaHTML()+'</div>'+
+    '<div style="display:flex;gap:8px;margin-top:18px;"><button onclick="saveTimerTplEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar plantilla</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+function closeTimerTplEditor(){
+  removeOverlay('tpl-timer');
+  M = TTE ? TTE.prevM : null; TTE = null;
+}
+function saveTimerTplEditor(){
+  var name = ((document.getElementById('tte-name')||{}).value||TTE.name||'').trim();
+  if(!name){ toast('Ponle un nombre a la plantilla'); return; }
+  if(!S.timerTemplates) S.timerTemplates = [];
+  var tm = JSON.parse(JSON.stringify(M.timer));
+  if(TTE.id) S.timerTemplates = S.timerTemplates.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,timer:tm,updatedAt:Date.now()}) : x; });
+  else S.timerTemplates.push({id:uid(), name:name, timer:tm, updatedAt:Date.now()});
+  saveState(); closeTimerTplEditor(); render(); toast('✓ Plantilla guardada');
+}
+function deleteTimerTemplate(id){
+  S.timerTemplates = (S.timerTemplates||[]).map(function(x){ return x.id===id ? Object.assign({},x,{del:true,updatedAt:Date.now()}) : x; });
+  saveState(); render(); toast('Plantilla eliminada');
 }
 function timerQuickDurHTML(set){
   var chips = [5,10,15,25,30,45,60,90];
@@ -13419,7 +14094,7 @@ function mSave(){
   // Pedido: la tarea COMPLETA puede estar vinculada (clLinkUp) aunque tenga
   // checklist propio — antes se borraba el vínculo acá apenas el checklist
   // tenía algún ítem; ahora se conserva siempre tal cual estaba.
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,registryId:(M.registryId&&regById(M.registryId))?M.registryId:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,registryId:(M.registryId&&regById(M.registryId))?M.registryId:null,regPerItem:!!(M.hasCL&&M.registryId&&M.regPerItem),oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
@@ -13483,7 +14158,7 @@ function streakActive(){ return !S.simpleMode && !S.streakDisabled; }
 function tasksForDateKey(dateKey){
   var d = parseLocalDate(dateKey);
   var wIdx = dayIdxFromDate(d);
-  var recurring = isSameWeekAsToday(d) ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx;}) : [];
+  var recurring = isSameWeekAsToday(d) ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx&&!isSkipped(t);}) : [];
   var dated = S.tasks.filter(function(t){return t.period==='dia'&&t.date===dateKey;});
   return recurring.concat(dated);
 }
@@ -15378,7 +16053,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.1';
+var APP_VERSION = '2026.10.02.1';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
