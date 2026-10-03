@@ -1073,6 +1073,7 @@ async function syncWithCloud(){
         bonusTaskLimit: S.bonusTaskLimit||0,
         registries: S.registries||[],
         timerTemplates: S.timerTemplates||[],
+        exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], timerBests: S.timerBests||{},
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
         timerCfg: S.timerCfg||{},
         autoReset: S.autoReset||{},
@@ -1152,6 +1153,11 @@ function applySyncResult(cloud, useCloud){
     mergeMedalsAndTracks(cloud);
     mergeRegistries(cloud);
     mergeTimerTemplates(cloud);
+    try{
+      S.exerciseLib = mergeLibById(S.exerciseLib, cloud.exerciseLib);
+      S.setLib = mergeLibById(S.setLib, cloud.setLib);
+      Object.keys(cloud.timerBests||{}).forEach(function(k){ var c=cloud.timerBests[k], l=(S.timerBests||{})[k]; if(!l || (c&&c.n>l.n)) S.timerBests[k]=c; });
+    }catch(e){}
     try{
       Object.keys(cloud.taskLog||{}).forEach(function(id){ S.taskLog[id] = Object.assign({}, cloud.taskLog[id], S.taskLog[id]||{}); });
       Object.keys(cloud.taskSkips||{}).forEach(function(id){ var m={}; (cloud.taskSkips[id]||[]).concat(S.taskSkips[id]||[]).forEach(function(k){m[k]=1;}); S.taskSkips[id]=Object.keys(m); });
@@ -1290,6 +1296,7 @@ function pushToCloud(){
       bonusTaskLimit: S.bonusTaskLimit||0,
       registries: S.registries||[],
         timerTemplates: S.timerTemplates||[],
+        exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], timerBests: S.timerBests||{},
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
       timerCfg: S.timerCfg||{},
       autoReset: S.autoReset||{},
@@ -1703,6 +1710,7 @@ var S = {
   timerCfg:{countdownBeepSec:3, volume:1, sounds:{start:true,work:true,rest:true,countdown:true,finish:true}, keepScreenOn:true},
   // Registros (finanzas y marcas) — ver openRegEditor / mergeRegistries
   registries:[],
+  exerciseLib:[], setLib:[], timerBests:{}, regPrefill:true,
   taskLog:{}, taskSkips:{}, // bitácora de cumplimiento por tarea y semanas ignoradas
   timerTemplates:[], // plantillas de temporizador propias (Energía → Plantillas)
   streak:{days:0,lastDate:null,total:0},
@@ -2088,6 +2096,10 @@ function loadState(){
     var md=localStorage.getItem('og6-medals');if(md)S.medals=JSON.parse(md);
     try{var rg=localStorage.getItem('og6-registries');if(rg)S.registries=JSON.parse(rg)||[];}catch(e){}
     try{var ttp=localStorage.getItem('og6-timertemplates');if(ttp)S.timerTemplates=JSON.parse(ttp)||[];}catch(e){}
+    try{var elb=localStorage.getItem('og6-exlib');if(elb)S.exerciseLib=JSON.parse(elb)||[];}catch(e){}
+    try{var slb=localStorage.getItem('og6-setlib');if(slb)S.setLib=JSON.parse(slb)||[];}catch(e){}
+    try{var tbs=localStorage.getItem('og6-timerbests');if(tbs)S.timerBests=JSON.parse(tbs)||{};}catch(e){}
+    try{var rpf=localStorage.getItem('og6-regprefill');if(rpf!==null)S.regPrefill=rpf==='1';}catch(e){}
     try{var tlg=localStorage.getItem('og6-tasklog');if(tlg)S.taskLog=JSON.parse(tlg)||{};}catch(e){}
     try{var tsk=localStorage.getItem('og6-taskskips');if(tsk)S.taskSkips=JSON.parse(tsk)||{};}catch(e){}
     var lt=localStorage.getItem('og6-leveltracks');if(lt)S.levelTracks=JSON.parse(lt);
@@ -2181,6 +2193,10 @@ function saveState(){
     localStorage.setItem('og6-medals',JSON.stringify(S.medals||[]));
     localStorage.setItem('og6-registries',JSON.stringify(S.registries||[]));
     localStorage.setItem('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
+    localStorage.setItem('og6-exlib',JSON.stringify(S.exerciseLib||[]));
+    localStorage.setItem('og6-setlib',JSON.stringify(S.setLib||[]));
+    localStorage.setItem('og6-timerbests',JSON.stringify(S.timerBests||{}));
+    localStorage.setItem('og6-regprefill',S.regPrefill===false?'0':'1');
     localStorage.setItem('og6-tasklog',JSON.stringify(S.taskLog||{}));
     localStorage.setItem('og6-taskskips',JSON.stringify(S.taskSkips||{}));
     localStorage.setItem('og6-leveltracks',JSON.stringify(S.levelTracks||[]));
@@ -2399,6 +2415,38 @@ function maxLevelTrackSlots(){
   var lvlBonus = getLevel(S.xp||0) >= 8 ? 1 : 0;
   var medalBonus = S.bonusTrackSlots || 0;
   return base + lvlBonus + medalBonus;
+}
+function trackAddXP(track, pts, label){
+  var oldLvl = getLevel(track.xp||0);
+  track.xp = Math.max(0,(track.xp||0) + pts);
+  track.log = (track.log||[]).concat([{d:todayStr(), x:pts, n:label||''}]).slice(-150);
+  var newLvl = getLevel(track.xp);
+  if(newLvl > oldLvl){
+    setTimeout(function(){
+      playSound('achievement');
+      showRewardToast('✦ '+esc(track.name)+' — ¡Nivel '+newLvl+'!', trackLevelName(track,newLvl));
+    }, 700);
+  }
+}
+// XP por registros: cada entrada real (no "esperada") de un registro enlazado suma los XP
+// elegidos, una sola vez por entrada. Si la entrada se borra o deja de contar, se quitan.
+function awardRegXP(reg, key){
+  if(S.simpleMode || !S.levelTracks || !reg) return;
+  S.levelTracks.forEach(function(tr){
+    var rs = (tr.regSources||[]).find(function(x){return x.regId===reg.id;}); if(!rs) return;
+    if(!tr.regAwarded) tr.regAwarded = {};
+    if(tr.regAwarded[key]!=null) return;
+    tr.regAwarded[key] = rs.xp;
+    trackAddXP(tr, rs.xp, reg.name);
+  });
+}
+function revokeRegXP(reg, key){
+  (S.levelTracks||[]).forEach(function(tr){
+    if(!tr.regAwarded || tr.regAwarded[key]==null) return;
+    var x = tr.regAwarded[key]; delete tr.regAwarded[key];
+    tr.xp = Math.max(0,(tr.xp||0)-x);
+    tr.log = (tr.log||[]).concat([{d:todayStr(), x:-x, n:(reg?reg.name:'Registro')+' (quitado)'}]).slice(-150);
+  });
 }
 function taskQualifiesForTrack(task, track){
   if(!task || !track || !track.source) return false;
@@ -4491,6 +4539,10 @@ function renderYoPreferenciasScreen(){
     '</div>'+
   '</div>';
 
+  html += '<div class="card" style="margin-top:10px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
+    '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Prellenar registros de tareas recurrentes</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5;">Al completar una tarea recurrente con registro, la ventana aparece con el monto o valores de la última vez. Apágalo si prefieres partir en blanco.</div></div>'+
+    '<button class="tog" onclick="toggleRegPrefill()" style="background:'+(S.regPrefill!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(S.regPrefill!==false?22:2)+'px;"></span></button></div></div>';
   return html;
 }
 function renderYoTemaScreen(){
@@ -4976,6 +5028,8 @@ function faqItems(){
       ['¿Para qué sirve la estrella (tarea crucial)?', T.crucial],
       ['¿Cómo duplico, muevo o elimino una tarea?', 'Toca el ⋯ de la tarea (o mantenla presionada): ahí puedes duplicarla (justo debajo, o a otro día), llevarla a otro día, añadirle un recordatorio, reordenar, seleccionar varias o eliminarla.'],
       ['¿Qué es un registro Sí / No?', 'Un hábito que marcas cada día como cumplido o no (vitaminas, dormir temprano, meditar...). Ves tu racha, el mapa de calor de las últimas 12 semanas y en qué día de la semana cumples más. Si lo asocias a una tarea, al completarla se marca “sí” solo.'],
+      ['¿Cómo personalizo el temporizador?', 'Cada ejercicio puede ser por tiempo o por cantidad (con meta de repeticiones), y puedes contar con toques en la pantalla. Mientras corre ves el ejercicio siguiente, tu mejor marca y puedes sumar +5 s o +15 s. En Yo → Temporizador eliges un sonido distinto para cada momento y subes el volumen hasta 300%. Guarda ejercicios y sets para reutilizarlos y agrégalos de a varios con “Agregar desde guardados”.'],
+      ['¿Un seguimiento puede sumar XP por un registro?', 'Sí. En el seguimiento activa los registros que quieras: cada entrada que anotes suma los XP que elijas, además de las tareas o la categoría que ya cuenten. Si borras la entrada, se quitan esos XP.'],
       ['¿Qué es la Constancia por tarea?', 'En Yo → Estadísticas: un mapa de calor con una celda por semana para cada tarea diaria recurrente (hecha, no hecha o ignorada). Puedes elegir si las semanas ignoradas cuentan como no hechas o no afectan tu cumplimiento ni tu racha. Se va llenando desde que empiezas a completar la tarea.'],
       ['¿Qué hace "Ignorar esta semana"?', 'En una tarea diaria, desde su ⋯: la deja en pausa solo durante la semana en curso (se ve atenuada, no se puede marcar y no cuenta en el porcentaje del día, el umbral de racha ni el calendario: se calculan solo con las tareas habilitadas). Se reactiva sola la semana siguiente, o antes con "Reactivar esta semana".'],
       ['¿Qué hay en el botón de opciones de Hoy?', 'Es el botón con ícono de ajustes, a la derecha de los filtros (Todas / Pendientes / categorías): Reordenar tareas, mostrar u ocultar el recordatorio de la semana, y un atajo a Yo → Personalización → Categorías para elegir cómo se pliegan las categorías.'],
@@ -5538,6 +5592,7 @@ function habitSet(regId, date, yes, extra){
   reg.entries = (reg.entries||[]).filter(function(e){return e.date!==date;});
   if(yes!==null) reg.entries.push(Object.assign({id:uid(), date:date, yes:!!yes, ts:Date.now()}, extra||{}));
   reg.updatedAt = new Date().toISOString();
+  if(yes===true) awardRegXP(reg, 'h:'+date); else revokeRegXP(reg, 'h:'+date);
   syncRegGoalsToPlan(reg);
   saveState(); refreshRegViews();
 }
@@ -5608,6 +5663,10 @@ function habitStatsHTML(reg){
   }
   return html;
 }
+function taskIsRecurring(t){
+  if(!t) return false;
+  return !(t.period==='dia' && t.date && !t.repeatEveryDays);
+}
 function regLastByLabel(reg, label){
   var es = regEntries(reg).filter(function(e){return (e.label||'')===label && e.status!=='expected';}).sort(function(a,b){return (b.ts||0)-(a.ts||0);});
   return es[0] || null;
@@ -5622,9 +5681,18 @@ function openRegEntry(regId, opts){
   var existing = opts.entryId ? regEntries(reg).find(function(e){return e.id===opts.entryId;}) : null;
   var last = existing || (opts.label ? regLastByLabel(reg, opts.label) : null) || regLastEntry(reg, opts.taskId||null);
   var confirming = !!(opts.confirm && existing && existing.status==='expected');
+  // Prellenado: en una tarea recurrente, la ventana parte con lo último que se anotó en ESA tarea.
+  var pf = null;
+  if(!existing && opts.fromTask && opts.taskId && S.regPrefill!==false){
+    var _pt = S.tasks.find(function(x){return x.id===opts.taskId;});
+    if(taskIsRecurring(_pt)){
+      pf = regEntries(reg).filter(function(e){ return e.taskId===opts.taskId && e.status!=='expected' && (opts.itemId ? e.itemId===opts.itemId : !e.itemId); })
+        .sort(function(a,b){return (b.ts||0)-(a.ts||0);})[0] || null;
+    }
+  }
   EN = {regId:regId, entryId:existing?existing.id:null, taskId:existing?(existing.taskId||null):(opts.taskId||null),
         itemId:existing?(existing.itemId||null):(opts.itemId||null), fromTask:!!opts.fromTask,
-        dir: existing?existing.dir:(last&&last.dir?last.dir:'out'),
+        dir: existing?existing.dir:(pf?pf.dir:(last&&last.dir?last.dir:'out')), prefill: pf,
         status: confirming ? 'done' : (existing ? (existing.status||'done') : 'done'),
         confirming: confirming,
         // Fecha propuesta: la del día al que pertenece lo que se registra (editable).
@@ -5645,12 +5713,13 @@ function regEntryBodyHTML(){
   var reg = regById(EN.regId), isFin = reg.kind==='finance', ex = EN.existing, last = EN.last;
   var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null;
   var labels = {}; regEntries(reg).forEach(function(e){ if(e.label) labels[e.label]=1; });
-  var labelVal = ex ? (ex.label||'') : (EN.presetLabel || (last && last.label ? last.label : ''));
+  var pf = EN.prefill; var labelVal = ex ? (ex.label||'') : (EN.presetLabel || (pf&&pf.label) || (last && last.label ? last.label : ''));
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
       '<span class="serif" style="font-weight:700;font-size:18px;">'+regIcon(reg)+' '+esc(reg.name)+'</span>'+
       '<button onclick="removeOverlay(\'reg-entry\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
-    (task?'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Tarea: '+esc(task.text)+(EN.presetLabel?' · ítem: '+esc(EN.presetLabel):'')+'</div>':'<div style="height:10px;"></div>');
+    (task?'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Tarea: '+esc(task.text)+(EN.presetLabel?' · ítem: '+esc(EN.presetLabel):'')+'</div>':'<div style="height:10px;"></div>')+
+    (pf&&!ex?'<div style="font-size:11.5px;color:var(--accent);background:var(--accent-bg);border-radius:9px;padding:7px 10px;margin:-6px 0 12px;line-height:1.4;">Prellenado con lo último que anotaste en esta tarea. Cámbialo si hace falta.</div>':'');
   if(isFin){
     var cur = reg.currency||'$';
     html += mSegHTML('en-dir-seg',[['out','Gasto'],['in','Ingreso']], EN.dir, 'enSetDir')+
@@ -5659,14 +5728,14 @@ function regEntryBodyHTML(){
       '<div id="en-amt-lbl">'+mSecLabel(enAmtLabel())+'</div>'+
       (EN.confirming?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperabas <b>'+fmtMoney(ex.amount,cur)+'</b>. Escribe lo que realmente '+(EN.dir==='in'?'recibiste':'pagaste')+'.</div>':'')+
       (!EN.confirming && ex && ex.status!=='expected' && ex.expectedAmount!=null?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperado: <b>'+fmtMoney(ex.expectedAmount,cur)+'</b> · diferencia: <b>'+fmtMoney(ex.amount-ex.expectedAmount,cur)+'</b></div>':'')+
-      '<input id="en-amount" class="finp" type="text" inputmode="decimal" placeholder="'+(last&&last.amount?('Último: '+fmtNum(last.amount)):'0')+'" value="'+(ex?fmtNum(ex.amount).replace(/\./g,''):'')+'" style="font-size:22px;font-weight:700;margin-bottom:14px;"/>'+
+      '<input id="en-amount" class="finp" type="text" inputmode="decimal" placeholder="'+(last&&last.amount?('Último: '+fmtNum(last.amount)):'0')+'" value="'+((!ex&&pf)?fmtNum(pf.amount).replace(/\./g,''):ex?fmtNum(ex.amount).replace(/\./g,''):'')+'" style="font-size:22px;font-weight:700;margin-bottom:14px;"/>'+
       mSecLabel('Concepto (opcional)')+
       '<input id="en-label" class="finp" type="text" list="en-labels" placeholder="Ej: Supermercado, Trabajo puntual" value="'+esc(labelVal)+'" style="margin-bottom:14px;"/>';
   } else {
     html += mSecLabel(reg.labelHint||'Concepto (opcional)')+
       '<input id="en-label" class="finp" type="text" list="en-labels" placeholder="'+esc(reg.labelHint||'')+'" value="'+esc(labelVal)+'" style="margin-bottom:14px;"/>';
     (reg.metrics||[]).forEach(function(m){
-      var cur2 = ex && ex.values && ex.values[m.id]!=null ? fmtNum(ex.values[m.id]).replace(/\./g,'') : '';
+      var cur2 = ex && ex.values && ex.values[m.id]!=null ? fmtNum(ex.values[m.id]).replace(/\./g,'') : ((!ex && pf && pf.values && pf.values[m.id]!=null) ? fmtNum(pf.values[m.id]).replace(/\./g,'') : '');
       var ph = last && last.values && last.values[m.id]!=null ? ('Último: '+fmtNum(last.values[m.id])) : '0';
       html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
         '<span style="font-size:13px;font-weight:600;color:var(--ink);flex:1;min-width:0;">'+esc(m.name)+'</span>'+
@@ -5723,6 +5792,7 @@ function saveRegEntry(){
   var wasRecord = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
   reg.entries = (reg.entries||[]).filter(function(e){return e.id!==entry.id;}).concat([entry]);
   reg.updatedAt = new Date().toISOString();
+  if(entry.status==='expected') revokeRegXP(reg, entry.id); else awardRegXP(reg, entry.id);
   syncRegGoalsToPlan(reg);
   saveState();
   removeOverlay('reg-entry');
@@ -5753,6 +5823,7 @@ function confirmDeleteRegEntry(){
   document.body.appendChild(box);
 }
 function deleteRegEntry(){
+  try{ var _rr=regById(EN.regId); if(_rr && EN.entryId) revokeRegXP(_rr, EN.entryId); }catch(e){}
   var reg = regById(EN.regId); if(!reg||!EN.entryId) return;
   reg.entries = (reg.entries||[]).map(function(e){ return e.id===EN.entryId ? Object.assign({},e,{del:true,ts:Date.now()}) : e; });
   reg.updatedAt = new Date().toISOString();
@@ -8043,6 +8114,7 @@ function confirmSimpleMode(){
   render();
   toast('Modo simplificado activado');
 }
+function toggleRegPrefill(){ S.regPrefill = S.regPrefill===false ? true : false; saveState(); render(); }
 function toggleSimpleModeFab(){
   S.simpleModeFabReset = !S.simpleModeFabReset;
   saveState();render();
@@ -9519,6 +9591,13 @@ function levelTrackColor(track, idx){
   return CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
 }
 function levelTrackSourceLabel(track){
+  var regs = (track.regSources||[]).map(function(rs){ var r=regById(rs.regId); return r?r.name:null; }).filter(Boolean);
+  var base = levelTrackSourceLabelBase(track);
+  var hasBase = track.source && ((track.source.type==='category' && track.source.categoryId) || (track.source.type==='manual' && (track.source.taskIds||[]).length));
+  if(!regs.length) return base;
+  return (hasBase?base+' + ':'')+'Registro'+(regs.length===1?'':'s')+': '+regs.join(', ');
+}
+function levelTrackSourceLabelBase(track){
   if(!track.source) return '';
   if(track.source.type==='category'){
     var cat=(S.categories||[]).find(function(c){return c.id===track.source.categoryId;});
@@ -9751,6 +9830,7 @@ function trackEditorBodyHTML(){
       '<button type="button" onclick="teSetSourceType(\'manual\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(isManual?'var(--accent)':'var(--line)')+';background:'+(isManual?'var(--accent)':'var(--paper)')+';color:'+(isManual?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Tareas elegidas a mano</button>'+
     '</div>'+
     '<div id="te-source-area">'+teSourceAreaHTML()+'</div>'+
+    '<div id="te-reg-area">'+teRegAreaHTML()+'</div>'+
     teColorAreaHTML()+
     teLevelNamesAreaHTML()+
     '<div style="display:flex;gap:8px;margin-top:20px;">'+
@@ -9901,6 +9981,28 @@ function teRerender(){
   var sheet = document.getElementById('te-sheet');
   if(sheet) sheet.innerHTML = trackEditorBodyHTML();
 }
+function teRegAreaHTML(){
+  var regs = regList(); var t = TE.track, cur = t.regSources||[];
+  var html = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 4px;">También suma experiencia por registros</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:8px;">Cada vez que anotas algo en el registro elegido, este seguimiento gana XP, aunque no sea una tarea. Combínalo con tareas o categoría para sumar por todo lo que te acerca a tu meta (ej. anotar tus rutas y además tus ejercicios de preparación física).</div>';
+  if(!regs.length) return html+'<div style="font-size:12px;color:var(--muted);">Aún no tienes registros. Créalos en Proyectos → Registros.</div>';
+  regs.forEach(function(r){
+    var rs = cur.find(function(x){return x.regId===r.id;});
+    html += '<div style="border:1.5px solid '+(rs?'var(--accent)':'var(--line)')+';background:'+(rs?'var(--accent-bg)':'var(--paper)')+';border-radius:12px;padding:9px 12px;margin-bottom:6px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+regIcon(r)+' '+esc(r.name)+'</span>'+
+      '<button type="button" class="tog" onclick="teToggleReg(\''+r.id+'\')" style="background:'+(rs?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(rs?22:2)+'px;"></span></button></div>'+
+      (rs?'<div style="display:flex;align-items:center;gap:6px;margin-top:8px;"><span style="font-size:11.5px;color:var(--muted);flex:1;">XP por '+(r.kind==='habit'?'día cumplido':'registro')+'</span>'+[1,3,5,10].map(function(x){ var on=rs.xp===x; return '<button type="button" onclick="teSetRegXp(\''+r.id+'\','+x+')" style="min-width:36px;padding:6px 8px;border-radius:9px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'var(--paper)')+';color:'+(on?'#fff':'var(--ink-soft)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+x+'</button>'; }).join('')+'</div>':'')+
+    '</div>';
+  });
+  return html;
+}
+function teRegRefresh(){ var el=document.getElementById('te-reg-area'); if(el) el.innerHTML=teRegAreaHTML(); }
+function teToggleReg(id){
+  var cur = (TE.track.regSources||[]).slice(), i = cur.findIndex(function(x){return x.regId===id;});
+  if(i===-1) cur.push({regId:id, xp:3}); else cur.splice(i,1);
+  TE.track.regSources = cur; teRegRefresh(); playSound('toggle');
+}
+function teSetRegXp(id,xp){ TE.track.regSources = (TE.track.regSources||[]).map(function(x){ return x.regId===id?{regId:id,xp:xp}:x; }); teRegRefresh(); }
 function teSetSourceType(type){
   if(type==='category'){
     var firstCat = (S.categories||[])[0];
@@ -9930,9 +10032,13 @@ function saveTrackEditor(){
   var name = (nameInp?nameInp.value:TE.track.name||'').trim();
   if(!name){ toast('Ponle un nombre al seguimiento'); return; }
   var src = TE.track.source;
-  if(!src || (src.type==='category' && !src.categoryId) || (src.type==='manual' && !(src.taskIds||[]).length)){
-    toast('Elige una categoría o al menos una tarea'); return;
+  var hasRegs = (TE.track.regSources||[]).length>0;
+  var srcEmpty = !src || (src.type==='category' && !src.categoryId) || (src.type==='manual' && !(src.taskIds||[]).length);
+  if(srcEmpty && !hasRegs){
+    toast('Elige una categoría, al menos una tarea o un registro'); return;
   }
+  if(srcEmpty) TE.track.source = {type:'manual', taskIds:[]};
+  if(!hasRegs) delete TE.track.regSources;
   TE.track.name = name;
   if(!S.levelTracks) S.levelTracks=[];
   if(TE.isNew){
@@ -9999,12 +10105,100 @@ function _timerGetCtx(){
   }catch(e){ return null; }
   return _timerCtx;
 }
-// Config por ejercicio (todo opcional; sin nada, se comporta como antes):
-//  · set.reps      → cuántas veces seguidas se repite ESE ejercicio cada vez que le toca
-//  · set.restReps  → descanso entre esas repeticiones (null = el descanso general entre ejercicios)
-//  · set.restAfter → descanso al terminar el ejercicio, antes del siguiente ejercicio — o, si es el
-//                    último de la vuelta, antes de la vuelta siguiente (null = el general que corresponda)
-function buildTimerSteps(timer){
+// ── Sonidos del temporizador ───────────────────────────────────────────────
+// Cada sonido = lista de notas [frecuencia, inicio(s), duración(s), onda, volumen, frecuenciaFinal?]
+var TIMER_SOUNDS = {
+  beep:    {label:'Pitido',        n:[[880,0,.16,'triangle',.18]]},
+  blip:    {label:'Pitido corto',  n:[[1400,0,.06,'square',.1]]},
+  tick:    {label:'Tic',           n:[[1000,0,.04,'square',.11]]},
+  double:  {label:'Doble pitido',  n:[[880,0,.1,'square',.12],[880,.16,.1,'square',.12]]},
+  triple:  {label:'Triple pitido', n:[[880,0,.09,'square',.12],[880,.14,.09,'square',.12],[1175,.28,.14,'square',.13]]},
+  chime:   {label:'Campanita',     n:[[659,0,.14,'sine',.16],[988,.12,.22,'sine',.18]]},
+  bell:    {label:'Campana',       n:[[1318,0,.7,'sine',.2],[2637,0,.45,'sine',.07]]},
+  gong:    {label:'Gong',          n:[[110,0,1.3,'sine',.32],[220,0,1.1,'sine',.15],[330,0,.9,'sine',.08]]},
+  rise:    {label:'Ascendente',    n:[[523,0,.12,'triangle',.17],[659,.11,.12,'triangle',.17],[784,.22,.22,'triangle',.18]]},
+  fall:    {label:'Descendente',   n:[[784,0,.12,'triangle',.17],[659,.11,.12,'triangle',.17],[523,.22,.22,'triangle',.18]]},
+  buzzer:  {label:'Zumbador',      n:[[196,0,.5,'sawtooth',.15]]},
+  horn:    {label:'Bocina',        n:[[311,0,.55,'sawtooth',.13],[466,0,.55,'sawtooth',.09]]},
+  whistle: {label:'Silbato',       n:[[1800,0,.4,'sine',.2,2600]]},
+  alarm:   {label:'Alarma',        n:[[880,0,.15,'square',.12],[660,.17,.15,'square',.12],[880,.34,.15,'square',.12],[660,.51,.15,'square',.12]]},
+  coin:    {label:'Moneda',        n:[[988,0,.08,'square',.1],[1319,.08,.32,'square',.1]]},
+  drum:    {label:'Golpe grave',   n:[[95,0,.28,'sine',.4,45]]},
+  soft:    {label:'Suave',         n:[[392,0,.24,'sine',.14]]},
+  fanfare: {label:'Fanfarria',     n:[[523.25,0,.16,'triangle',.18],[659.25,.13,.16,'triangle',.18],[784,.26,.16,'triangle',.18],[1046.5,.4,.34,'triangle',.18]]}
+};
+var TIMER_EVENTS = [
+  ['start','Inicio del entrenamiento','chime'],
+  ['work','Empieza un ejercicio','beep'],
+  ['rest','Empieza un descanso','soft'],
+  ['countdown','Segundos finales','tick'],
+  ['exerciseEnd','Fin de un ejercicio','bell'],
+  ['finish','Fin del entrenamiento','fanfare']
+];
+function timerCfgNorm(){
+  var c = S.timerCfg || {};
+  return {
+    countdownBeepSec: c.countdownBeepSec==null?3:c.countdownBeepSec,
+    volume: c.volume==null?1:Math.max(0,Math.min(3,c.volume)),
+    sounds: c.sounds||{}, snd: c.snd||{},
+    keepScreenOn: c.keepScreenOn!==false, vibrate: c.vibrate!==false, voice: !!c.voice
+  };
+}
+function timerEvOn(cfg,key){ return key==='exerciseEnd' ? cfg.sounds.exerciseEnd===true : cfg.sounds[key]!==false; }
+function timerEvSound(cfg,key){
+  var def = TIMER_EVENTS.find(function(e){return e[0]===key;});
+  var id = cfg.snd[key] || (def?def[2]:'beep');
+  return TIMER_SOUNDS[id] ? id : (def?def[2]:'beep');
+}
+// Cadena de salida: compresor + ganancia de maquillaje → se oye fuerte sin saturar,
+// incluso con música de fondo.
+function _timerBus(ctx){
+  if(ctx._tbus) return ctx._tbus;
+  var comp = ctx.createDynamicsCompressor();
+  try{ comp.threshold.value=-14; comp.knee.value=12; comp.ratio.value=10; comp.attack.value=0.003; comp.release.value=0.2; }catch(e){}
+  var makeup = ctx.createGain(); makeup.gain.value = 1.9;
+  comp.connect(makeup); makeup.connect(ctx.destination);
+  ctx._tbus = comp; return comp;
+}
+function _timerTone(ctx, at, freq, dur, type, peak, endFreq){
+  var osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.type = type||'sine';
+  osc.frequency.setValueAtTime(freq, at);
+  if(endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, at+dur);
+  gain.gain.setValueAtTime(0, at);
+  gain.gain.linearRampToValueAtTime(Math.max(0.0002,peak), at+0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, at+dur);
+  osc.connect(gain); gain.connect(_timerBus(ctx));
+  osc.start(at); osc.stop(at+dur+0.03);
+  return osc;
+}
+function playTimerSound(ctx, id, at, vol, pitch){
+  var snd = TIMER_SOUNDS[id] || TIMER_SOUNDS.beep, out = [];
+  snd.n.forEach(function(n){
+    out.push(_timerTone(ctx, at+n[1], n[0]*(pitch||1), n[2], n[3], (n[4]||0.15)*vol, n[5]?n[5]*(pitch||1):null));
+  });
+  return out;
+}
+function previewTimerSound(id){
+  var ctx=_timerGetCtx(); if(!ctx) return;
+  if(ctx.state==='suspended') ctx.resume();
+  playTimerSound(ctx, id, ctx.currentTime+0.02, timerCfgNorm().volume, 1);
+}
+function previewTimerVolume(){ previewTimerSound('bell'); }
+function timerPlayEv(key, at, pitch){
+  var ctx=_timerGetCtx(); if(!ctx||!TR) return;
+  var cfg=timerCfgNorm(); if(!timerEvOn(cfg,key)) return;
+  var t = Math.max(at, ctx.currentTime+0.01);
+  TR.scheduledOscillators = TR.scheduledOscillators.concat(playTimerSound(ctx, timerEvSound(cfg,key), t, cfg.volume, pitch));
+}
+// ── Pasos ──────────────────────────────────────────────────────────────────
+// Config por ejercicio (todo opcional):
+//  · set.kind  'time' (por defecto) | 'reps' (por cantidad: se avanza al terminar, sin tiempo fijo)
+//  · set.count meta de repeticiones (kind 'reps')
+//  · set.tap   contar con toques en la pantalla
+//  · set.reps / restReps / restAfter: vueltas del ejercicio y descansos propios
+var TIMER_OPEN_SEC = 86400;
+function buildTimerSteps(timer, runtime){
   var steps = [];
   var sets = timer.sets;
   for(var r=0; r<timer.rounds; r++){
@@ -10014,8 +10208,12 @@ function buildTimerSteps(timer){
       var isLastSet = i===sets.length-1, isLastRound = r===timer.rounds-1;
       var name = set.name||('Ejercicio '+(i+1));
       var color = set.color||CATEGORY_COLORS[i%CATEGORY_COLORS.length];
+      var isReps = set.kind==='reps', count = Math.max(1, set.count||10);
       for(var k=1; k<=reps; k++){
-        steps.push({type:'work', name:name, sec:Math.max(1,set.sec||30), color:color, round:r+1, totalRounds:timer.rounds, rep:k, reps:reps});
+        var st = {type:'work', name:name, key:(name||'').toLowerCase().trim(), color:color, round:r+1, totalRounds:timer.rounds, rep:k, reps:reps, tap:!!set.tap, kind:isReps?'reps':'time', n:0};
+        if(isReps){ st.count=count; st.open=true; st.estSec=Math.max(5,Math.round(count*3)); st.sec = runtime?TIMER_OPEN_SEC:st.estSec; }
+        else st.sec = Math.max(1,set.sec||30);
+        steps.push(st);
         if(k<reps){
           if(restReps>0) steps.push({type:'rest', name:'Descanso', sec:restReps, round:r+1, totalRounds:timer.rounds});
         } else if(!isLastSet){
@@ -10032,6 +10230,9 @@ function buildTimerSteps(timer){
   steps.forEach(function(s){ s.startAt=t; t+=s.sec; });
   return {steps:steps, totalSec:t};
 }
+function timerReflow(){
+  var t=0; TR.steps.forEach(function(s){ s.startAt=t; t+=s.sec; }); TR.totalSec=t;
+}
 function timerStepIndexAt(elapsed){
   var steps = TR.steps;
   for(var i=0;i<steps.length;i++){
@@ -10039,53 +10240,44 @@ function timerStepIndexAt(elapsed){
   }
   return steps.length-1;
 }
+function timerElapsed(){ var ctx=_timerGetCtx(); return (ctx&&TR) ? Math.max(0, ctx.currentTime - TR.audioStartCtxTime) : 0; }
 function cancelScheduledTimerAudio(){
   if(!TR) return;
   (TR.scheduledOscillators||[]).forEach(function(osc){ try{osc.stop(0);}catch(e){} });
   TR.scheduledOscillators = [];
 }
-// Programa el audio desde el paso fromIdx en adelante (usado al iniciar, y al
-// saltar de tramo). Nunca programa algo con tiempo ya pasado.
-function scheduleTimerAudioFrom(fromIdx){
+// Programa el audio desde el paso fromIdx. Los pasos "abiertos" (por cantidad) no tienen
+// final conocido: se programa hasta ellos y el resto se reprograma al terminarlos.
+function scheduleTimerAudioFrom(fromIdx, opts){
+  opts = opts||{};
   var ctx = _timerGetCtx();
   if(!ctx || !TR) return;
-  var cfg = S.timerCfg || {countdownBeepSec:3,volume:1,sounds:{}};
-  var vol = (cfg.volume==null?1:cfg.volume);
-  var sounds = cfg.sounds||{};
-  var steps = TR.steps;
-  var base = TR.audioStartCtxTime;
-  var now = ctx.currentTime;
-  if(fromIdx===0 && sounds.start!==false){
-    TR.scheduledOscillators.push(_sndTone(ctx, Math.max(base-0.05,now+0.01), 659.25, 0.14, 'sine', 0.16*vol));
-    TR.scheduledOscillators.push(_sndTone(ctx, Math.max(base+0.05,now+0.05), 987.77, 0.2, 'sine', 0.18*vol));
-  }
+  var cfg = timerCfgNorm(), steps = TR.steps, base = TR.audioStartCtxTime, now = ctx.currentTime;
+  if(fromIdx===0 && !opts.noStart) timerPlayEv('start', base-0.05);
+  var openAhead = false;
   for(var idx=fromIdx; idx<steps.length; idx++){
-    var step = steps[idx];
-    var stepAt = base + step.startAt;
+    var step = steps[idx], stepAt = base + step.startAt;
     if(idx>fromIdx || fromIdx>0){
       if(stepAt>=now-0.05){
-        if(step.type==='work' && sounds.work!==false){
-          TR.scheduledOscillators.push(_sndTone(ctx, Math.max(stepAt,now+0.02), 880, 0.16, 'triangle', 0.18*vol));
-        } else if((step.type==='rest'||step.type==='restRound') && sounds.rest!==false){
-          TR.scheduledOscillators.push(_sndTone(ctx, Math.max(stepAt,now+0.02), 392, 0.22, 'sine', 0.14*vol));
-        }
+        if(step.type==='work') timerPlayEv('work', stepAt);
+        else timerPlayEv('rest', stepAt);
       }
     }
-    if(sounds.countdown!==false && cfg.countdownBeepSec>0){
+    if(step.open){ openAhead = true; break; }
+    var endAt = stepAt + step.sec;
+    if(step.type==='work' && idx<steps.length-1 && endAt>=now-0.05) timerPlayEv('exerciseEnd', endAt);
+    if(cfg.countdownBeepSec>0 && timerEvOn(cfg,'countdown')){
       var n = Math.min(cfg.countdownBeepSec, step.sec-1);
       for(var s=n; s>=1; s--){
         var beepAt = stepAt + (step.sec-s);
         if(beepAt < now-0.05) continue;
-        var isLast = s===1;
-        TR.scheduledOscillators.push(_sndTone(ctx, Math.max(beepAt,now+0.01), isLast?987.77:698.46, 0.09, 'square', (isLast?0.16:0.11)*vol));
+        timerPlayEv('countdown', beepAt, s===1?1.35:1);
       }
     }
   }
-  var endAt = base + TR.totalSec;
-  if(sounds.finish!==false && endAt>=now-0.05){
-    [[523.25,0,0.16],[659.25,0.13,0.16],[784.0,0.26,0.16],[1046.5,0.4,0.32]].forEach(function(p){
-      TR.scheduledOscillators.push(_sndTone(ctx, Math.max(endAt+p[1],now+0.01), p[0], p[2], 'triangle', 0.18*vol));
-    });
+  if(!openAhead){
+    var finAt = base + TR.totalSec;
+    if(finAt>=now-0.05) timerPlayEv('finish', finAt);
   }
 }
 function timerRequestWakeLock(){
@@ -10101,12 +10293,13 @@ function timerReleaseWakeLock(){
   if(TR && TR.wakeLock){ try{TR.wakeLock.release();}catch(e){} TR.wakeLock=null; }
 }
 function buildTimerAndStart(taskId, timer, taskName, isPreview){
-  var built = buildTimerSteps(timer);
+  var built = buildTimerSteps(timer, true);
   if(!built.steps.length){ toast('Agrega al menos un ejercicio'); return; }
   TR = {
     taskId: isPreview?null:taskId, preview: !!isPreview, taskName: taskName,
     steps: built.steps, totalSec: built.totalSec,
-    scheduledOscillators: [], wakeLock:null, paused:false, finished:false, tickHandle:null
+    scheduledOscillators: [], wakeLock:null, paused:false, finished:false, tickHandle:null,
+    results: [], _lastIdx:-1, _frameKey:null
   };
   var ctx = _timerGetCtx();
   if(ctx){
@@ -10130,13 +10323,43 @@ function openTimerRun(taskId, previewConfig, previewName, isPreview){
   if(!t || !t.timer){ return; }
   buildTimerAndStart(taskId, t.timer, t.text, false);
 }
+// ── Mejores marcas (ejercicios por cantidad o con toques) ──────────────────
+function timerRecordBest(step){
+  if(!step || step.recorded || step.type!=='work') return;
+  step.recorded = true;
+  if(!(step.n>0) || !step.key) return;
+  var prev = ((S.timerBests||{})[step.key]||{}).n||0;
+  TR.results.push({name:step.name, n:step.n, prev:prev, pr:step.n>prev});
+  if(step.n>prev && !TR.preview){
+    if(!S.timerBests) S.timerBests = {};
+    S.timerBests[step.key] = {n:step.n, d:todayStr()};
+    saveState();
+  }
+}
+function timerSweepBests(upToIdx){
+  for(var i=0;i<upToIdx && i<TR.steps.length;i++) timerRecordBest(TR.steps[i]);
+}
+function timerSpeak(step){
+  if(!('speechSynthesis' in window)) return;
+  try{
+    var txt = step.type==='work' ? (step.name + (step.kind==='reps' ? ', '+step.count+' repeticiones' : '')) : (step.type==='restRound'?'Descanso entre vueltas':'Descanso');
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(txt); u.lang='es-ES'; u.volume=Math.min(1, timerCfgNorm().volume);
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
 function timerTick(){
   if(!TR || TR.finished) return;
-  var ctx = _timerGetCtx();
-  var elapsed = ctx ? Math.max(0, ctx.currentTime - TR.audioStartCtxTime) : 0;
-  if(elapsed >= TR.totalSec){
-    timerFinish();
-    return;
+  var elapsed = timerElapsed();
+  if(elapsed >= TR.totalSec){ timerFinish(); return; }
+  var idx = timerStepIndexAt(elapsed);
+  if(idx!==TR._lastIdx){
+    var first = TR._lastIdx===-1;
+    TR._lastIdx = idx;
+    timerSweepBests(idx);
+    var cfg = timerCfgNorm(), st = TR.steps[idx];
+    if(!first && cfg.vibrate) vibrate(st.type==='work'?[30,40,30]:18);
+    if(cfg.voice) timerSpeak(st);
   }
   timerRenderFrame();
 }
@@ -10145,12 +10368,13 @@ function timerFinish(){
   TR.finished = true;
   if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
   timerReleaseWakeLock();
-  vibrate(50);
+  timerSweepBests(TR.steps.length);
+  vibrate(timerCfgNorm().vibrate?[60,60,60]:50);
   if(!TR.preview && TR.taskId){
     var t = S.tasks.find(function(x){return x.id===TR.taskId;});
     if(t && !isDone(t)) tapTask(TR.taskId);
   }
-  timerRenderFrame();
+  timerRenderFrame(true);
 }
 function timerTogglePause(){
   if(!TR || TR.finished) return;
@@ -10166,25 +10390,73 @@ function timerTogglePause(){
     if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
     timerReleaseWakeLock();
   }
-  timerRenderFrame();
+  timerRenderFrame(true);
+}
+// Termina antes de tiempo un ejercicio "abierto" (por cantidad) y pasa al siguiente.
+function timerCompleteStep(){
+  if(!TR || TR.finished) return;
+  var ctx = _timerGetCtx(); if(!ctx) return;
+  var el = timerElapsed(), idx = timerStepIndexAt(el), st = TR.steps[idx];
+  if(!st || !st.open) return;
+  cancelScheduledTimerAudio();
+  if(!(st.n>0) && st.kind==='reps') st.n = st.count; // marcó "Listo" sin contar: cuenta como la meta
+  timerRecordBest(st);
+  st.sec = Math.max(1, el - st.startAt); st.open = false;
+  timerReflow();
+  timerPlayEv('exerciseEnd', ctx.currentTime);
+  scheduleTimerAudioFrom(idx+1<TR.steps.length ? idx+1 : idx, {noStart:true});
+  timerRenderFrame(true);
+}
+function timerAddTime(n){
+  if(!TR || TR.finished) return;
+  var ctx = _timerGetCtx(); if(!ctx) return;
+  var el = timerElapsed(), idx = timerStepIndexAt(el), st = TR.steps[idx];
+  if(!st || st.open) return;
+  st.sec += n; timerReflow();
+  cancelScheduledTimerAudio();
+  scheduleTimerAudioFrom(idx, {noStart:true});
+  vibrate(10);
+  timerRenderFrame(true);
+}
+function timerTap(ev){
+  if(ev && ev.preventDefault) ev.preventDefault();
+  if(!TR || TR.finished || TR.paused) return;
+  var el = timerElapsed(), idx = timerStepIndexAt(el), st = TR.steps[idx];
+  if(!st || st.type!=='work' || !st.tap) return;
+  st.n = (st.n||0) + 1;
+  var ctx = _timerGetCtx();
+  if(ctx){ if(ctx.state==='suspended') ctx.resume(); playTimerSound(ctx, 'blip', ctx.currentTime+0.01, timerCfgNorm().volume, 1); }
+  vibrate(8);
+  var c = document.getElementById('tr-n'); if(c) c.textContent = st.n;
+  if(st.kind==='reps' && st.n>=st.count) timerCompleteStep();
+}
+function timerTapUndo(ev){
+  if(ev){ if(ev.stopPropagation) ev.stopPropagation(); if(ev.preventDefault) ev.preventDefault(); }
+  if(!TR || TR.finished) return;
+  var idx = timerStepIndexAt(timerElapsed()), st = TR.steps[idx];
+  if(st && st.tap && st.n>0){ st.n--; var c=document.getElementById('tr-n'); if(c) c.textContent=st.n; }
 }
 function timerSkip(delta){
   if(!TR || TR.finished) return;
   var ctx = _timerGetCtx();
   if(!ctx) return;
-  cancelScheduledTimerAudio();
-  var elapsed = Math.max(0, ctx.currentTime - TR.audioStartCtxTime);
+  var elapsed = timerElapsed();
   var curIdx = timerStepIndexAt(elapsed);
+  if(delta>0 && TR.steps[curIdx].open){ timerCompleteStep(); return; }
+  cancelScheduledTimerAudio();
   var newIdx = Math.max(0, Math.min(TR.steps.length-1, curIdx+delta));
-  TR.audioStartCtxTime = ctx.currentTime - TR.steps[newIdx].startAt;
+  var ns = TR.steps[newIdx];
+  if(ns.kind==='reps' && !ns.open){ ns.open=true; ns.sec=TIMER_OPEN_SEC; ns.n=0; ns.recorded=false; timerReflow(); }
+  TR.audioStartCtxTime = ctx.currentTime - ns.startAt;
   scheduleTimerAudioFrom(newIdx);
-  timerRenderFrame();
+  timerRenderFrame(true);
 }
 function closeTimerRun(){
   if(TR){
     cancelScheduledTimerAudio();
     if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
     timerReleaseWakeLock();
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
   }
   TR = null;
   removeOverlay('timer-run');
@@ -10194,12 +10466,10 @@ function confirmExitTimerRun(){
   if(TR.finished){ closeTimerRun(); return; }
   var box=document.createElement('div');
   box.className='conf-box';
+  box.style.zIndex = 9000;
   box.innerHTML='<div class="conf-inner">'+
-    '<div style="text-align:center;margin-bottom:14px;">'+
-      '<div style="font-size:36px;margin-bottom:8px;">⏹️</div>'+
-      '<div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);">¿Salir del temporizador?</div>'+
-    '</div>'+
-    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">Se pierde el progreso de esta sesión. Si ya terminaste a tu modo, podés marcar la tarea como hecha a mano desde la lista.</div>'+
+    '<div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:10px;">¿Salir del temporizador?</div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">Se pierde el progreso de esta sesión. Si ya terminaste a tu modo, puedes marcar la tarea como hecha a mano desde la lista.</div>'+
     '<div style="display:flex;gap:8px;">'+
       '<button onclick="this.closest(\'.conf-box\').remove();closeTimerRun();" style="flex:1;background:var(--bad);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Salir</button>'+
       '<button onclick="this.closest(\'.conf-box\').remove()" style="flex:1;background:var(--bg);color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Seguir</button>'+
@@ -10216,56 +10486,104 @@ function showTimerRunOverlay(){
   overlay.style.justifyContent='stretch';
   overlay.innerHTML = '<div id="timer-run-body" style="width:100%;height:100%;display:flex;flex-direction:column;"></div>';
   document.body.appendChild(overlay);
-  timerRenderFrame();
+  timerRenderFrame(true);
 }
-function timerRenderFrame(){
+function timerFmt(sec){
+  sec = Math.max(0, Math.ceil(sec));
+  var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  return h>0 ? (h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s) : (m>0 ? (m+':'+(s<10?'0':'')+s) : String(s));
+}
+function timerNextWork(idx){
+  for(var i=idx+1;i<TR.steps.length;i++) if(TR.steps[i].type==='work') return TR.steps[i];
+  return null;
+}
+function timerRenderFrame(force){
   var body = document.getElementById('timer-run-body');
   if(!body || !TR) return;
   if(TR.finished){
+    if(TR._finShown && !force) return;
+    TR._finShown = true;
     body.style.background = 'linear-gradient(160deg, #1a1a1a, #000)';
-    body.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:24px;text-align:center;">'+
-      '<div style="font-size:60px;margin-bottom:12px;">✅</div>'+
-      '<div class="serif" style="font-size:22px;font-weight:700;margin-bottom:6px;">¡Listo!</div>'+
-      '<div style="font-size:14px;color:rgba(255,255,255,.7);margin-bottom:28px;">'+esc(TR.taskName)+'</div>'+
+    var res = TR.results||[];
+    body.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:24px;text-align:center;overflow-y:auto;">'+
+      '<div class="serif" style="font-size:26px;font-weight:700;margin-bottom:6px;">¡Listo!</div>'+
+      '<div style="font-size:14px;color:rgba(255,255,255,.7);margin-bottom:'+(res.length?16:28)+'px;">'+esc(TR.taskName)+' · '+timerFmt(timerElapsed()>TR.totalSec?TR.totalSec:TR.totalSec)+'</div>'+
+      (res.length?'<div style="width:100%;max-width:320px;margin-bottom:24px;">'+res.map(function(r){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(255,255,255,.1);border-radius:10px;margin-bottom:6px;font-size:13.5px;"><span>'+esc(r.name)+'</span><span style="font-weight:800;">'+r.n+(r.pr?' <span style="font-size:10px;background:#f5c25a;color:#111;border-radius:6px;padding:2px 6px;margin-left:4px;">RÉCORD</span>':(r.prev?' <span style="font-size:10.5px;opacity:.6;font-weight:500;">mejor '+r.prev+'</span>':''))+'</span></div>';
+      }).join('')+'</div>':'')+
       '<button onclick="closeTimerRun()" style="background:#fff;color:#111;border:none;border-radius:12px;padding:14px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
     '</div>';
     return;
   }
-  var ctx = _timerGetCtx();
-  var elapsed = ctx ? Math.max(0, ctx.currentTime - TR.audioStartCtxTime) : 0;
+  var elapsed = timerElapsed();
   var idx = timerStepIndexAt(elapsed);
   var step = TR.steps[idx];
-  var remaining = Math.max(0, Math.ceil(step.startAt+step.sec-elapsed));
-  var stepRatio = Math.min(1, Math.max(0, (elapsed-step.startAt)/step.sec));
-  var isRest = step.type!=='work';
-  var mm = Math.floor(remaining/60), ss = remaining%60;
-  var hh = Math.floor(remaining/3600), mi = Math.floor((remaining%3600)/60);
-  var timeLabel = hh>0 ? (hh+':'+(mi<10?'0':'')+mi+':'+(ss<10?'0':'')+ss)
-                : (mm>0 ? (mm+':'+(ss<10?'0':'')+ss) : String(remaining));
-  var bgColor = isRest ? '#20242b' : (step.color||'#2d8c70');
-  body.style.background = bgColor;
-  body.style.transition = 'background .5s ease';
-  body.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;padding-top:calc(16px + env(safe-area-inset-top,0px));">'+
-      '<button onclick="confirmExitTimerRun()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">×</button>'+
-      '<div style="color:rgba(255,255,255,.85);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Vuelta '+step.round+'/'+step.totalRounds+'</div>'+
-      '<div style="width:36px;"></div>'+
-    '</div>'+
-    '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:0 24px;text-align:center;">'+
-      '<div style="font-size:15px;font-weight:700;letter-spacing:.03em;color:rgba(255,255,255,.85);margin-bottom:'+(step.type==='work'&&step.reps>1?'4':'10')+'px;text-transform:uppercase;">'+esc(step.name||(isRest?'Descanso':'Ejercicio'))+'</div>'+
-      (step.type==='work'&&step.reps>1?'<div style="font-size:12.5px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px;">Serie '+step.rep+' de '+step.reps+'</div>':'')+
-      '<div style="font-size:'+(hh>0?66:92)+'px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;">'+timeLabel+'</div>'+
-      '<div style="width:180px;height:4px;background:rgba(255,255,255,.25);border-radius:4px;margin-top:22px;overflow:hidden;">'+
-        '<div style="width:'+Math.round(stepRatio*100)+'%;height:100%;background:#fff;"></div>'+
+  var isRest = step.type!=='work', isOpen = !!step.open;
+  var key = idx+'|'+(TR.paused?1:0)+'|'+(isOpen?1:0);
+  if(force || TR._frameKey!==key || !document.getElementById('tr-time')){
+    TR._frameKey = key;
+    var bg = isRest ? '#20242b' : (step.color||'#2d8c70');
+    body.style.background = bg; body.style.transition = 'background .5s ease';
+    var nxt = timerNextWork(idx);
+    var best = (step.type==='work' && step.key && (step.tap||step.kind==='reps')) ? ((S.timerBests||{})[step.key]||{}).n : 0;
+    var nWork = TR.steps.filter(function(x){return x.type==='work';}).length;
+    var curWork = TR.steps.slice(0,idx+1).filter(function(x){return x.type==='work';}).length;
+    var chips = '';
+    var chip = function(t){ return '<span style="background:rgba(255,255,255,.18);border-radius:14px;padding:5px 12px;font-size:12px;font-weight:700;">'+t+'</span>'; };
+    if(step.kind==='reps') chips += chip('Meta: '+step.count);
+    if(best) chips += chip('Mejor marca: '+best);
+    var main, sub='';
+    if(step.kind==='reps' && step.tap){ main = '<div id="tr-n" style="font-size:110px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;">'+(step.n||0)+'</div>'; sub = '<div style="font-size:14px;color:rgba(255,255,255,.75);margin-top:6px;">de '+step.count+' · toca la pantalla por cada repetición</div>'; }
+    else if(step.kind==='reps'){ main = '<div style="font-size:110px;font-weight:800;line-height:1;">'+step.count+'</div>'; sub = '<div style="font-size:14px;color:rgba(255,255,255,.75);margin-top:6px;">repeticiones · toca “Listo” al terminar</div>'; }
+    else {
+      main = '<div id="tr-time" style="font-size:92px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;"></div>';
+      if(step.tap) sub = '<div style="margin-top:14px;"><span style="font-size:12px;color:rgba(255,255,255,.7);display:block;margin-bottom:2px;">Toques contados</span><span id="tr-n" style="font-size:54px;font-weight:800;font-variant-numeric:tabular-nums;">'+(step.n||0)+'</span></div><div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;">toca la pantalla para contar</div>';
+    }
+    var timeEl = (step.kind==='reps') ? '<div id="tr-time" style="font-size:13px;color:rgba(255,255,255,.6);margin-top:12px;font-variant-numeric:tabular-nums;"></div>' : '';
+    if(step.kind==='reps') main = main.replace('<div id="tr-time"','<div id="tr-x"');
+    var ctrl = 'background:rgba(255,255,255,.15);border:none;color:#fff;cursor:pointer;font-family:Inter,sans-serif;';
+    body.innerHTML =
+      '<div style="padding:14px 18px 6px;padding-top:calc(14px + env(safe-area-inset-top,0px));">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;">'+
+          '<button onclick="confirmExitTimerRun()" style="'+ctrl+'width:36px;height:36px;border-radius:50%;font-size:18px;line-height:1;">×</button>'+
+          '<div style="color:rgba(255,255,255,.85);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;text-align:center;">'+(isRest?'Descanso':('Ejercicio '+curWork+'/'+nWork))+' · Vuelta '+step.round+'/'+step.totalRounds+'</div>'+
+          '<div id="tr-total" style="color:rgba(255,255,255,.75);font-size:12px;font-weight:700;min-width:36px;text-align:right;font-variant-numeric:tabular-nums;"></div>'+
+        '</div>'+
+        '<div style="height:4px;background:rgba(255,255,255,.2);border-radius:3px;margin-top:12px;overflow:hidden;"><div id="tr-wbar" style="height:100%;background:#fff;width:0%;"></div></div>'+
       '</div>'+
-      '<div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:10px;">Paso '+(idx+1)+' de '+TR.steps.length+'</div>'+
-    '</div>'+
-    '<div style="display:flex;align-items:center;justify-content:center;gap:22px;padding:24px;padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));">'+
-      '<button onclick="timerSkip(-1)" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:50px;height:50px;border-radius:50%;font-size:19px;cursor:pointer;">⏮</button>'+
-      '<button onclick="timerTogglePause()" style="background:#fff;border:none;color:#111;width:72px;height:72px;border-radius:50%;font-size:26px;cursor:pointer;">'+(TR.paused?'▶':'⏸')+'</button>'+
-      '<button onclick="timerSkip(1)" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:50px;height:50px;border-radius:50%;font-size:19px;cursor:pointer;">⏭</button>'+
-    '</div>'+
-    (TR.preview?'<div style="text-align:center;color:rgba(255,255,255,.55);font-size:11px;padding-bottom:10px;">Vista previa — no se guarda ni se marca como completada</div>':'');
+      '<div '+(step.tap?'onpointerdown="timerTap(event)"':'')+' style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:0 24px;text-align:center;'+(step.tap?'cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;':'')+'">'+
+        '<div style="font-size:16px;font-weight:700;letter-spacing:.03em;color:rgba(255,255,255,.9);margin-bottom:'+(step.type==='work'&&step.reps>1?'4':'10')+'px;text-transform:uppercase;">'+esc(step.name||(isRest?'Descanso':'Ejercicio'))+'</div>'+
+        (step.type==='work'&&step.reps>1?'<div style="font-size:12.5px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px;">Serie '+step.rep+' de '+step.reps+'</div>':'')+
+        main+sub+timeEl+
+        (chips?'<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px;">'+chips+'</div>':'')+
+        (step.kind!=='reps'?'<div style="width:180px;height:4px;background:rgba(255,255,255,.25);border-radius:4px;margin-top:20px;overflow:hidden;"><div id="tr-prog" style="width:0%;height:100%;background:#fff;"></div></div>':'')+
+        (step.tap?'<button onpointerdown="timerTapUndo(event)" style="'+ctrl+'margin-top:18px;border-radius:12px;padding:7px 14px;font-size:12px;font-weight:700;">−1</button>':'')+
+      '</div>'+
+      '<div style="padding:0 18px;">'+
+        (nxt && !(step.type==='work' && false) ? '<div style="background:rgba(0,0,0,.25);border-radius:12px;padding:9px 14px;color:#fff;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span style="opacity:.7;">'+(isRest?'A continuación':'Siguiente')+'</span><span style="font-weight:700;">'+esc(nxt.name)+' · '+(nxt.kind==='reps'?(nxt.count+' rep'):timerFmt(nxt.sec)+(nxt.sec<60?' s':''))+'</span></div>' : '<div style="text-align:center;color:rgba(255,255,255,.6);font-size:12px;margin-bottom:12px;">'+(isRest?'Último descanso':'Último ejercicio')+'</div>')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:0 18px 10px;">'+
+        (isOpen ? (step.tap && step.kind==='reps' ? '' : '<button onclick="timerCompleteStep()" style="flex:1;max-width:260px;background:#fff;color:#111;border:none;border-radius:14px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;">Listo</button>')
+                  : '<button onclick="timerAddTime(5)" style="'+ctrl+'border-radius:14px;padding:11px 18px;font-size:14px;font-weight:700;">+5 s</button><button onclick="timerAddTime(15)" style="'+ctrl+'border-radius:14px;padding:11px 18px;font-size:14px;font-weight:700;">+15 s</button>')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;justify-content:center;gap:22px;padding:6px 24px 20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));">'+
+        '<button onclick="timerSkip(-1)" aria-label="Anterior" style="'+ctrl+'width:50px;height:50px;border-radius:50%;font-size:19px;">⏮</button>'+
+        '<button onclick="timerTogglePause()" aria-label="Pausar" style="background:#fff;border:none;color:#111;width:72px;height:72px;border-radius:50%;font-size:26px;cursor:pointer;">'+(TR.paused?'▶':'⏸')+'</button>'+
+        '<button onclick="timerSkip(1)" aria-label="Siguiente" style="'+ctrl+'width:50px;height:50px;border-radius:50%;font-size:19px;">⏭</button>'+
+      '</div>'+
+      (TR.preview?'<div style="text-align:center;color:rgba(255,255,255,.55);font-size:11px;padding-bottom:10px;">Vista previa — no se guarda ni se marca como completada</div>':'');
+  }
+  // actualización liviana (sin reconstruir la pantalla: así los toques no se pierden)
+  var inStep = Math.max(0, elapsed-step.startAt);
+  var tEl = document.getElementById('tr-time') || document.getElementById('tr-x');
+  if(tEl){
+    if(isOpen) tEl.textContent = 'Tiempo en este ejercicio: '+timerFmt(inStep);
+    else tEl.textContent = timerFmt(step.startAt+step.sec-elapsed);
+  }
+  var xEl = document.getElementById('tr-x'); if(xEl && !isOpen) xEl.textContent = '';
+  var pr = document.getElementById('tr-prog'); if(pr) pr.style.width = Math.round(Math.min(1,inStep/step.sec)*100)+'%';
+  var wb = document.getElementById('tr-wbar'); if(wb) wb.style.width = Math.round(Math.min(1,(idx + (isOpen?Math.min(1,(step.n||0)/(step.count||1)):Math.min(1,inStep/step.sec)))/TR.steps.length)*100)+'%';
+  var tt = document.getElementById('tr-total'); if(tt) tt.textContent = timerFmt(elapsed);
 }
 // Re-adquirir el wake lock al volver a la pestaña (el sistema operativo lo
 // libera solo apenas la pestaña deja de estar visible, sea cual sea el
@@ -10291,83 +10609,76 @@ document.addEventListener('visibilitychange', function(){
 });
 // ── Yo → Temporizador: configuración global de sonidos y pantalla ──────────
 function timerCfgSummary(){
-  var cfg = S.timerCfg||{};
-  var on = Object.keys(cfg.sounds||{}).filter(function(k){return cfg.sounds[k]!==false;}).length;
-  var total = Object.keys(cfg.sounds||{}).length||5;
-  return on+'/'+total+' sonidos activos';
+  var cfg = timerCfgNorm();
+  var on = TIMER_EVENTS.filter(function(e){return timerEvOn(cfg,e[0]);}).length;
+  return on+'/'+TIMER_EVENTS.length+' sonidos · volumen '+Math.round(cfg.volume*100)+'%';
+}
+function tcfgToggleHTML(id, on, fn){
+  return '<button class="tog" id="'+id+'" onclick="'+fn+'" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button>';
 }
 function renderYoTemporizadorScreen(){
-  var cfg = S.timerCfg || {countdownBeepSec:3,volume:1,sounds:{},keepScreenOn:true};
-  var soundLabels = {start:'Inicio de la sesión', work:'Empieza un ejercicio', rest:'Empieza un descanso', countdown:'Cuenta regresiva (pitidos)', finish:'Final de la sesión'};
+  var cfg = timerCfgNorm();
   var html = '<div style="display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:14px;">Sonidos y pantalla del temporizador'+infoBtn('timercfg')+'</div>';
-
-  html += '<div class="fsec" style="margin-bottom:14px;">'+
-    '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Sonidos</div>';
-  Object.keys(soundLabels).forEach(function(key, i){
-    var on = cfg.sounds[key]!==false;
-    html += '<div class="frow" style="margin-bottom:'+(i<Object.keys(soundLabels).length-1?10:0)+'px;">'+
-      '<span style="font-size:13px;color:var(--ink);">'+soundLabels[key]+'</span>'+
-      '<button class="tog" id="tcfg-snd-'+key+'" onclick="toggleTimerSound(\''+key+'\')" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';">'+
-        '<span class="tok" style="left:'+(on?22:2)+'px;"></span>'+
-      '</button>'+
-    '</div>';
+  html += '<div class="fsec" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Sonido de cada momento</div>';
+  TIMER_EVENTS.forEach(function(e, i){
+    var key = e[0], on = timerEvOn(cfg,key), cur = timerEvSound(cfg,key);
+    html += '<div style="margin-bottom:'+(i<TIMER_EVENTS.length-1?14:0)+'px;">'+
+      '<div class="frow" style="margin-bottom:6px;"><span style="font-size:13px;font-weight:600;color:var(--ink);">'+e[1]+'</span>'+tcfgToggleHTML('tcfg-snd-'+key, on, 'toggleTimerSound(\''+key+'\')')+'</div>'+
+      '<div style="display:flex;gap:6px;align-items:center;">'+
+        '<select class="finp" onchange="setTimerSound(\''+key+'\',this.value)" style="flex:1;margin:0;font-size:13px;">'+
+          Object.keys(TIMER_SOUNDS).map(function(id){ return '<option value="'+id+'"'+(id===cur?' selected':'')+'>'+TIMER_SOUNDS[id].label+'</option>'; }).join('')+
+        '</select>'+
+        '<button type="button" onclick="previewTimerSound(timerEvSound(timerCfgNorm(),\''+key+'\'))" style="background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:0 14px;height:40px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">▶ Probar</button>'+
+      '</div></div>';
   });
   html += '</div>';
-
+  html += '<div class="fsec" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Segundos finales</div>'+
+    '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:13px;color:var(--ink);flex:1;">Sonar en los últimos...</span>'+
+    '<button class="qb" onclick="changeTimerBeepSec(-1)">−</button><span id="tcfg-beepsec" style="font-weight:700;min-width:60px;text-align:center;font-size:13px;">'+(cfg.countdownBeepSec>0?(cfg.countdownBeepSec+' seg'):'apagado')+'</span><button class="qb" onclick="changeTimerBeepSec(1)">+</button></div></div>';
+  html += '<div class="fsec" style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;"><span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Volumen</span><b id="tcfg-vol-lbl" style="font-size:13px;color:var(--ink);">'+Math.round(cfg.volume*100)+'%</b></div>'+
+    '<input type="range" min="0" max="300" step="10" value="'+Math.round(cfg.volume*100)+'" oninput="setTimerVolume(this.value)" onchange="previewTimerVolume()" style="width:100%;accent-color:var(--accent);"/>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">Pasa del 100% hasta 300% para que se distinga sobre la música. Se usa un limitador para que no distorsione. Al soltar la barra suena una muestra.</div></div>';
   html += '<div class="fsec" style="margin-bottom:14px;">'+
-    '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Cuenta regresiva</div>'+
-    '<div style="display:flex;align-items:center;gap:10px;">'+
-      '<span style="font-size:13px;color:var(--ink);flex:1;">Pitido en los últimos...</span>'+
-      '<button class="qb" onclick="changeTimerBeepSec(-1)">−</button>'+
-      '<span id="tcfg-beepsec" style="font-weight:700;min-width:60px;text-align:center;font-size:13px;">'+(cfg.countdownBeepSec>0?(cfg.countdownBeepSec+' seg'):'apagado')+'</span>'+
-      '<button class="qb" onclick="changeTimerBeepSec(1)">+</button>'+
-    '</div>'+
+    '<div class="frow" style="margin-bottom:12px;"><div style="flex:1;padding-right:10px;"><div style="font-size:13px;font-weight:600;color:var(--ink);">Vibrar al cambiar de paso</div></div>'+tcfgToggleHTML('tcfg-vibrate', cfg.vibrate, 'toggleTimerOpt(\'vibrate\')')+'</div>'+
+    '<div class="frow" style="margin-bottom:12px;"><div style="flex:1;padding-right:10px;"><div style="font-size:13px;font-weight:600;color:var(--ink);">Anunciar el ejercicio con voz</div><div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Dice en voz alta el nombre del ejercicio al empezar (depende de la voz de tu teléfono).</div></div>'+tcfgToggleHTML('tcfg-voice', cfg.voice, 'toggleTimerOpt(\'voice\')')+'</div>'+
+    '<div class="frow"><div style="flex:1;padding-right:10px;"><div style="font-size:13px;font-weight:600;color:var(--ink);">Mantener la pantalla encendida</div><div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Mientras corre el temporizador, para no perderte la cuenta regresiva.</div></div>'+tcfgToggleHTML('tcfg-wakelock', cfg.keepScreenOn, 'toggleTimerKeepScreen()')+'</div>'+
   '</div>';
-
-  html += '<div class="fsec" style="margin-bottom:14px;">'+
-    '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Volumen</div>'+
-    '<input type="range" min="0" max="100" value="'+Math.round((cfg.volume==null?1:cfg.volume)*100)+'" oninput="setTimerVolume(this.value)" style="width:100%;accent-color:var(--accent);"/>'+
-  '</div>';
-
-  html += '<div class="fsec">'+
-    '<div class="frow">'+
-      '<div style="flex:1;padding-right:10px;">'+
-        '<div style="font-size:13px;font-weight:600;color:var(--ink);">Mantener la pantalla encendida</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Mientras corre el temporizador, para no perderte la cuenta regresiva.</div>'+
-      '</div>'+
-      '<button class="tog" id="tcfg-wakelock" onclick="toggleTimerKeepScreen()" style="background:'+(cfg.keepScreenOn!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
-        '<span class="tok" style="left:'+(cfg.keepScreenOn!==false?22:2)+'px;"></span>'+
-      '</button>'+
-    '</div>'+
-  '</div>'+
-  '';
-
   return html;
 }
+function _tcfgSet(){ if(!S.timerCfg) S.timerCfg={}; if(!S.timerCfg.sounds) S.timerCfg.sounds={}; if(!S.timerCfg.snd) S.timerCfg.snd={}; }
+function _tcfgPaint(id,on){ var tog=document.getElementById(id); if(tog){ tog.style.background=on?'var(--accent)':'var(--muted-soft)'; var k=tog.querySelector('.tok'); if(k)k.style.left=(on?22:2)+'px'; } }
 function toggleTimerSound(key){
-  if(!S.timerCfg.sounds) S.timerCfg.sounds={};
-  S.timerCfg.sounds[key] = S.timerCfg.sounds[key]===false ? true : false;
-  var tog=document.getElementById('tcfg-snd-'+key);
-  if(tog){var on=S.timerCfg.sounds[key]!==false;tog.style.background=on?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(on?22:2)+'px';}
-  saveState();
-  playSound('toggle');
+  _tcfgSet();
+  var on = timerEvOn(timerCfgNorm(), key);
+  S.timerCfg.sounds[key] = !on;
+  _tcfgPaint('tcfg-snd-'+key, !on);
+  saveState(); playSound('toggle');
+}
+function setTimerSound(key, id){
+  _tcfgSet(); S.timerCfg.snd[key] = id; saveState(); previewTimerSound(id);
+}
+function toggleTimerOpt(key){
+  _tcfgSet(); S.timerCfg[key] = !timerCfgNorm()[key];
+  _tcfgPaint(key==='vibrate'?'tcfg-vibrate':'tcfg-voice', S.timerCfg[key]);
+  saveState(); playSound('toggle');
 }
 function changeTimerBeepSec(delta){
-  S.timerCfg.countdownBeepSec = Math.max(0, Math.min(10, (S.timerCfg.countdownBeepSec||0)+delta));
+  _tcfgSet();
+  S.timerCfg.countdownBeepSec = Math.max(0, Math.min(10, (timerCfgNorm().countdownBeepSec||0)+delta));
   var el=document.getElementById('tcfg-beepsec');
   if(el) el.textContent = S.timerCfg.countdownBeepSec>0 ? (S.timerCfg.countdownBeepSec+' seg') : 'apagado';
   saveState();
 }
 function setTimerVolume(val){
-  S.timerCfg.volume = Math.max(0, Math.min(1, (parseInt(val,10)||0)/100));
+  _tcfgSet();
+  S.timerCfg.volume = Math.max(0, Math.min(3, (parseInt(val,10)||0)/100));
+  var l=document.getElementById('tcfg-vol-lbl'); if(l) l.textContent = Math.round(S.timerCfg.volume*100)+'%';
   saveState();
 }
 function toggleTimerKeepScreen(){
-  S.timerCfg.keepScreenOn = S.timerCfg.keepScreenOn===false ? true : false;
-  var tog=document.getElementById('tcfg-wakelock');
-  if(tog){var on=S.timerCfg.keepScreenOn!==false;tog.style.background=on?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(on?22:2)+'px';}
-  saveState();
-  playSound('toggle');
+  _tcfgSet(); S.timerCfg.keepScreenOn = S.timerCfg.keepScreenOn===false ? true : false;
+  _tcfgPaint('tcfg-wakelock', S.timerCfg.keepScreenOn!==false);
+  saveState(); playSound('toggle');
 }
 function renderProgress(){
   if(S.simpleMode){
@@ -12936,7 +13247,7 @@ var INFO_TIPS = {
   regtask:'Asocia la tarea a un registro: al completarla se abre una hoja rápida para anotar el monto o la marca (puedes omitirla, la tarea queda completa igual). Si la tarea tiene checklist, activa "Registrar por ítem" para anotar cada ítem por separado al marcarlo. La fecha propuesta es la del día de la tarea (editable). También desde el ⋯ de la tarea → "Registrar ahora".',
   reglimit:'Plan gratuito: 1 registro de finanzas y 1 de marcas. Acceso completo: hasta 5. Al llegar al nivel 10 se suma 1 cupo extra.',
   regmet:'Cada métrica lleva su unidad (kg, km, min, bloques...) y si "mejor" es más alto (peso) o más bajo (tiempo), para calcular récords. El campo "concepto" separa ejercicios distintos, ej. "Press de banca".',
-  timercfg:'Estos ajustes valen para todas las tareas con temporizador. Los sonidos usan el audio del sistema, así que siguen sonando si cambias de app (depende de que el navegador mantenga la pestaña activa).'
+  timercfg:'Estos ajustes valen para todas las tareas con temporizador. Elige un sonido distinto para cada momento (inicio, ejercicio, descanso, segundos finales, fin de ejercicio y fin del entrenamiento) y sube el volumen hasta 300% si escuchas música a la vez. Siguen sonando si cambias de app (depende de que el navegador mantenga la pestaña activa).'
 };
 function infoBtn(key){
   return '<button type="button" class="ibtn" aria-label="Más información" onclick="showTip(\''+key+'\',event)">i</button>';
@@ -13721,6 +14032,100 @@ function confirmSaveTimerTemplate(){
   var b = document.querySelector('.conf-box'); if(b) b.remove();
   saveState(); mRerenderTimerArea(); toast('✓ Plantilla guardada');
 }
+function mergeLibById(local, cloudArr){
+  var map = {};
+  (local||[]).forEach(function(t){ map[t.id]=t; });
+  (cloudArr||[]).forEach(function(c){ var l=map[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) map[c.id]=c; });
+  return Object.keys(map).map(function(k){return map[k];});
+}
+function exLibList(){ return (S.exerciseLib||[]).filter(function(x){return !x.del;}); }
+function setLibList(){ return (S.setLib||[]).filter(function(x){return !x.del;}); }
+function stripSetId(set){ var c = JSON.parse(JSON.stringify(set)); delete c.id; return c; }
+function promptName(title, defVal, cb){
+  window._pnCb = cb;
+  var box = document.createElement('div'); box.className='conf-box'; box.style.zIndex = 9000;
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;">'+esc(title)+'</div>'+
+    '<input id="pn-input" class="finp" maxlength="30" value="'+esc(defVal||'')+'"/>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="var v=document.getElementById(\'pn-input\').value.trim();if(!v){toast(\'Ponle un nombre\');return;}this.closest(\'.conf-box\').remove();window._pnCb(v);">Guardar</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button></div></div>';
+  document.body.appendChild(box);
+  setTimeout(function(){ var i=document.getElementById('pn-input'); if(i){ i.focus(); i.select(); } },50);
+}
+function timerSetSaveBtnHTML(set){
+  return '<button type="button" onclick="saveSetAsExercise(\''+set.id+'\')" style="width:100%;margin-top:10px;background:none;border:1.5px dashed var(--accent);color:var(--accent);border-radius:9px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Guardar este ejercicio en mi biblioteca</button>';
+}
+function saveSetAsExercise(setId){
+  var set = M.timer.sets.find(function(x){return x.id===setId;}); if(!set) return;
+  promptName('Nombre del ejercicio', set.name||'', function(name){
+    if(!S.exerciseLib) S.exerciseLib=[];
+    S.exerciseLib.push({id:uid(), name:name, set:Object.assign(stripSetId(set),{name:name}), updatedAt:Date.now()});
+    saveState(); toast('Ejercicio guardado');
+  });
+}
+function saveAllAsSet(){
+  if(!M.timer.sets.some(function(x){return (x.name||'').trim();})){ toast('Ponle nombre a tus ejercicios antes de guardar el set'); }
+  promptName('Nombre del set', '', function(name){
+    if(!S.setLib) S.setLib=[];
+    S.setLib.push({id:uid(), name:name, sets:M.timer.sets.map(stripSetId), updatedAt:Date.now()});
+    saveState(); toast('Set guardado');
+  });
+}
+function timerLibButtonsHTML(){
+  var n = timerTplList().length + setLibList().length + exLibList().length;
+  var b = 'flex:1;background:var(--bg);border:1.5px solid var(--line);border-radius:8px;padding:8px;color:var(--ink-soft);font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;';
+  return '<div style="display:flex;gap:6px;margin-top:6px;"><button type="button" onclick="openTimerLibPicker()" style="'+b+'">Agregar desde guardados'+(n?' ('+n+')':'')+'</button>'+(M._tplEdit?'':'<button type="button" onclick="saveAllAsSet()" style="'+b+'">Guardar como set</button>')+'</div>';
+}
+var TLP = null;
+function openTimerLibPicker(){
+  TLP = {sel:{}};
+  removeOverlay('tlib');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='tlib'; ov.style.zIndex = 700;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('tlib'); });
+  ov.innerHTML = '<div class="sheet" id="tlib-sheet">'+tlibBodyHTML()+'</div>';
+  document.body.appendChild(ov);
+}
+function tlibSummary(sets){ var tot=0; try{ tot=timerEstimateTotalSec({sets:sets,rounds:1,restBetween:0,restBetweenRounds:0}); }catch(e){} return sets.length+' ejercicio'+(sets.length===1?'':'s')+' · '+fmtDur(tot); }
+function tlibBodyHTML(){
+  var sec = function(title, items){
+    if(!items.length) return '';
+    return '<div style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">'+title+'</div>'+items.map(function(it){
+      var on = !!TLP.sel[it.key];
+      return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';border-radius:12px;margin-bottom:6px;cursor:pointer;"><input type="checkbox" '+(on?'checked':'')+' onchange="tlibToggle(\''+it.key+'\')" style="width:17px;height:17px;accent-color:var(--accent);flex-shrink:0;"/><span style="flex:1;min-width:0;"><span style="display:block;font-size:13.5px;font-weight:700;color:var(--ink);">'+esc(it.name)+'</span><span style="display:block;font-size:11px;color:var(--muted);margin-top:1px;">'+it.sub+'</span></span></label>';
+    }).join('');
+  };
+  var tpls = timerTplList().map(function(t){ return {key:'tpl:'+t.id, name:t.name, sub:'Plantilla · '+tlibSummary((t.timer&&t.timer.sets)||[])}; });
+  var sets = setLibList().map(function(t){ return {key:'set:'+t.id, name:t.name, sub:'Set · '+tlibSummary(t.sets||[])}; });
+  var exs = exLibList().map(function(t){ var st=t.set||{}; return {key:'ex:'+t.id, name:t.name, sub:'Ejercicio · '+(st.kind==='reps'?((st.count||10)+' repeticiones'):fmtDur(st.sec||30))+(st.tap?' · con toques':'')}; });
+  var n = Object.keys(TLP.sel).length;
+  var empty = !tpls.length && !sets.length && !exs.length;
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:19px;">Agregar desde guardados</span><button onclick="removeOverlay(\'tlib\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Elige varios a la vez: se agregan al temporizador en orden (plantillas, sets y ejercicios).</div>'+
+    (empty?'<div style="text-align:center;padding:26px 8px;font-size:13px;color:var(--muted);line-height:1.6;">Todavía no tienes nada guardado.<br>Guarda ejercicios con el ⚙ de cada uno, o un set completo con “Guardar como set”.</div>':'')+
+    sec('Plantillas',tpls)+sec('Sets',sets)+sec('Ejercicios',exs)+
+    '<button onclick="tlibApply()" '+(n?'':'disabled')+' style="width:100%;margin-top:14px;background:'+(n?'var(--accent)':'var(--line)')+';color:'+(n?'#fff':'var(--muted)')+';border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:'+(n?'pointer':'default')+';font-family:Inter,sans-serif;">'+(n?'Agregar ('+n+')':'Elige algo para agregar')+'</button>';
+}
+function tlibToggle(key){ if(TLP.sel[key]) delete TLP.sel[key]; else TLP.sel[key]=true; var sh=document.getElementById('tlib-sheet'); if(sh) sh.innerHTML=tlibBodyHTML(); }
+function tlibApply(){
+  var keys = Object.keys(TLP.sel); if(!keys.length) return;
+  var order = {tpl:0,set:1,ex:2};
+  keys.sort(function(a,b){ return order[a.split(':')[0]]-order[b.split(':')[0]]; });
+  var add = [], firstTpl = null;
+  keys.forEach(function(k){
+    var kind=k.split(':')[0], id=k.slice(kind.length+1);
+    if(kind==='tpl'){ var t=timerTplList().find(function(x){return x.id===id;}); if(t){ if(!firstTpl) firstTpl=t; (t.timer.sets||[]).forEach(function(x){ add.push(stripSetId(x)); }); } }
+    else if(kind==='set'){ var t2=setLibList().find(function(x){return x.id===id;}); if(t2) (t2.sets||[]).forEach(function(x){ add.push(Object.assign({},x)); }); }
+    else { var t3=exLibList().find(function(x){return x.id===id;}); if(t3) add.push(Object.assign({},t3.set)); }
+  });
+  var cur = M.timer.sets;
+  var pristine = cur.length===1 && !(cur[0].name||'').trim() && !cur[0].tap && cur[0].kind!=='reps';
+  var base = pristine ? [] : cur.slice();
+  if(pristine && keys.length===1 && firstTpl){ M.timer.rounds=firstTpl.timer.rounds||1; M.timer.restBetween=firstTpl.timer.restBetween; M.timer.restBetweenRounds=firstTpl.timer.restBetweenRounds; }
+  var room = 20-base.length;
+  if(add.length>room) toast('Máximo 20 ejercicios: se agregaron '+room);
+  add.slice(0,Math.max(0,room)).forEach(function(x,i){ var c=Object.assign({},x,{id:uid()}); if(!c.color) c.color=CATEGORY_COLORS[(base.length+i)%CATEGORY_COLORS.length]; base.push(c); });
+  M.timer.sets = base; M._timerOpenSet = null;
+  removeOverlay('tlib'); TLP=null;
+  mRerenderTimerArea(); playSound('add');
+}
 function mergeTimerTemplates(cloud){
   var map = {};
   (S.timerTemplates||[]).forEach(function(t){ map[t.id]=t; });
@@ -13747,23 +14152,27 @@ function renderTimerTemplatesSection(){
   });
   if(!list.length) html += '<div style="text-align:center;font-size:12px;color:var(--muted);padding:10px 0 4px;">Aún no tienes temporizadores propios.</div>';
   html += '<button onclick="openTimerTplEditor(null)" style="width:100%;background:var(--accent-bg);border:1.5px dashed var(--accent);color:var(--accent);border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-top:6px;">＋ Nuevo temporizador</button>';
-  return html;
+  return html + timerLibSectionsHTML();
 }
 var TTE = null;
-function openTimerTplEditor(id){
-  if(!id && timerTplList().length>=12){ toast('Máximo 12 plantillas de temporizador'); return; }
-  var t = id ? timerTplList().find(function(x){return x.id===id;}) : null;
-  TTE = {id:id||null, name:t?t.name:'', prevM:(typeof M!=='undefined'?M:null)};
-  M = {isNew:true, _tplEdit:true, task:{}, clFresh:false, timer:t?JSON.parse(JSON.stringify(t.timer)):defaultTimerConfig(), _timerOpenSet:null};
+function openTimerTplEditor(id, mode){
+  mode = mode||'tpl';
+  if(!id && mode==='tpl' && timerTplList().length>=12){ toast('Máximo 12 plantillas de temporizador'); return; }
+  var t = null, timer = null;
+  if(id && mode==='tpl'){ t = timerTplList().find(function(x){return x.id===id;}); if(t) timer = JSON.parse(JSON.stringify(t.timer)); }
+  if(id && mode==='set'){ t = setLibList().find(function(x){return x.id===id;}); if(t) timer = {sets:JSON.parse(JSON.stringify(t.sets)).map(function(x){x.id=uid();return x;}), rounds:1, restBetween:0, restBetweenRounds:0}; }
+  TTE = {id:id||null, mode:mode, name:t?t.name:'', prevM:(typeof M!=='undefined'?M:null)};
+  M = {isNew:true, _tplEdit:true, task:{}, clFresh:false, timer:timer||defaultTimerConfig(), _timerOpenSet:null};
   removeOverlay('tpl-timer');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='tpl-timer';
   ov.addEventListener('click',function(e){ if(e.target===ov) closeTimerTplEditor(); });
+  var what = mode==='set' ? 'set de ejercicios' : 'plantilla de temporizador';
   ov.innerHTML = '<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(id?'Editar':'Nueva')+' plantilla de temporizador</span>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(id?'Editar':'Nuevo')+' '+what+'</span>'+
     '<button onclick="closeTimerTplEditor()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<input id="tte-name" class="finp" placeholder="Nombre (ej. Lectura 30/5)" maxlength="30" value="'+esc(TTE.name)+'" oninput="TTE.name=this.value" style="margin-bottom:14px;"/>'+
+    '<input id="tte-name" class="finp" placeholder="Nombre (ej. '+(mode==='set'?'Calentamiento':'Lectura 30/5')+')" maxlength="30" value="'+esc(TTE.name)+'" oninput="TTE.name=this.value" style="margin-bottom:14px;"/>'+
     '<div id="m-timer-area">'+timerAreaHTML()+'</div>'+
-    '<div style="display:flex;gap:8px;margin-top:18px;"><button onclick="saveTimerTplEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar plantilla</button></div>'+
+    '<div style="display:flex;gap:8px;margin-top:18px;"><button onclick="saveTimerTplEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button></div>'+
   '</div>';
   document.body.appendChild(ov);
 }
@@ -13773,12 +14182,48 @@ function closeTimerTplEditor(){
 }
 function saveTimerTplEditor(){
   var name = ((document.getElementById('tte-name')||{}).value||TTE.name||'').trim();
-  if(!name){ toast('Ponle un nombre a la plantilla'); return; }
-  if(!S.timerTemplates) S.timerTemplates = [];
+  if(!name){ toast('Ponle un nombre'); return; }
   var tm = JSON.parse(JSON.stringify(M.timer));
-  if(TTE.id) S.timerTemplates = S.timerTemplates.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,timer:tm,updatedAt:Date.now()}) : x; });
-  else S.timerTemplates.push({id:uid(), name:name, timer:tm, updatedAt:Date.now()});
-  saveState(); closeTimerTplEditor(); render(); toast('✓ Plantilla guardada');
+  if(TTE.mode==='set'){
+    if(!S.setLib) S.setLib = [];
+    var sets = tm.sets.map(stripSetId);
+    if(TTE.id) S.setLib = S.setLib.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,sets:sets,updatedAt:Date.now()}) : x; });
+    else S.setLib.push({id:uid(), name:name, sets:sets, updatedAt:Date.now()});
+  } else {
+    if(!S.timerTemplates) S.timerTemplates = [];
+    if(TTE.id) S.timerTemplates = S.timerTemplates.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,timer:tm,updatedAt:Date.now()}) : x; });
+    else S.timerTemplates.push({id:uid(), name:name, timer:tm, updatedAt:Date.now()});
+  }
+  saveState(); closeTimerTplEditor(); render(); toast('Guardado');
+}
+function deleteLibItem(kind, id){
+  var key = kind==='set' ? 'setLib' : 'exerciseLib';
+  S[key] = (S[key]||[]).map(function(x){ return x.id===id ? Object.assign({},x,{del:true,updatedAt:Date.now()}) : x; });
+  saveState(); render(); toast('Eliminado');
+}
+function renameLibItem(kind, id){
+  var key = kind==='set' ? 'setLib' : 'exerciseLib';
+  var it = (S[key]||[]).find(function(x){return x.id===id;}); if(!it) return;
+  promptName('Cambiar nombre', it.name, function(v){ S[key] = S[key].map(function(x){ return x.id===id ? Object.assign({},x,{name:v,updatedAt:Date.now()}) : x; }); saveState(); render(); });
+}
+function timerLibSectionsHTML(){
+  var sets = setLibList(), exs = exLibList();
+  var head = function(t,n){ return '<div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:26px 0 8px;">'+t+' ('+n+')</div>'; };
+  var btn = 'background:none;border:1.5px solid var(--line);border-radius:7px;padding:4px 10px;font-size:11px;color:var(--muted);cursor:pointer;';
+  var html = head('Sets de ejercicios', sets.length)+'<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Grupos de ejercicios reutilizables (ej. un calentamiento). Los eliges junto con plantillas y ejercicios al armar un temporizador.</div>';
+  sets.forEach(function(t){
+    html += '<div class="card" style="display:flex;align-items:center;gap:10px;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+tlibSummary(t.sets||[])+'</div></div>'+
+      '<button onclick="openTimerTplEditor(\''+t.id+'\',\'set\')" style="'+btn+'">Editar</button><button onclick="deleteLibItem(\'set\',\''+t.id+'\')" style="'+btn+'color:var(--bad);">×</button></div>';
+  });
+  html += '<button onclick="openTimerTplEditor(null,\'set\')" style="width:100%;background:var(--bg);border:1.5px dashed var(--line);color:var(--ink-soft);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">＋ Nuevo set</button>';
+  html += head('Ejercicios guardados', exs.length);
+  exs.forEach(function(t){
+    var st = t.set||{};
+    html += '<div class="card" style="display:flex;align-items:center;gap:10px;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(st.kind==='reps'?((st.count||10)+' repeticiones'):fmtDur(st.sec||30))+(st.tap?' · con toques':'')+'</div></div>'+
+      '<button onclick="renameLibItem(\'ex\',\''+t.id+'\')" style="'+btn+'">Nombre</button><button onclick="deleteLibItem(\'ex\',\''+t.id+'\')" style="'+btn+'color:var(--bad);">×</button></div>';
+  });
+  if(!exs.length) html += '<div style="text-align:center;font-size:12px;color:var(--muted);padding:6px 0;line-height:1.5;">Guarda un ejercicio desde su ⚙ al armar un temporizador.</div>';
+  return html;
 }
 function deleteTimerTemplate(id){
   S.timerTemplates = (S.timerTemplates||[]).map(function(x){ return x.id===id ? Object.assign({},x,{del:true,updatedAt:Date.now()}) : x; });
@@ -13797,22 +14242,23 @@ function timerQuickDurHTML(set){
 function timerSetRowHTML(set, idx){
   var col = set.color || CATEGORY_COLORS[idx%CATEGORY_COLORS.length];
   var open = M._timerOpenSet===set.id;
-  var custom = (set.reps>1) || set.restReps!=null || set.restAfter!=null;
+  var custom = (set.reps>1) || set.restReps!=null || set.restAfter!=null || set.kind==='reps' || !!set.tap;
   var html = '<div style="border-bottom:1px solid var(--line-soft);">'+
     '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;">'+
       '<button type="button" onclick="mCycleTimerSetColor(\''+set.id+'\')" title="Tocar para cambiar el color" style="width:22px;height:22px;border-radius:50%;background:'+col+';flex-shrink:0;cursor:pointer;border:2px solid var(--paper);box-shadow:0 0 0 1.5px var(--line);padding:0;"></button>'+
       '<input type="text" placeholder="Ejercicio '+(idx+1)+'" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:6px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
-      durInputHTML(set.sec||30,'set',set.id,'sec',false)+
+      (set.kind==='reps' ? repsInputHTML(set) : durInputHTML(set.sec||30,'set',set.id,'sec',false))+
       '<button type="button" onclick="mToggleTimerSetOpen(\''+set.id+'\')" title="Ajustes de este ejercicio" style="background:'+(open||custom?'var(--accent-bg)':'none')+';border:1.5px solid '+(open||custom?'var(--accent)':'var(--line)')+';color:'+(open||custom?'var(--accent)':'var(--muted)')+';border-radius:8px;height:26px;padding:0 7px;font-size:11px;font-weight:700;flex-shrink:0;cursor:pointer;font-family:Inter,sans-serif;">⚙'+(set.reps>1?' ×'+set.reps:'')+'</button>'+
       '<button type="button" onclick="mRemoveTimerSet(\''+set.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:18px;flex-shrink:0;cursor:pointer;line-height:1;">×</button>'+
     '</div>';
   if(open){
     var isLast = idx===M.timer.sets.length-1;
     html += '<div style="background:var(--bg);border-radius:10px;padding:4px 12px 8px;margin:0 0 10px;">'+
-      timerQuickDurHTML(set)+
+      timerSetKindHTML(set)+(set.kind==='reps'?'':timerQuickDurHTML(set))+
       timerSetStepperHTML(set,'reps','Vueltas de este ejercicio','',1)+
       (set.reps>1?timerSetStepperHTML(set,'restReps','Descanso entre sus vueltas','s',5):'')+
       timerSetStepperHTML(set,'restAfter', isLast?(M.timer.rounds>1?'Descanso antes de la siguiente vuelta general':'Descanso al terminar'):'Descanso antes del siguiente ejercicio','s',5)+
+      timerSetSaveBtnHTML(set)+
     '</div>';
   }
   return html+'</div>';
@@ -13884,7 +14330,7 @@ function timerAreaHTML(){
   var totalSec = timerEstimateTotalSec(timer);
   var mm = Math.floor(totalSec/60), ss = totalSec%60;
   var html = timerPresetsHTML()+'<div id="timer-sets-list">'+timer.sets.map(function(s,i){return timerSetRowHTML(s,i);}).join('')+'</div>'+
-    '<button type="button" onclick="mAddTimerSet()" style="width:100%;margin-top:8px;background:none;border:1.5px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;">+ Agregar ejercicio</button>'+
+    '<button type="button" onclick="mAddTimerSet()" style="width:100%;margin-top:8px;background:none;border:1.5px dashed var(--line);border-radius:8px;padding:8px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;">+ Agregar ejercicio</button>'+timerLibButtonsHTML()+
     '<div style="height:1px;background:var(--line-soft);margin:14px 0 4px;"></div>'+
     timerFieldStepperHTML('Vueltas de toda la rutina','rounds',1,'')+
     timerDurFieldHTML('Descanso entre ejercicios (general)','restBetween')+
@@ -13903,11 +14349,24 @@ function mUpdateTimerSet(setId, field, val){
     if(s.id!==setId) return s;
     var updated = Object.assign({},s);
     if(field==='sec') updated.sec = Math.max(1, Math.min(TIMER_MAX_SEC, parseInt(val,10)||30));
+    else if(field==='count') updated.count = Math.max(1,Math.min(999,parseInt(val,10)||10));
     else updated[field] = val;
     return updated;
   });
-  if(field==='sec') mRerenderTimerArea(); // por el total estimado; el nombre no necesita repintar (perdería foco)
+  if(field==='sec' || field==='count') mRerenderTimerArea(); // por el total estimado; el nombre no necesita repintar (perdería foco)
 }
+function repsInputHTML(set){
+  return '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;"><input type="number" inputmode="numeric" min="1" max="999" value="'+(set.count||10)+'" onchange="mUpdateTimerSet(\''+set.id+'\',\'count\',this.value)" style="width:54px;text-align:center;border:1.5px solid var(--line);border-radius:8px;padding:5px 2px;font-size:14px;font-weight:700;background:var(--paper);color:var(--ink);font-family:Inter,sans-serif;"/><span style="font-size:11px;color:var(--muted);">rep</span></div>';
+}
+function timerSetKindHTML(set){
+  var isReps = set.kind==='reps';
+  var b = function(k,l,on){ return '<button type="button" onclick="mSetSetKind(\''+set.id+'\',\''+k+'\')" style="flex:1;padding:7px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'var(--paper)')+';color:'+(on?'#fff':'var(--ink-soft)')+';border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+l+'</button>'; };
+  return '<div style="font-size:11px;color:var(--muted);margin:8px 0 5px;">Tipo de ejercicio</div><div style="display:flex;gap:6px;">'+b('time','Por tiempo',!isReps)+b('reps','Por cantidad',isReps)+'</div>'+
+    '<div class="frow" style="margin-top:10px;"><div style="flex:1;padding-right:8px;"><div style="font-size:12.5px;font-weight:600;color:var(--ink);">Contar con toques en la pantalla</div><div style="font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.4;">'+(isReps?'Cada toque suma una repetición y avanza solo al llegar a la meta.':'Cuenta cuántas veces tocas durante el tiempo y guarda tu mejor marca.')+'</div></div>'+
+    '<button type="button" class="tog" onclick="mToggleSetTap(\''+set.id+'\')" style="background:'+(set.tap?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(set.tap?22:2)+'px;"></span></button></div>';
+}
+function mSetSetKind(id,k){ M.timer.sets = M.timer.sets.map(function(s){ return s.id===id ? Object.assign({},s,{kind:k, count:s.count||10}) : s; }); mRerenderTimerArea(); }
+function mToggleSetTap(id){ M.timer.sets = M.timer.sets.map(function(s){ return s.id===id ? Object.assign({},s,{tap:!s.tap}) : s; }); mRerenderTimerArea(); }
 function mAddTimerSet(){
   if(M.timer.sets.length>=20){ toast('Máximo 20 ejercicios por temporizador'); return; }
   M.timer.sets.push({id:uid(), name:'', sec:30, color:CATEGORY_COLORS[M.timer.sets.length%CATEGORY_COLORS.length]});
@@ -16352,7 +16811,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.02.2';
+var APP_VERSION = '2026.10.02.3';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
