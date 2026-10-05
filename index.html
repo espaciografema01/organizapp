@@ -1712,6 +1712,7 @@ var S = {
   // Registros (finanzas y marcas) — ver openRegEditor / mergeRegistries
   registries:[],
   exerciseLib:[], setLib:[], exerciseGroups:[], timerBests:{}, regPrefill:true,
+  planWeekKey:null, // si se reinició la semana el fin de semana: clave de ESA semana → se muestran las fechas de la siguiente
   taskLog:{}, taskSkips:{}, // bitácora de cumplimiento por tarea y semanas ignoradas
   timerTemplates:[], // plantillas de temporizador propias (Energía → Plantillas)
   streak:{days:0,lastDate:null,total:0},
@@ -1827,9 +1828,21 @@ function todayIdx(){var d=new Date().getDay();return d===0?6:d-1;}
 // Número de día del mes (01, 02...) para un día de semana (0=Lun..6=Dom)
 // DENTRO de la semana actual — para mostrarlo junto al nombre ("Lunes 07").
 // Fecha (YYYY-MM-DD) del día de semana dowIdx (0=lunes) dentro de la semana en curso.
+// Tras reiniciar la semana un sábado o domingo, la app pasa a mostrar la SEMANA SIGUIENTE (fechas y claves).
+// Se apaga sola el lunes: ahí la semana real coincide con la que ya se estaba mostrando.
+function weekPlanOffsetDays(){ return (S.planWeekKey && S.planWeekKey===getWeekKey()) ? 7 : 0; }
+function planWeekKey(){
+  if(!weekPlanOffsetDays()) return getWeekKey();
+  var t = new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()-todayIdx()+7);
+  return getWeekKey(t);
+}
+function weekPlanBadgeHTML(){
+  return weekPlanOffsetDays() ? ' <span style="font-size:9.5px;font-weight:700;color:var(--accent);background:var(--accent-bg);border-radius:8px;padding:2px 7px;vertical-align:middle;margin-left:4px;">próxima semana</span>' : '';
+}
+function markWeekRolled(){ if(isWeekend()){ S.planWeekKey = getWeekKey(); } }
 function weekdayDateKey(dowIdx){
   var today = new Date(); today.setHours(0,0,0,0);
-  var monday = new Date(today); monday.setDate(today.getDate() - todayIdx());
+  var monday = new Date(today); monday.setDate(today.getDate() - todayIdx() + weekPlanOffsetDays());
   var d = new Date(monday); d.setDate(monday.getDate() + dowIdx);
   return localDateStr(d);
 }
@@ -1847,7 +1860,7 @@ function taskEntryDate(t){
 }
 function weekdayDateNum(dowIdx){
   var today = new Date(); today.setHours(0,0,0,0);
-  var monday = new Date(today); monday.setDate(today.getDate() - todayIdx());
+  var monday = new Date(today); monday.setDate(today.getDate() - todayIdx() + weekPlanOffsetDays());
   var d = new Date(monday); d.setDate(monday.getDate() + dowIdx);
   return String(d.getDate()).padStart(2,'0');
 }
@@ -2007,11 +2020,11 @@ function checklistSatisfied(t){
 // Pedido: poder ignorar una tarea diaria solo por la semana en curso (t.skippedWeek
 // guarda la clave de semana). Se reactiva sola la semana siguiente porque la clave
 // deja de coincidir.
-function isSkipped(t){ return !!(t && t.period==='dia' && t.skippedWeek && t.skippedWeek===getWeekKey()); }
+function isSkipped(t){ return !!(t && t.period==='dia' && t.skippedWeek && t.skippedWeek===planWeekKey()); }
 function toggleSkipTaskWeek(id){
   var t=S.tasks.find(function(x){return x.id===id;}); if(!t) return;
   var on = isSkipped(t);
-  S.tasks = S.tasks.map(function(x){ if(x.id!==id) return x; var u=Object.assign({},x); if(on) delete u.skippedWeek; else u.skippedWeek=getWeekKey(); return u; });
+  S.tasks = S.tasks.map(function(x){ if(x.id!==id) return x; var u=Object.assign({},x); if(on) delete u.skippedWeek; else u.skippedWeek=planWeekKey(); return u; });
   if(!S.taskSkips) S.taskSkips = {};
   var mon = weekdayDateKey(0), arr = (S.taskSkips[id]||[]).filter(function(k){return k!==mon;});
   if(!on) arr.push(mon);
@@ -2102,6 +2115,7 @@ function loadState(){
     try{var slb=localStorage.getItem('og6-setlib');if(slb)S.setLib=JSON.parse(slb)||[];}catch(e){}
     try{var tbs=localStorage.getItem('og6-timerbests');if(tbs)S.timerBests=JSON.parse(tbs)||{};}catch(e){}
     try{var rpf=localStorage.getItem('og6-regprefill');if(rpf!==null)S.regPrefill=rpf==='1';}catch(e){}
+    try{var pwk=localStorage.getItem('og6-planweek');if(pwk)S.planWeekKey=pwk;}catch(e){}
     try{var tlg=localStorage.getItem('og6-tasklog');if(tlg)S.taskLog=JSON.parse(tlg)||{};}catch(e){}
     try{var tsk=localStorage.getItem('og6-taskskips');if(tsk)S.taskSkips=JSON.parse(tsk)||{};}catch(e){}
     var lt=localStorage.getItem('og6-leveltracks');if(lt)S.levelTracks=JSON.parse(lt);
@@ -2156,89 +2170,112 @@ function loadState(){
     document.body.className='theme-'+S.theme+' task-size-medium';applyVisualCustomizations();
   }catch(e){S.xp=0;S.prevLvl=1;}
 }
+// Guardado: cada cambio llama a saveState(), pero lo que se escribe se agrupa (cada ~250 ms) y solo se
+// reescriben las claves que realmente cambiaron. Si la app pasa a segundo plano o se cierra, se guarda al instante.
+var _lsCache = {}, _saveTimer = null, _savePending = false;
+function _lsSet(k, v){
+  if(_lsCache[k]===v) return;
+  localStorage.setItem(k, v);
+  _lsCache[k] = v;
+}
 function saveState(){
+  _savePending = true;
+  if(_saveTimer) return;
+  _saveTimer = setTimeout(function(){ _saveTimer = null; flushSaveState(); }, 250);
+}
+function flushSaveState(){
+  if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; }
+  if(!_savePending) return;
+  _savePending = false;
+  _saveStateNow();
+}
+document.addEventListener('visibilitychange', function(){ if(document.hidden) flushSaveState(); });
+window.addEventListener('pagehide', flushSaveState);
+window.addEventListener('beforeunload', flushSaveState);
+function _saveStateNow(){
   try{
-    localStorage.setItem('og6-tasks',JSON.stringify(S.tasks));
-    localStorage.setItem('og6-modes',JSON.stringify(S.modes));
-    localStorage.setItem('og6-baja',JSON.stringify(S.bajaEnergia));
-    localStorage.setItem('og6-active',JSON.stringify(S.activeMode));
-    localStorage.setItem('og6-xp',String(S.xp));
-    localStorage.setItem('og6-streak',JSON.stringify(S.streak));
-    localStorage.setItem('og6-scfg',JSON.stringify(S.streakCfg));
-    localStorage.setItem('og6-streakdisabled',S.streakDisabled?'1':'0');
-    localStorage.setItem('og6-rewarded',JSON.stringify(S.rewardedTaskIds));
-    localStorage.setItem('og6-blocks',JSON.stringify(S.taskBlocks));
-    localStorage.setItem('og6-theme',S.theme);
-    localStorage.setItem('og6-bgcolor',S.bgColorOverride||'default');
-    localStorage.setItem('og6-showmodetips',S.showModeTips===false?'0':'1');
-    localStorage.setItem('og6-showweeklymessage',S.showWeeklyMessage===false?'0':'1');
-    localStorage.setItem('og6-collapsedcats',JSON.stringify(S.collapsedCats||{}));
-    localStorage.setItem('og6-soundon',S.soundOn===false?'0':'1');
-    localStorage.setItem('og6-layout',S.interfaceLayout||'default');
-    localStorage.setItem('og6-hiperfoco',JSON.stringify(S.hiperfoco||{}));
-    localStorage.setItem('og6-templates',JSON.stringify(S.templates||[]));
-    localStorage.setItem('og6-categories',JSON.stringify(S.categories||[]));
-    localStorage.setItem('og6-tutorialseen',S.tutorialSeen?'1':'0');
-    localStorage.setItem('og6-weekschedule',JSON.stringify(S.weekSchedule||{}));
-    localStorage.setItem('og6-projects',JSON.stringify(S.projects||[]));
-    localStorage.setItem('og6-weeklymsg',JSON.stringify(S.weeklyMessages||{}));
-    if(S.activeTemplate)localStorage.setItem('og6-activetemplate',S.activeTemplate);
+    _lsSet('og6-tasks',JSON.stringify(S.tasks));
+    _lsSet('og6-modes',JSON.stringify(S.modes));
+    _lsSet('og6-baja',JSON.stringify(S.bajaEnergia));
+    _lsSet('og6-active',JSON.stringify(S.activeMode));
+    _lsSet('og6-xp',String(S.xp));
+    _lsSet('og6-streak',JSON.stringify(S.streak));
+    _lsSet('og6-scfg',JSON.stringify(S.streakCfg));
+    _lsSet('og6-streakdisabled',S.streakDisabled?'1':'0');
+    _lsSet('og6-rewarded',JSON.stringify(S.rewardedTaskIds));
+    _lsSet('og6-blocks',JSON.stringify(S.taskBlocks));
+    _lsSet('og6-theme',S.theme);
+    _lsSet('og6-bgcolor',S.bgColorOverride||'default');
+    _lsSet('og6-showmodetips',S.showModeTips===false?'0':'1');
+    _lsSet('og6-showweeklymessage',S.showWeeklyMessage===false?'0':'1');
+    _lsSet('og6-collapsedcats',JSON.stringify(S.collapsedCats||{}));
+    _lsSet('og6-soundon',S.soundOn===false?'0':'1');
+    _lsSet('og6-layout',S.interfaceLayout||'default');
+    _lsSet('og6-hiperfoco',JSON.stringify(S.hiperfoco||{}));
+    _lsSet('og6-templates',JSON.stringify(S.templates||[]));
+    _lsSet('og6-categories',JSON.stringify(S.categories||[]));
+    _lsSet('og6-tutorialseen',S.tutorialSeen?'1':'0');
+    _lsSet('og6-weekschedule',JSON.stringify(S.weekSchedule||{}));
+    _lsSet('og6-projects',JSON.stringify(S.projects||[]));
+    _lsSet('og6-weeklymsg',JSON.stringify(S.weeklyMessages||{}));
+    if(S.activeTemplate)_lsSet('og6-activetemplate',S.activeTemplate);
     else localStorage.removeItem('og6-activetemplate');
-    if(S.taskBackup)localStorage.setItem('og6-taskbackup',JSON.stringify(S.taskBackup));
+    if(S.taskBackup)_lsSet('og6-taskbackup',JSON.stringify(S.taskBackup));
     else localStorage.removeItem('og6-taskbackup');
-    if(S.modeTaskBackup)localStorage.setItem('og6-modetaskbackup',JSON.stringify(S.modeTaskBackup));
+    if(S.modeTaskBackup)_lsSet('og6-modetaskbackup',JSON.stringify(S.modeTaskBackup));
     else localStorage.removeItem('og6-modetaskbackup');
-    localStorage.setItem('og6-dailyhistory',JSON.stringify(S.dailyHistory||{}));
-    localStorage.setItem('og6-xphistory',JSON.stringify(S.xpHistory||{}));
-    localStorage.setItem('og6-vacaciones',JSON.stringify(S.vacaciones||{}));
-    localStorage.setItem('og6-achievements',JSON.stringify(S.achievements||[]));
-    localStorage.setItem('og6-medals',JSON.stringify(S.medals||[]));
-    localStorage.setItem('og6-registries',JSON.stringify(S.registries||[]));
-    localStorage.setItem('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
-    localStorage.setItem('og6-exlib',JSON.stringify(S.exerciseLib||[]));
-    localStorage.setItem('og6-setlib',JSON.stringify(S.setLib||[]));
-    localStorage.setItem('og6-exgroups',JSON.stringify(S.exerciseGroups||[]));
-    localStorage.setItem('og6-timerbests',JSON.stringify(S.timerBests||{}));
-    localStorage.setItem('og6-regprefill',S.regPrefill===false?'0':'1');
-    localStorage.setItem('og6-tasklog',JSON.stringify(S.taskLog||{}));
-    localStorage.setItem('og6-taskskips',JSON.stringify(S.taskSkips||{}));
-    localStorage.setItem('og6-leveltracks',JSON.stringify(S.levelTracks||[]));
-    localStorage.setItem('og6-bonustrackslots',String(S.bonusTrackSlots||0));
-    localStorage.setItem('og6-timercfg',JSON.stringify(S.timerCfg||{}));
-    localStorage.setItem('og6-visithistory',JSON.stringify(S.visitHistory||{}));
-    localStorage.setItem('og6-themesused',JSON.stringify(S.themesUsed||[]));
-    localStorage.setItem('og6-bajaused',String(S.bajaUsedCount||0));
-    localStorage.setItem('og6-vacused',String(S.vacacionesUsedCount||0));
-    localStorage.setItem('og6-hfused',String(S.hiperfocoUsedCount||0));
-    localStorage.setItem('og6-resetused',String(S.resetUsedCount||0));
-    localStorage.setItem('og6-bonuslimit',String(S.bonusTaskLimit||0));
-    if(S.userName)localStorage.setItem('og6-username',S.userName);
-    if(S.userPhrase)localStorage.setItem('og6-userphrase',S.userPhrase);
+    _lsSet('og6-dailyhistory',JSON.stringify(S.dailyHistory||{}));
+    _lsSet('og6-xphistory',JSON.stringify(S.xpHistory||{}));
+    _lsSet('og6-vacaciones',JSON.stringify(S.vacaciones||{}));
+    _lsSet('og6-achievements',JSON.stringify(S.achievements||[]));
+    _lsSet('og6-medals',JSON.stringify(S.medals||[]));
+    _lsSet('og6-registries',JSON.stringify(S.registries||[]));
+    _lsSet('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
+    _lsSet('og6-exlib',JSON.stringify(S.exerciseLib||[]));
+    _lsSet('og6-setlib',JSON.stringify(S.setLib||[]));
+    _lsSet('og6-exgroups',JSON.stringify(S.exerciseGroups||[]));
+    _lsSet('og6-timerbests',JSON.stringify(S.timerBests||{}));
+    _lsSet('og6-regprefill',S.regPrefill===false?'0':'1');
+    _lsSet('og6-tasklog',JSON.stringify(S.taskLog||{}));
+    _lsSet('og6-planweek',S.planWeekKey||'');
+    _lsSet('og6-taskskips',JSON.stringify(S.taskSkips||{}));
+    _lsSet('og6-leveltracks',JSON.stringify(S.levelTracks||[]));
+    _lsSet('og6-bonustrackslots',String(S.bonusTrackSlots||0));
+    _lsSet('og6-timercfg',JSON.stringify(S.timerCfg||{}));
+    _lsSet('og6-visithistory',JSON.stringify(S.visitHistory||{}));
+    _lsSet('og6-themesused',JSON.stringify(S.themesUsed||[]));
+    _lsSet('og6-bajaused',String(S.bajaUsedCount||0));
+    _lsSet('og6-vacused',String(S.vacacionesUsedCount||0));
+    _lsSet('og6-hfused',String(S.hiperfocoUsedCount||0));
+    _lsSet('og6-resetused',String(S.resetUsedCount||0));
+    _lsSet('og6-bonuslimit',String(S.bonusTaskLimit||0));
+    if(S.userName)_lsSet('og6-username',S.userName);
+    if(S.userPhrase)_lsSet('og6-userphrase',S.userPhrase);
     else localStorage.removeItem('og6-demoplan');
-    if(S.notifPermission)localStorage.setItem('og6-notifperm',S.notifPermission);
-    if(S.notifAskedDate)localStorage.setItem('og6-notifasked',S.notifAskedDate);
-    if(S.resetNotifShown)localStorage.setItem('og6-resetnotif',S.resetNotifShown);
-    if(S.lastAutoReset)localStorage.setItem('og6-lastauto',S.lastAutoReset);
-    localStorage.setItem('og6-autoreset',JSON.stringify(S.autoReset||{}));
-    localStorage.setItem('og6-periodautoseen',JSON.stringify(S.periodAutoSeen||{}));
-    localStorage.setItem('og6-periodresetused',JSON.stringify(S.periodResetUsed||{}));
-    localStorage.setItem('og6-simplemode',S.simpleMode?'1':'0');
-    localStorage.setItem('og6-listdensity',S.listDensity||'normal');
-    localStorage.setItem('og6-simplemodefabreset',S.simpleModeFabReset===false?'0':'1');
-    localStorage.setItem('og6-calsubtab',S.calendariosSubTab||'semanal');
-    localStorage.setItem('og6-ganttweekends',S.ganttHideWeekends?'1':'0');
-    if(S.userAvatar) localStorage.setItem('og6-useravatar',S.userAvatar);
+    if(S.notifPermission)_lsSet('og6-notifperm',S.notifPermission);
+    if(S.notifAskedDate)_lsSet('og6-notifasked',S.notifAskedDate);
+    if(S.resetNotifShown)_lsSet('og6-resetnotif',S.resetNotifShown);
+    if(S.lastAutoReset)_lsSet('og6-lastauto',S.lastAutoReset);
+    _lsSet('og6-autoreset',JSON.stringify(S.autoReset||{}));
+    _lsSet('og6-periodautoseen',JSON.stringify(S.periodAutoSeen||{}));
+    _lsSet('og6-periodresetused',JSON.stringify(S.periodResetUsed||{}));
+    _lsSet('og6-simplemode',S.simpleMode?'1':'0');
+    _lsSet('og6-listdensity',S.listDensity||'normal');
+    _lsSet('og6-simplemodefabreset',S.simpleModeFabReset===false?'0':'1');
+    _lsSet('og6-calsubtab',S.calendariosSubTab||'semanal');
+    _lsSet('og6-ganttweekends',S.ganttHideWeekends?'1':'0');
+    if(S.userAvatar) _lsSet('og6-useravatar',S.userAvatar);
     else localStorage.removeItem('og6-useravatar'); // BUGFIX: si se quita la foto, antes quedaba huérfana y volvía a aparecer al recargar
-    localStorage.setItem('og6-notiftiming',JSON.stringify(S.notifTiming||{hh:0,mm:15}));
-    localStorage.setItem('og6-dailyreviewreminder',JSON.stringify(S.dailyReviewReminder||{on:false,hh:20,mm:0,days:[0,1,2,3,4,5,6]}));
-    localStorage.setItem('og6-quiethours',JSON.stringify(S.quietHours||{on:false,startHH:22,startMM:0,endHH:8,endMM:0}));
-    localStorage.setItem('og6-streakrisk',JSON.stringify(S.streakRisk||{on:false,hh:21,mm:0}));
-    localStorage.setItem('og6-projecttourseen',S.projectTourSeen?'1':'0');
-    localStorage.setItem('og6-leveltipseen',S.levelTipSeen?'1':'0');
-    localStorage.setItem('og6-medaltipseen',S.medalTipSeen?'1':'0');
-    localStorage.setItem('og6-dataversion',String(S.dataVersion||1));
-    localStorage.setItem('og6-catcollapsemode',S.catCollapseMode||'remember');
-    localStorage.setItem('og6-disabledperiods',JSON.stringify(S.disabledPeriods||{}));
+    _lsSet('og6-notiftiming',JSON.stringify(S.notifTiming||{hh:0,mm:15}));
+    _lsSet('og6-dailyreviewreminder',JSON.stringify(S.dailyReviewReminder||{on:false,hh:20,mm:0,days:[0,1,2,3,4,5,6]}));
+    _lsSet('og6-quiethours',JSON.stringify(S.quietHours||{on:false,startHH:22,startMM:0,endHH:8,endMM:0}));
+    _lsSet('og6-streakrisk',JSON.stringify(S.streakRisk||{on:false,hh:21,mm:0}));
+    _lsSet('og6-projecttourseen',S.projectTourSeen?'1':'0');
+    _lsSet('og6-leveltipseen',S.levelTipSeen?'1':'0');
+    _lsSet('og6-medaltipseen',S.medalTipSeen?'1':'0');
+    _lsSet('og6-dataversion',String(S.dataVersion||1));
+    _lsSet('og6-catcollapsemode',S.catCollapseMode||'remember');
+    _lsSet('og6-disabledperiods',JSON.stringify(S.disabledPeriods||{}));
     // Auto-push a la nube si hay sesión
     if(typeof currentUser !== 'undefined' && currentUser){
       if(typeof pushToCloud === 'function'){
@@ -2709,12 +2746,18 @@ function bajaRemainingDays(){
 
 // ── Hiperfoco (premium) ───────────────────────────────────────────────────
 // Devuelve el plan actual: 'free', 'donante'
+// Cuentas autorizadas para probar la suscripción sin pagar (vista previa). Pon aquí TU correo.
+// Mientras la lista esté vacía, la vista previa queda desactivada para todo el mundo.
+var DEV_EMAILS = ['jferrer.psi@gmail.com', 'joaquinferrercarmona@gmail.com'];
+function isDevUser(){
+  try{ return !!(currentUser && currentUser.email && DEV_EMAILS.map(function(e){return String(e).toLowerCase();}).indexOf(String(currentUser.email).toLowerCase())!==-1); }catch(e){ return false; }
+}
 function getPlan(){
   // Vista previa de desarrollador: activable manteniendo presionado el logo
   // 1.5s (ver togglePremiumPreview). Sirve para probar la experiencia de
   // usuario Donante en tu propio dispositivo sin tener que pagar de verdad
   // ni usar una segunda cuenta — no afecta a otros usuarios ni es una compra.
-  if(localStorage.getItem('og6-dev-premium-preview')==='1') return 'donante';
+  if(isDevUser() && localStorage.getItem('og6-dev-premium-preview')==='1') return 'donante';
   // BUGFIX: `userSubscription` nunca se declara en ningún lado de este
   // archivo — se espera que el wrapper nativo de Android (Play Billing) lo
   // inyecte como window.userSubscription tras verificar una compra real.
@@ -2731,6 +2774,7 @@ function getPlan(){
 // la vista previa de Donante en este dispositivo, solo para pruebas.
 var _lpTimer = null;
 function _lpStart(){
+  if(!isDevUser()) return; // el atajo del logo ya no desbloquea nada para usuarios normales
   _lpTimer = setTimeout(function(){
     _lpTimer = null;
     togglePremiumPreview();
@@ -2740,6 +2784,7 @@ function _lpEnd(){
   if(_lpTimer){ clearTimeout(_lpTimer); _lpTimer = null; }
 }
 function togglePremiumPreview(){
+  if(!isDevUser()) return;
   var on = localStorage.getItem('og6-dev-premium-preview')==='1';
   if(on){
     localStorage.removeItem('og6-dev-premium-preview');
@@ -3268,7 +3313,7 @@ function renderV2Header(){
           (am?'<span style="color:var(--accent);">'+esc(am.icon||'')+'</span> ':'')+DAYS[todayIdx()]+
         '</div>'+
       '</div>'+
-      (localStorage.getItem('og6-dev-premium-preview')==='1'
+      (isDevUser() && localStorage.getItem('og6-dev-premium-preview')==='1'
         ?'<div onclick="togglePremiumPreview()" style="font-size:9px;font-weight:700;color:white;background:#c97842;padding:2px 7px;border-radius:8px;margin-top:3px;cursor:pointer;display:inline-block;">🧪 Vista previa Suscripción — toca para salir</div>'
         :'')+
     '</div>'+
@@ -3390,7 +3435,7 @@ function renderAgendaSectionContent(activeSection, tab, today){
     // Día seleccionado + botón agregar
     html += '<div style="padding:8px 16px;background:var(--bg);border-top:1px solid var(--line-soft);">'+
       '<div style="display:flex;align-items:center;gap:8px;">'+
-        '<span style="font-size:13px;font-weight:700;color:var(--ink);">'+DAYS[S.day]+' '+weekdayDateNum(S.day)+(S.day===today?' · <span style=\'color:var(--accent)\'>Hoy</span>':'')+'</span>'+
+        '<span style="font-size:13px;font-weight:700;color:var(--ink);">'+DAYS[S.day]+' '+weekdayDateNum(S.day)+(S.day===today && !weekPlanOffsetDays()?' · <span style=\'color:var(--accent)\'>Hoy</span>':weekPlanBadgeHTML())+'</span>'+
         '<button onclick="openNew(\'dia\')" style="margin-left:auto;background:var(--accent);color:white;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Tarea</button>'+
       '</div>'+
     '</div>';
@@ -3608,7 +3653,7 @@ function renderHoy(){
       'style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;padding:0 8px;line-height:1;">‹</button>'+
     '<div style="text-align:center;display:flex;align-items:center;gap:8px;">'+
       '<span class="serif" style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.02em;">'+DAYS[day]+' '+weekdayDateNum(day)+'</span>'+
-      (day===today?'<span style="font-size:10px;background:var(--accent);color:white;border-radius:6px;padding:2px 8px;font-weight:700;letter-spacing:.02em;">Hoy</span>':'')+
+      (day===today && !weekPlanOffsetDays()?'<span style="font-size:10px;background:var(--accent);color:white;border-radius:6px;padding:2px 8px;font-weight:700;letter-spacing:.02em;">Hoy</span>':(weekPlanOffsetDays()?weekPlanBadgeHTML():''))+
     '</div>'+
     '<button onclick="S.day=(S.day===6?0:S.day+1);var c=document.getElementById(\'content\');if(c)c.scrollTop=0;render();" '+
       'style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;padding:0 8px;line-height:1;">›</button>'+
@@ -3682,6 +3727,40 @@ function renderHoy(){
 // ── Reordenar categorías y tareas (flechas ▲▼) ─────────────────────────────
 function _taskCatKey(x){
   return (x.categoryId && (S.categories||[]).some(function(c){return c.id===x.categoryId;})) ? x.categoryId : null;
+}
+// Refresco "suave": en vez de redibujar toda la pantalla, solo se vuelven a dibujar las filas que cambiaron,
+// los contadores de sus categorías y el encabezado. Si algo no encaja (filtro "Pendientes", modo reordenar,
+// selección múltiple...), se usa el redibujo completo de siempre.
+function taskSig(t){ try{ return JSON.stringify(t); }catch(e){ return Math.random()+''; } }
+function softRefreshTasks(ids){
+  try{
+    if(!(S.tab==='hoy'||S.tab==='dia') || (S.interfaceLayout||'default')==='agenda') return false;
+    if(SEL.active || S._reorder || S.activeCatFilter==='__pending') return false;
+    var sec = document.getElementById('hoy-tasks-section'); if(!sec) return false;
+    var cats = {};
+    for(var i=0;i<ids.length;i++){
+      var t = S.tasks.find(function(x){return x.id===ids[i];});
+      var row = document.getElementById('ti-'+ids[i]);
+      if(!t || !row) return false;
+      if(taskWeekdayThisWeek(t)!==S.day) continue;
+      cats[t.categoryId||'__nocat'] = 1;
+    }
+    for(var j=0;j<ids.length;j++){
+      var tt = S.tasks.find(function(x){return x.id===ids[j];});
+      var rw = document.getElementById('ti-'+ids[j]);
+      if(taskWeekdayThisWeek(tt)!==S.day) continue;
+      rw.outerHTML = taskHTML(tt);
+    }
+    Object.keys(cats).forEach(function(cid){
+      var secEl = document.getElementById('cat-sec-'+cid); if(!secEl) return;
+      var grp = S.tasks.filter(function(x){ return taskWeekdayThisWeek(x)===S.day && (cid==='__nocat' ? !x.categoryId : x.categoryId===cid); });
+      var act = grp.filter(function(x){return !isSkipped(x);});
+      var spans = secEl.querySelectorAll('.cat-sec-head > span');
+      if(spans[1]) spans[1].textContent = act.filter(isDone).length+'/'+act.length;
+    });
+    renderV2Header();
+    return true;
+  }catch(e){ return false; }
 }
 function refreshHoyTasks(){
   var sec = document.getElementById('hoy-tasks-section');
@@ -8343,6 +8422,7 @@ function askResetToday(){
   document.body.appendChild(box);
 }
 function doResetToday(){
+  markWeekRolled();
   S.tasks = S.tasks.map(function(t){
     if(t.period!=='dia' || t.date) return t; // solo recurrentes — las puntuales no se tocan
     var clr = resetChecklistForCycle(t); // mismo reinicio (incluye prog de ítems) que el resto de los reinicios
@@ -13070,6 +13150,7 @@ function logTaskDone(t){
   if(isDone(t)) m[d] = 1; else delete m[d];
 }
 function finishUpdate(updated, justCompleted, delta){
+  var _sigsBefore = {}, _sigCount = S.tasks.length; S.tasks.forEach(function(t){ _sigsBefore[t.id] = taskSig(t); });
   try{ logTaskDone(updated); }catch(e){}
   try{ trackSyncTask(updated, S.tasks.find(function(t){return t.id===updated.id;})); }catch(e){}
   S.tasks=S.tasks.map(function(t){return t.id===updated.id?updated:t;});
@@ -13090,7 +13171,11 @@ function finishUpdate(updated, justCompleted, delta){
     S._delayedCollapseCatId = updated.categoryId;
   }
   saveState();
-  render();
+  var _changed = [updated.id].concat(S.tasks.filter(function(t){ return t.id!==updated.id && _sigsBefore[t.id]!==undefined && _sigsBefore[t.id]!==taskSig(t); }).map(function(t){return t.id;}));
+  var _newTask = S.tasks.length!==_sigCount;
+  var _soft = !_newTask && softRefreshTasks(_changed);
+  if(!_soft) render();
+  S._softDone = _soft;
   S._justCompletedId = null; // limpiar para que el pop no se repita en próximos renders
   if(S._delayedCollapseCatId){
     (function(catId){
@@ -13118,6 +13203,7 @@ function finishUpdate(updated, justCompleted, delta){
     }
   }
   if(justCompleted) checkStreakNow();
+  S._softDone = false;
 }
 // Pliega una categoría sin pasar por render() completo — usado por el
 // respiro de "smart" (ver finishUpdate/isCatCollapsed) para que el plegado
@@ -13337,6 +13423,7 @@ function resetTasksOfPeriod(period){
   });
 }
 function doReset(){
+  markWeekRolled();
   resetTasksOfPeriod('semana');
   S.taskBlocks = {};
   S.resetUsedCount = (S.resetUsedCount||0) + 1;
@@ -14537,7 +14624,7 @@ function smpSave(){
 function saveAllAsSet(){
   openSetMetaPrompt({title:'Guardar como set', name:'', color:(M.timer.sets[0]&&M.timer.sets[0].color)||CATEGORY_COLORS[0]}, function(m){
     if(!S.setLib) S.setLib=[];
-    S.setLib.push({id:uid(), name:m.name, color:m.color, icon:m.icon, sets:M.timer.sets.map(stripSetId), updatedAt:Date.now()});
+    S.setLib.push({id:uid(), name:m.name, color:m.color, icon:m.icon, sets:M.timer.sets.map(stripSetId), rounds:M.timer.rounds||1, restBetween:M.timer.restBetween||0, restBetweenRounds:M.timer.restBetweenRounds||0, updatedAt:Date.now()});
     saveState(); toast('Set guardado');
   });
 }
@@ -14556,11 +14643,11 @@ function openTimerLibPicker(){
   ov.innerHTML = '<div class="sheet" id="tlib-sheet">'+tlibBodyHTML()+'</div>';
   document.body.appendChild(ov);
 }
-function tlibSummary(sets){ var tot=0; try{ tot=timerEstimateTotalSec({sets:sets,rounds:1,restBetween:0,restBetweenRounds:0}); }catch(e){} return sets.length+' ejercicio'+(sets.length===1?'':'s')+' · '+fmtDur(tot); }
+function tlibSummary(sets, x){ x=x||{}; var tot=0; try{ tot=timerEstimateTotalSec({sets:sets,rounds:x.rounds||1,restBetween:x.restBetween||0,restBetweenRounds:x.restBetweenRounds||0}); }catch(e){} return sets.length+' ejercicio'+(sets.length===1?'':'s')+' · '+fmtDur(tot); }
 function tlibItems(){
   var q = (TLP.q||'').trim().toLowerCase(), ok = function(n){ return !q || (n||'').toLowerCase().indexOf(q)!==-1; };
   var tpls = timerTplList().filter(function(t){return ok(t.name);}).map(function(t){ return {key:'tpl:'+t.id, name:t.name, color:CATEGORY_COLORS[0], sub:'Plantilla · '+tlibSummary((t.timer&&t.timer.sets)||[])}; });
-  var sets = setLibList().filter(function(t){return ok(t.name);}).map(function(t){ return {key:'set:'+t.id, name:t.name, color:t.color, icon:t.icon, sub:'Set · '+tlibSummary(t.sets||[])}; });
+  var sets = setLibList().filter(function(t){return ok(t.name);}).map(function(t){ return {key:'set:'+t.id, name:t.name, color:t.color, icon:t.icon, sub:'Set · '+tlibSummary(t.sets||[], t)}; });
   var gname = function(gid){ var g=exGroupList().find(function(x){return x.id===gid;}); return g?g.name:''; };
   var gorder = exGroupList().map(function(g){return g.id;});
   var exs = exLibList().filter(function(t){return ok(t.name);}).slice().sort(function(a,b){ var ia=gorder.indexOf(a.gid), ib=gorder.indexOf(b.gid); if(ia<0) ia=999; if(ib<0) ib=999; return ia-ib; })
@@ -14591,6 +14678,22 @@ function tlibBodyHTML(){
 }
 function tlibRefresh(){ var l=document.getElementById('tlib-list'); if(l) l.innerHTML=tlibListHTML(); var b=document.getElementById('tlib-btn'); if(b) b.innerHTML=tlibApplyBtnHTML(); }
 function tlibToggle(key){ if(TLP.sel[key]) delete TLP.sel[key]; else TLP.sel[key]=true; tlibRefresh(); }
+// Un set guarda sus ejercicios y sus descansos (entre ejercicios y entre vueltas). Al meterlo en otro
+// temporizador, esos descansos se "fijan" en cada ejercicio para que no cambien según el temporizador de destino.
+function expandSetForTimer(item){
+  var rounds = Math.max(1, item.rounds||1), rb = item.restBetween||0, rr = item.restBetweenRounds||0, out = [];
+  for(var r=0; r<rounds; r++){
+    (item.sets||[]).forEach(function(x,i){
+      var c = Object.assign({},x), lastInRound = i===(item.sets.length-1), lastOverall = lastInRound && r===rounds-1;
+      if(c.restAfter==null){
+        if(!lastInRound && rb>0) c.restAfter = rb;
+        else if(lastInRound && !lastOverall && rr>0) c.restAfter = rr;
+      }
+      out.push(c);
+    });
+  }
+  return out;
+}
 function tlibApply(){
   var keys = Object.keys(TLP.sel); if(!keys.length) return;
   var order = {tpl:0,set:1,ex:2};
@@ -14599,7 +14702,7 @@ function tlibApply(){
   keys.forEach(function(k){
     var kind=k.split(':')[0], id=k.slice(kind.length+1);
     if(kind==='tpl'){ var t=timerTplList().find(function(x){return x.id===id;}); if(t){ if(!firstTpl) firstTpl=t; (t.timer.sets||[]).forEach(function(x){ add.push(stripSetId(x)); }); } }
-    else if(kind==='set'){ var t2=setLibList().find(function(x){return x.id===id;}); if(t2) (t2.sets||[]).forEach(function(x){ add.push(Object.assign({},x)); }); }
+    else if(kind==='set'){ var t2=setLibList().find(function(x){return x.id===id;}); if(t2) expandSetForTimer(t2).forEach(function(x){ add.push(x); }); }
     else { var t3=exLibList().find(function(x){return x.id===id;}); if(t3) add.push(Object.assign({},t3.set)); }
   });
   var cur = M.timer.sets;
@@ -14647,7 +14750,7 @@ function openTimerTplEditor(id, mode){
   if(!id && mode==='tpl' && timerTplList().length>=12){ toast('Máximo 12 plantillas de temporizador'); return; }
   var t = null, timer = null;
   if(id && mode==='tpl'){ t = timerTplList().find(function(x){return x.id===id;}); if(t) timer = JSON.parse(JSON.stringify(t.timer)); }
-  if(id && mode==='set'){ t = setLibList().find(function(x){return x.id===id;}); if(t) timer = {sets:JSON.parse(JSON.stringify(t.sets)).map(function(x){x.id=uid();return x;}), rounds:1, restBetween:0, restBetweenRounds:0}; }
+  if(id && mode==='set'){ t = setLibList().find(function(x){return x.id===id;}); if(t) timer = {sets:JSON.parse(JSON.stringify(t.sets)).map(function(x){x.id=uid();return x;}), rounds:t.rounds||1, restBetween:t.restBetween||0, restBetweenRounds:t.restBetweenRounds||0}; }
   TTE = {id:id||null, mode:mode, name:t?t.name:'', color:(t&&t.color)||CATEGORY_COLORS[0], icon:(t&&t.icon)||'', prevM:(typeof M!=='undefined'?M:null)};
   M = {isNew:true, _tplEdit:true, task:{}, clFresh:false, timer:timer||defaultTimerConfig(), _timerOpenSet:null};
   removeOverlay('tpl-timer');
@@ -14676,8 +14779,8 @@ function saveTimerTplEditor(){
   if(TTE.mode==='set'){
     if(!S.setLib) S.setLib = [];
     var sets = tm.sets.map(stripSetId);
-    if(TTE.id) S.setLib = S.setLib.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,color:TTE.color,icon:TTE.icon,sets:sets,updatedAt:Date.now()}) : x; });
-    else S.setLib.push({id:uid(), name:name, color:TTE.color, icon:TTE.icon, sets:sets, updatedAt:Date.now()});
+    if(TTE.id) S.setLib = S.setLib.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,color:TTE.color,icon:TTE.icon,sets:sets,rounds:tm.rounds||1,restBetween:tm.restBetween||0,restBetweenRounds:tm.restBetweenRounds||0,updatedAt:Date.now()}) : x; });
+    else S.setLib.push({id:uid(), name:name, color:TTE.color, icon:TTE.icon, sets:sets, rounds:tm.rounds||1, restBetween:tm.restBetween||0, restBetweenRounds:tm.restBetweenRounds||0, updatedAt:Date.now()});
   } else {
     if(!S.timerTemplates) S.timerTemplates = [];
     if(TTE.id) S.timerTemplates = S.timerTemplates.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,timer:tm,updatedAt:Date.now()}) : x; });
@@ -14816,7 +14919,7 @@ function timerLibSectionsHTML(){
   html += '<div data-drag-list data-drag-cb="setLib">';
   sets.forEach(function(t){
     html += '<div class="card" data-drag-item data-id="'+t.id+'" style="display:flex;align-items:center;gap:6px;padding-left:6px;">'+gripHTML()+exChipHTML(t.icon, t.color||CATEGORY_COLORS[0], t.name, 36)+
-      '<div style="flex:1;min-width:0;padding-left:6px;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+tlibSummary(t.sets||[])+'</div></div>'+
+      '<div style="flex:1;min-width:0;padding-left:6px;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+tlibSummary(t.sets||[], t)+'</div></div>'+
       '<button onclick="openTimerTplEditor(\''+t.id+'\',\'set\')" style="'+btn+'">Editar</button><button onclick="deleteLibItem(\'set\',\''+t.id+'\')" style="'+btn+'color:var(--bad);">×</button></div>';
   });
   html += '</div><button onclick="openTimerTplEditor(null,\'set\')" style="width:100%;background:var(--bg);border:1.5px dashed var(--line);color:var(--ink-soft);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">＋ Nuevo set</button>';
@@ -15654,7 +15757,11 @@ function reconcileStreak(){
 // pasado, ayer) para recalcular el historial y la racha al vuelo.
 function checkStreakNow(){
   if(S.simpleMode)return; // Modo simplificado: sin racha
+  var soft = S._softDone; S._softDone = false;
+  var sig0 = soft ? JSON.stringify([S.streak,S.xp,S.achievements,S.medals]) : '';
   reconcileStreak();
+  // Si la racha y la experiencia no cambiaron y la pantalla ya se actualizó por partes, no hace falta redibujar todo.
+  if(soft && JSON.stringify([S.streak,S.xp,S.achievements,S.medals])===sig0) return;
   render();
 }
 
@@ -17448,7 +17555,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.02.4';
+var APP_VERSION = '2026.10.01.6';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
@@ -17471,6 +17578,7 @@ document.addEventListener('visibilitychange', function(){
 window.addEventListener('pageshow', function(e){ if(e.persisted) checkForUpdate(); });
 checkForUpdate();
 loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
+try{ localStorage.removeItem('og6-dev-premium-preview'); }catch(e){} // limpia la bandera vieja; solo vuelve a existir si activa la cuenta de desarrollador
 // El primer escalón del historial debe saber en qué pestaña está la app: así "atrás" desde
 // una pantalla de Yo nunca cae en una pestaña sin relación.
 try{ var _h0 = {navTab:S.tab||'hoy'}; if((S.tab||'hoy')==='yo') _h0.navYoScreen = null; history.replaceState(_h0, ''); }catch(e){}
