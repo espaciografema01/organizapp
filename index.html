@@ -662,8 +662,7 @@ img,svg{-webkit-user-drag:none;}
       <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span>Seguimiento
     </button>
     <button class="bnav-btn" id="bnav-timer" onclick="setTab('timer')">
-      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5M9.5 2.5h5M12 6.5V4.5M18.5 7l1.2-1.2"/></svg></span>
-      Temporizador
+      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z" stroke-linejoin="round"/></svg></span>Enfoque
     </button>
     <button class="bnav-btn" id="bnav-yo" onclick="setTab('yo')">
       <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c1-3.6 4-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg></span>Yo
@@ -3502,7 +3501,7 @@ function renderAgendaLayout(tab){
     {id:'semana',   label:'Semana',    icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.5" width="16" height="15.5" rx="2"/><path d="M4 9.5h16M8 3v3M16 3v3"/></svg>'},
     {id:'plan',     label:'Plan',      icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg>'},
     {id:'proyectos',label:'Seguimiento', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg>'},
-    {id:'timer',    label:'Temporizador', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5M9.5 2.5h5M12 6.5V4.5"/></svg>'},
+    {id:'timer',    label:'Enfoque',   icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/></svg>'},
     {id:'yo',       label:'Yo',        icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c1-3.6 4-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg>'},
   ];
   if(S.timerPlacement==='seguimiento') navItems = navItems.filter(function(i){return i.id!=='timer';});
@@ -4624,11 +4623,11 @@ function renderYoMain(){
 
   html += yoSectionHTML('Personalizar',
     yoRowHTML('preferencias','⚙️','Preferencias', prefSub, false, 'modo simplificado racha xp niveles sonido efectos consejos sugerencias mensaje recordatorio semana prellenar registros')+
-    yoRowHTML('modos','⚡','Modos', (function(){ var m=modeChipInfo(); return m.on ? esc(m.name)+' activo' : 'Normal · Baja energía, Hiperfoco…'; })(), false, 'modos energia baja hiperfoco vacaciones personalizado ritmo descanso')+
+    yoRowHTML('modos','🔋','Modos', (function(){ var m=modeChipInfo(); return m.on ? esc(m.name)+' activo' : 'Normal · Baja energía, Hiperfoco…'; })(), false, 'modos energia baja hiperfoco vacaciones personalizado ritmo descanso')+
     yoRowHTML('tema','🎨','Tema visual', currentThemeName, false, 'tema color oscuro claro sepia bosque oceano atardecer galaxia cereza terracota apariencia')+
     yoRowHTML('categorias','🗂️','Categorías', catModeSub, false, 'categorias despliegue plegar desplegar colores')+
     yoRowHTML('periodos','📆','Períodos', periodsSub, false, 'periodos semana mes semestre año objetivos desactivar')+
-    yoRowHTML('temporizador','⏱️','Temporizador', timerCfgSummary(), false, 'temporizador timer sonidos vibrar pantalla ejercicios plantillas rutinas pestaña ubicacion seguimiento barra')+
+    yoRowHTML('temporizador','⚡','Enfoque', timerCfgSummary(), false, 'enfoque temporizador timer sonidos vibrar pantalla ejercicios rutinas estudio entrenamiento pestaña ubicacion seguimiento barra')+
     yoRowHTML('notificaciones','🔔','Notificaciones', notifOn?'Activadas':'Desactivadas', false, 'notificaciones avisos alertas recordatorios permisos')+
     yoRowHTML('calendario','📅','Google Calendar', cs.enabled?'Sincronizado':'No conectado', true, 'google calendar calendario sincronizar')
   );
@@ -4659,7 +4658,7 @@ function renderYoScreenWrap(screen){
   var titles = {
     perfil:'Perfil', plan:'Nivel de acceso', preferencias:'Preferencias',
     tema:'Tema visual', categorias:'Categorías', periodos:'Períodos', notificaciones:'Notificaciones', calendario:'Google Calendar',
-    estadisticas:'Estadísticas', modos:'Modos', temporizador:'Temporizador', faq:'Preguntas frecuentes',
+    estadisticas:'Estadísticas', modos:'Modos', temporizador:'Enfoque', faq:'Preguntas frecuentes',
     ayuda:'Ayuda', datos:'Datos y privacidad'
   };
   var renderers = {
@@ -5376,7 +5375,7 @@ function faqItems(){
     ]],
     ['Modos y plantillas', [
       ['¿Dónde cambio de modo?', 'Toca la etiqueta del modo (☀️ Normal) junto al logo, arriba a la izquierda. Para crear, editar o ver tus modos: Yo → Personalizar → Modos.'],
-      ['¿Puedo usar el temporizador sin una tarea?', 'Sí. En la pestaña Temporizador eliges una cuenta regresiva rápida o una de tus rutinas. Si prefieres no tener pestaña propia, en Yo → Temporizador puedes moverlo dentro de Seguimiento.'],
+      ['¿Puedo usar el temporizador sin una tarea?', 'Sí. En la pestaña Enfoque eliges una cuenta regresiva rápida o una de tus rutinas (vienen Estudio y Entrenamiento de ejemplo, y puedes editarlas o borrarlas). Si prefieres no tener pestaña propia, en Yo → Enfoque puedes moverlo dentro de Seguimiento.'],
       ['¿Qué hace el modo enfoque?', T.modohf],
       ['¿Qué es el modo de baja energía?', T.modebaja],
       ['¿Y si solo quiero bajar el ritmo?', T.modebaja2],
@@ -6919,7 +6918,7 @@ function renderProyectosTab(){
   var view = S._projView || 'reg';
   if(view==='timer' && !tOn) view = 'reg';
   var segs = [['reg','Registros'],['proj','Proyectos']];
-  if(tOn) segs.push(['timer','Temporizador']);
+  if(tOn) segs.push(['timer','Enfoque']);
   var html = '<div style="padding:16px 16px 0;">'+
     mSegHTML('proj-seg', segs, view, 'setProjView')+
   '</div>';
@@ -11520,6 +11519,7 @@ function startFreeTimer(timer, name){
 function startFreeCountdown(m){
   if(m==null){ var el=document.getElementById('tm-free-min'); m = parseFloat(el && el.value); }
   if(!(m>0)){ toast('Escribe cuántos minutos'); return; }
+  removeOverlay('quick-cd');
   var sec = Math.max(1, Math.min(TIMER_MAX_SEC, Math.round(m*60)));
   startFreeTimer({sets:[{id:uid(),name:'Cuenta regresiva',sec:sec,color:CATEGORY_COLORS[2]}],rounds:1,restBetween:0,restBetweenRounds:0}, 'Cuenta regresiva');
 }
@@ -11545,22 +11545,100 @@ function timerPresetRowsHTML(){
         '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(tm.rounds||1)+' vuelta'+((tm.rounds||1)===1?'':'s')+' · '+fmtDur(total)+'</div></div></div>';
     }).join('');
 }
-// Pantalla del temporizador: la usa tanto la pestaña propia como el segmento de Seguimiento.
+// Rutinas de ejemplo: son plantillas normales (se editan y se eliminan como cualquiera).
+// Se crean una sola vez, y solo si el usuario todavía no tiene ninguna. Ids fijos y
+// updatedAt:1 para que, entre dispositivos, cualquier edición o borrado gane sobre el ejemplo.
+function timerSeedDefaults(){
+  var seeded = false;
+  try{ seeded = localStorage.getItem('og6-timerseeded')==='1'; }catch(e){}
+  if(seeded) return;
+  try{ localStorage.setItem('og6-timerseeded','1'); }catch(e){}
+  if((S.timerTemplates||[]).length) return;
+  var C = CATEGORY_COLORS;
+  S.timerTemplates = [
+    {id:'seed-estudio', name:'Estudio', updatedAt:1, timer:{
+      sets:[{id:uid(),name:'Estudio',sec:1500,color:C[2]}], rounds:4, restBetween:0, restBetweenRounds:300}},
+    {id:'seed-entrenamiento', name:'Entrenamiento', updatedAt:1, timer:{
+      sets:[{id:uid(),name:'Sentadillas',sec:40,color:C[0]},{id:uid(),name:'Flexiones',sec:40,color:C[1]},
+            {id:uid(),name:'Plancha',sec:40,color:C[3]},{id:uid(),name:'Zancadas',sec:40,color:C[4]}],
+      rounds:3, restBetween:20, restBetweenRounds:60}}
+  ];
+  saveState();
+}
+// Pantalla Enfoque: la usa tanto la pestaña propia como el segmento de Seguimiento.
+function toggleTimerLib(){ S._timerLibOpen = !S._timerLibOpen; render(); }
 function renderTimerHome(){
+  timerSeedDefaults();
+  var list = timerTplList();
   var html = '<div style="padding:16px 16px 90px;">';
-  html += '<div class="card" style="margin-bottom:16px;">'+
-    '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Cuenta regresiva rápida</div>'+
-    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'+
-      [5,10,15,25,45,60].map(function(m){ return '<button class="cat-tab-btn" onclick="startFreeCountdown('+m+')" style="padding:9px 16px;font-size:13px;">'+m+' min</button>'; }).join('')+
+  html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">';
+  // Rápido
+  html += '<button onclick="openQuickCountdown()" style="text-align:left;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:14px;padding:14px;min-height:104px;display:flex;flex-direction:column;justify-content:space-between;font-family:Inter,sans-serif;color:var(--accent);cursor:pointer;">'+
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+'<path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/></svg>'+
+    '<span><span style="display:block;font-size:14px;font-weight:700;">Rápido</span><span style="display:block;font-size:11px;opacity:.85;margin-top:2px;">Elegir minutos</span></span></button>';
+  // Rutinas
+  list.forEach(function(tp){
+    var tm = tp.timer||{sets:[],rounds:1}, total = 0;
+    try{ total = timerEstimateTotalSec(tm); }catch(e){}
+    var n = (tm.sets||[]).length;
+    var col = (tm.sets&&tm.sets[0]&&tm.sets[0].color) || CATEGORY_COLORS[0];
+    var tint = /^#[0-9a-f]{6}$/i.test(col) ? col+'26' : 'var(--accent-bg)';
+    html += '<div onclick="startTimerTpl(\''+tp.id+'\')" style="position:relative;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:14px;min-height:104px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<span style="width:36px;height:36px;border-radius:11px;background:'+tint+';color:'+col+';display:flex;align-items:center;justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>'+
+        '<button onclick="event.stopPropagation();openTimerTplMenu(\''+tp.id+'\')" aria-label="Opciones de '+esc(tp.name)+'" style="background:none;border:none;color:var(--muted);font-size:20px;line-height:1;padding:0 2px 6px 8px;cursor:pointer;">⋯</button>'+
+      '</div>'+
+      '<div><div style="font-size:14px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(tp.name)+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+fmtDur(total)+' · '+n+' ejercicio'+(n===1?'':'s')+'</div></div></div>';
+  });
+  // Nueva rutina
+  html += '<button onclick="openTimerTplEditor(null)" style="background:none;border:1.5px dashed var(--line);border-radius:14px;padding:14px;min-height:104px;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:13px;font-weight:600;font-family:Inter,sans-serif;cursor:pointer;">'+
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nueva rutina</button>';
+  html += '</div>';
+  // Biblioteca (plegable)
+  var open = !!S._timerLibOpen;
+  html += '<button onclick="toggleTimerLib()" style="width:100%;display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 4px;background:none;border:none;border-top:1px solid var(--line-soft);color:var(--ink-soft);font-size:14px;font-family:Inter,sans-serif;text-align:left;cursor:pointer;">'+
+    '<span style="flex:1;">Biblioteca de ejercicios</span><span style="font-size:12px;color:var(--muted);transform:'+(open?'rotate(180deg)':'none')+';">▾</span></button>';
+  if(open) html += timerLibSectionsHTML();
+  return html+'</div>';
+}
+function openQuickCountdown(){
+  removeOverlay('quick-cd');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='quick-cd';
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('quick-cd'); });
+  ov.innerHTML = '<div class="sheet">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">Cuenta regresiva</span>'+
+    '<button onclick="removeOverlay(\'quick-cd\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">'+
+      [5,10,15,25,45,60].map(function(m){ return '<button class="cat-tab-btn" onclick="startFreeCountdown('+m+')" style="padding:10px 18px;font-size:14px;">'+m+' min</button>'; }).join('')+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:8px;">'+
       '<input id="tm-free-min" class="finp" type="number" inputmode="decimal" min="1" placeholder="Otro tiempo" style="flex:1;margin:0;"/>'+
       '<span style="font-size:13px;color:var(--muted);">min</span>'+
       '<button class="sbtn" onclick="startFreeCountdown()" style="padding:10px 18px;font-size:13px;">Iniciar</button>'+
-    '</div>'+
-  '</div>';
-  html += renderTimerTemplatesSection();
-  return html+'</div>';
+    '</div></div>';
+  document.body.appendChild(ov);
+}
+function openTimerTplMenu(id){
+  var tp = timerTplList().find(function(x){return x.id===id;}); if(!tp) return;
+  var box = document.createElement('div'); box.className='conf-box';
+  var b = 'width:100%;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:14px;">'+esc(tp.name)+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+    '<button onclick="this.closest(\'.conf-box\').remove();openTimerTplEditor(\''+id+'\')" style="'+b+'background:var(--accent);color:#fff;border:none;">Editar rutina</button>'+
+    '<button onclick="this.closest(\'.conf-box\').remove();confirmDeleteTimerTpl(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--bad);border:1.5px solid var(--line);">Eliminar</button>'+
+    '<button onclick="this.closest(\'.conf-box\').remove()" style="'+b+'background:var(--bg);color:var(--muted);border:1.5px solid var(--line);font-weight:600;">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function confirmDeleteTimerTpl(id){
+  var tp = timerTplList().find(function(x){return x.id===id;}); if(!tp) return;
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:8px;">¿Eliminar «'+esc(tp.name)+'»?</div>'+
+    '<div style="font-size:12px;color:var(--muted);text-align:center;line-height:1.5;margin-bottom:14px;">Esta rutina se borra de tu lista.</div>'+
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '<button class="sbtn" style="flex:1;background:var(--bad);" onclick="this.closest(\'.conf-box\').remove();deleteTimerTemplate(\''+id+'\')">Eliminar</button></div></div>';
+  document.body.appendChild(box);
 }
 function setTimerPlacement(v){
   S.timerPlacement = (v==='seguimiento') ? 'seguimiento' : 'tab';
@@ -11576,10 +11654,10 @@ function renderYoTemporizadorScreen(){
       '<span style="width:18px;height:18px;border-radius:9px;border:2px solid '+(on?'var(--accent)':'var(--muted-soft)')+';background:'+(on?'var(--accent)':'transparent')+';flex-shrink:0;box-shadow:inset 0 0 0 3px var(--paper);"></span>'+
       '<span><span style="display:block;font-size:14px;font-weight:700;">'+title+'</span><span style="display:block;font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">'+sub+'</span></span></button>';
   };
-  var html = '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Dónde mostrar el temporizador</div>'+
+  var html = '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Dónde mostrar Enfoque</div>'+
     opt('tab','Pestaña propia','Acceso directo en la barra inferior.')+
     opt('seguimiento','Dentro de Seguimiento','Libera una pestaña. También aparece en el botón + de Hoy.')+
-    '<button onclick="setTab(\'timer\')" class="cbtn" style="width:100%;margin:6px 0 22px;">Abrir mis temporizadores</button>';
+    '<button onclick="setTab(\'timer\')" class="cbtn" style="width:100%;margin:6px 0 22px;">Abrir Enfoque</button>';
   html += '<div style="display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:14px;">Sonidos y pantalla del temporizador'+infoBtn('timercfg')+'</div>';
   html += '<div class="fsec" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Sonido de cada momento</div>';
   TIMER_EVENTS.forEach(function(e, i){
@@ -14155,7 +14233,7 @@ function fabAddTap(){
   m.style.cssText = 'position:fixed;right:'+Math.max(8,window.innerWidth-r.right)+'px;bottom:'+(window.innerHeight-r.top+10)+'px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:800;min-width:230px;overflow:hidden;';
   m.innerHTML = item(I('<path d="M12 5v14M5 12h14"/>'),'Nueva tarea','Para este día','openNew(\'dia\')')+
     (hasRegs ? div+item(I('<path d="M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM6 3v18M10 8h5M10 12h5"/>'),'Anotar movimiento','Gasto, ingreso o marca','openQuickAdd()') : '')+
-    (tOn ? div+item(I('<circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5M9.5 2.5h5M12 6.5V4.5"/>'),'Iniciar temporizador','Cuenta regresiva o rutina','setTab(\'timer\')') : '');
+    (tOn ? div+item(I('<path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/>'),'Iniciar enfoque','Cuenta regresiva o rutina','setTab(\'timer\')') : '');
   document.body.appendChild(m);
   setTimeout(function(){ document.addEventListener('pointerdown', _fabMenuOutside, true); }, 0);
 }
@@ -15145,7 +15223,7 @@ function saveCurrentTimerAsTemplate(){
   if(timerTplList().length>=12){ toast('Máximo 12 plantillas de temporizador'); return; }
   var box = document.createElement('div'); box.className='conf-box';
   box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:6px;">Guardar como plantilla</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Quedará disponible en todos tus temporizadores y en tu sección Temporizador.</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Quedará disponible en todos tus temporizadores y en Enfoque.</div>'+
     '<input id="tt-name" class="finp" placeholder="Nombre (ej. Lectura 30/5)" maxlength="30"/>'+
     '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="confirmSaveTimerTemplate()">Guardar</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button></div></div>';
   document.body.appendChild(box);
@@ -17211,7 +17289,7 @@ var MAIN_TOUR = [
   {
     target: '#bottom-nav',
     title: 'Navegación principal',
-    body: 'Aquí están las 5 secciones de la app: Hoy, Plan, Seguimiento, Temporizador y Yo.',
+    body: 'Aquí están las 5 secciones de la app: Hoy, Plan, Seguimiento, Enfoque y Yo.',
   },
   {
     target: '#fab-wrap .fab',
@@ -17233,8 +17311,8 @@ var MAIN_TOUR = [
   },
   {
     target: '#bnav-timer',
-    title: 'Temporizador',
-    body: 'Inicia una cuenta regresiva o tus rutinas guardadas, sin necesidad de una tarea. Si prefieres, lo puedes mover dentro de Seguimiento desde Yo → Temporizador.',
+    title: 'Enfoque',
+    body: 'Inicia una cuenta regresiva o tus rutinas (estudio, entrenamiento…) sin necesidad de una tarea. Si prefieres, lo puedes mover dentro de Seguimiento desde Yo → Enfoque.',
     onEnter: function(){ setTab('timer'); }
   },
   {
@@ -18330,7 +18408,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.8';
+var APP_VERSION = '2026.10.01.9';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
