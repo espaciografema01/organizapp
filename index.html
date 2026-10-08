@@ -231,7 +231,8 @@ input{font-family:'Inter',sans-serif;color:var(--ink);}
   transform-origin:center;
   animation:lineGrow .45s cubic-bezier(.25,.46,.45,.94) .85s both;
 }
-#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--ink);color:white;border-radius:20px;padding:10px 20px;font-size:13px;font-weight:600;z-index:999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.2);opacity:0;transition:opacity .25s ease,transform .25s ease;pointer-events:none;text-align:center;}
+#toast.has-undo{pointer-events:auto;display:flex;align-items:center;justify-content:center;}
+#toast{position:fixed;bottom:98px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--ink);color:white;border-radius:20px;padding:10px 20px;font-size:13px;font-weight:600;z-index:999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.2);opacity:0;transition:opacity .25s ease,transform .25s ease;pointer-events:none;text-align:center;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 .tab-btn{flex:1;padding:8px 4px;border:none;border-radius:9px;background:transparent;font-size:12px;color:var(--muted);font-weight:500;transition:all .15s;}
@@ -269,7 +270,7 @@ body.dens-cozy .task-row{padding:17px 0;gap:12px;}
 /* Grande — toda la app */
 
 /* Íconos de pestañas — siempre grandes */
-.bnav-icon{font-size:22px !important;}
+.bnav-icon{font-size:26px !important;}
 .crucial-star{color:var(--accent);font-size:13px;flex-shrink:0;}
 .mpbar{background:var(--line);border-radius:4px;overflow:hidden;margin-top:5px;}
 .mpbar-fill{background:var(--accent);border-radius:4px;transition:width .4s;}
@@ -481,12 +482,12 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 }
 .bnav-btn{
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-  padding:10px 0 8px;
+  padding:12px 0 11px;
   border:none;background:transparent;cursor:pointer;
   font-family:Inter,sans-serif;
   color:var(--muted);
-  font-size:10px;font-weight:600;letter-spacing:.01em;
-  gap:4px;
+  font-size:11.5px;font-weight:600;letter-spacing:.01em;
+  gap:5px;
   transition:color .15s;
   position:relative;
 }
@@ -502,7 +503,7 @@ textarea::placeholder,input::placeholder{color:var(--muted);opacity:1;}
 .bnav-btn.active .bnav-icon{transform:scale(1.12);}
 
 /* Content area */
-#content{flex:1;padding:0 0 80px;overflow-y:auto;}
+#content{flex:1;padding:0 0 92px;overflow-y:auto;}
 /* Pedido: mantener el dedo sobre un texto abría selección/menú de "navegador"
    (copiar, buscar, compartir...) y distraía. Se desactiva en toda la app,
    salvo en los campos donde sí se escribe. */
@@ -526,7 +527,7 @@ img,svg{-webkit-user-drag:none;}
 
 /* ── Botón flotante (+) para agregar tarea en Hoy ─────────────────────── */
 .fab-wrap{
-  position:fixed;bottom:84px;left:50%;transform:translateX(-50%);
+  position:fixed;bottom:92px;left:50%;transform:translateX(-50%);
   width:100%;max-width:440px;
   display:flex;flex-direction:column;align-items:flex-end;gap:10px;justify-content:flex-end;
   padding:0 16px;
@@ -651,19 +652,19 @@ img,svg{-webkit-user-drag:none;}
   <div id="content"></div>
   <div id="bottom-nav">
     <button class="bnav-btn active" id="bnav-hoy" onclick="setTab('hoy')">
-      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.4M12 19.1v2.4M4.5 4.5l1.7 1.7M17.8 17.8l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.5 19.5l1.7-1.7M17.8 6.2l1.7-1.7"/></svg></span>Hoy
+      <span class="bnav-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.4M12 19.1v2.4M4.5 4.5l1.7 1.7M17.8 17.8l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.5 19.5l1.7-1.7M17.8 6.2l1.7-1.7"/></svg></span>Hoy
     </button>
     <button class="bnav-btn" id="bnav-plan" onclick="setTab('plan')">
-      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg></span>Plan
+      <span class="bnav-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/></svg></span>Plan
     </button>
     <button class="bnav-btn" id="bnav-proyectos" onclick="setTab('proyectos')">
-      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span><span style="text-align:center;line-height:1.15;">Registros y<br>Proyectos</span>
+      <span class="bnav-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></svg></span><span>Registros</span>
     </button>
     <button class="bnav-btn" id="bnav-timer" onclick="setTab('timer')">
-      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z" stroke-linejoin="round"/></svg></span>Enfoque
+      <span class="bnav-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z" stroke-linejoin="round"/></svg></span>Enfoque
     </button>
     <button class="bnav-btn" id="bnav-yo" onclick="setTab('yo')">
-      <span class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c1-3.6 4-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg></span>Yo
+      <span class="bnav-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c1-3.6 4-5.6 7.2-5.6s6.2 2 7.2 5.6"/></svg></span>Yo
     </button>
   </div>
   <div class="fab-wrap" id="fab-wrap" style="display:none;">
@@ -1754,8 +1755,9 @@ var S = {
   // Personalizaciones visuales avanzadas
   bgColorOverride:'default',
   showModeTips:true, // consejos y tareas sugeridas de los modos predeterminados
+  hoyProgressBar:true, hoySort:'manual', hideDone:false, hoyNextHint:true, wkPromptWeeks:[],
   showWeeklyMessage:true, // franja de "recordatorio/intención de la semana" en Hoy
-  timerPlacement:'tab', // dónde vive el temporizador: 'tab' (pestaña propia) | 'seguimiento' (dentro de Registros y Proyectos)
+  timerPlacement:'tab', // dónde vive el temporizador: 'tab' (pestaña propia) | 'seguimiento' (dentro de Registros)
   interfaceLayout:'default', // 'default' | 'compact' | 'agenda'
   _compactSection:'dia',
   _agendaSection:'semana', // 'default' | 'white' | 'black'
@@ -2107,7 +2109,7 @@ function checklistSatisfied(t){
 // guarda la clave de semana). Se reactiva sola la semana siguiente porque la clave
 // deja de coincidir.
 function isSkipped(t){ return !!(t && t.period==='dia' && t.skippedWeek && t.skippedWeek===planWeekKey()); }
-function toggleSkipTaskWeek(id){
+function toggleSkipTaskWeek(id, silent){
   var t=S.tasks.find(function(x){return x.id===id;}); if(!t) return;
   var on = isSkipped(t);
   S.tasks = S.tasks.map(function(x){ if(x.id!==id) return x; var u=Object.assign({},x); if(on) delete u.skippedWeek; else u.skippedWeek=planWeekKey(); return u; });
@@ -2116,7 +2118,8 @@ function toggleSkipTaskWeek(id){
   if(!on) arr.push(mon);
   S.taskSkips[id] = arr;
   saveState(); render(); playSound('toggle');
-  toast(on ? '✓ Tarea reactivada' : 'Tarea ignorada esta semana · vuelve sola la próxima');
+  if(silent) return;
+  if(on) toast('Tarea reactivada'); else toastUndo('Tarea ignorada esta semana', function(){ toggleSkipTaskWeek(id,true); });
 }
 function isDone(t){
   if(t.checklist&&t.checklist.length)return checklistSatisfied(t);
@@ -2172,6 +2175,11 @@ function loadState(){
     var tc=localStorage.getItem('og6-bgcolor');if(tc)S.bgColorOverride=tc;
     var smt=localStorage.getItem('og6-showmodetips');if(smt!==null)S.showModeTips=smt==='1';
     var swm=localStorage.getItem('og6-showweeklymessage');if(swm!==null)S.showWeeklyMessage=swm==='1';
+    var hpb=localStorage.getItem('og6-hoyprogress');if(hpb!==null)S.hoyProgressBar=hpb==='1';
+    var hso=localStorage.getItem('og6-hoysort');if(hso)S.hoySort=hso;
+    var hdn=localStorage.getItem('og6-hidedone');if(hdn!==null)S.hideDone=hdn==='1';
+    var hnx=localStorage.getItem('og6-hoynext');if(hnx!==null)S.hoyNextHint=hnx==='1';
+    try{var wpw=localStorage.getItem('og6-wkpromptweeks');if(wpw)S.wkPromptWeeks=JSON.parse(wpw)||[];}catch(e){}
     var cc=localStorage.getItem('og6-collapsedcats');if(cc)S.collapsedCats=JSON.parse(cc);
     var sndOn=localStorage.getItem('og6-soundon');if(sndOn!==null)S.soundOn=sndOn==='1';
     var il=localStorage.getItem('og6-layout');if(il)S.interfaceLayout=il;
@@ -2298,6 +2306,11 @@ function _saveStateNow(){
     _lsSet('og6-bgcolor',S.bgColorOverride||'default');
     _lsSet('og6-showmodetips',S.showModeTips===false?'0':'1');
     _lsSet('og6-showweeklymessage',S.showWeeklyMessage===false?'0':'1');
+    _lsSet('og6-hoyprogress',S.hoyProgressBar===false?'0':'1');
+    _lsSet('og6-hoysort',S.hoySort||'manual');
+    _lsSet('og6-hidedone',S.hideDone?'1':'0');
+    _lsSet('og6-hoynext',S.hoyNextHint===false?'0':'1');
+    _lsSet('og6-wkpromptweeks',JSON.stringify(S.wkPromptWeeks||[]));
     _lsSet('og6-collapsedcats',JSON.stringify(S.collapsedCats||{}));
     _lsSet('og6-soundon',S.soundOn===false?'0':'1');
     _lsSet('og6-layout',S.interfaceLayout||'default');
@@ -2381,8 +2394,53 @@ function _saveStateNow(){
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 var toastTimer=null;
+var _undoFn=null;
+function toastUndo(msg, fn){
+  var el=document.getElementById('toast'); _undoFn=fn;
+  el.innerHTML='<span>'+msg+'</span><button type="button" onclick="runUndo()" style="margin-left:14px;background:none;border:none;color:#fff;font-weight:800;font-size:13px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-family:Inter,sans-serif;padding:4px 2px;">Deshacer</button>';
+  el.classList.add('show','has-undo');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){el.classList.remove('show','has-undo'); _undoFn=null;},6000);
+}
+function runUndo(){
+  var f=_undoFn; _undoFn=null;
+  var el=document.getElementById('toast'); if(el) el.classList.remove('show','has-undo');
+  clearTimeout(toastTimer);
+  if(f) f();
+}
+// Íconos de línea (SVG) para reemplazar emojis en la interfaz — mismo trazo en toda la app.
+var ICO_PATHS={
+  leaf:'<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14z"/><path d="M5 19c2-4 5-7 9-9"/>',
+  list:'<rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M8.5 9h7M8.5 13h7M8.5 17h4"/>',
+  check:'<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-5"/>',
+  check2:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  folder:'<path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>',
+  eye:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  eyeoff:'<path d="M3 3l18 18"/><path d="M10.6 5.6c.46-.07.92-.1 1.4-.1 6.4 0 10 6.5 10 6.5a17 17 0 0 1-3.2 3.9M6.5 7.6A16.5 16.5 0 0 0 2 12s3.6 6.5 10 6.5c1.5 0 2.8-.3 4-.9"/>',
+  flame:'<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.2 2-4.2.2 1.4.9 2 1.7 2.2C10.3 8 10.6 5.5 12 3z"/>',
+  chat:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+  bell:'<path d="M18 15.5V11a6 6 0 0 0-12 0v4.5L4 18h16l-2-2.5z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+  box:'<path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z"/><path d="M3.5 7.5 12 12l8.5-4.5M12 12v9"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  dots:'<circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/>',
+  chev:'<polyline points="6 9 12 15 18 9"/>',
+  star:'<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.7l5.9-.8z" fill="currentColor"/>',
+  trash:'<path d="M4 7h16M9 7V4.5h6V7M6.5 7l.8 12.5h9.4L17.5 7M10 11v5M14 11v5"/>',
+  edit:'<path d="M15.5 5.5l3 3M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/>',
+  sort:'<path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/>',
+  rows:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  reset:'<path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20 4 20 9 15 9"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  up:'<path d="M12 19V5M6 11l6-6 6 6"/>',
+  star0:'<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.7l5.9-.8z"/>',
+  dice:'<rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r="1.1" fill="currentColor"/><circle cx="15" cy="15" r="1.1" fill="currentColor"/><circle cx="15" cy="9" r="1.1" fill="currentColor"/><circle cx="9" cy="15" r="1.1" fill="currentColor"/>'
+};
+function ico(n,size,sw){
+  size=size||16;
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.8)+'" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:-3px;">'+(ICO_PATHS[n]||'')+'</svg>';
+}
 function toast(msg){
-  var el=document.getElementById('toast');
+  var el=document.getElementById('toast'); _undoFn=null; el.classList.remove('has-undo');
   el.innerHTML=msg;el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(function(){el.classList.remove('show');},2200);
@@ -3022,7 +3080,7 @@ function setTab(t){
   try{ closeFabMenu(); }catch(e){}
   // Los modos ya no tienen pestaña: se cambian desde la etiqueta del header y se gestionan en Yo → Modos.
   if(t==='energia'||t==='modos'){ setTab('yo'); setTimeout(function(){ openYoScreen('modos'); },30); return; }
-  // Si el usuario eligió el temporizador dentro de Registros y Proyectos, "timer" lleva ahí.
+  // Si el usuario eligió el temporizador dentro de Registros, "timer" lleva ahí.
   if(t==='timer' && S.timerPlacement==='seguimiento'){ S._projView='timer'; t='proyectos'; }
   if(t==='plantillas'){ S.calendariosSubTab = 'plantillas'; t = 'horario'; }
   S._reorder = false; S._prevWeek = false;
@@ -3163,11 +3221,16 @@ function selBulkDeleteTasks(){
 }
 function selBulkDeleteTasksConfirmed(btn){
   var ids = SEL.ids.slice();
+  var _removed = [];
+  S.tasks.forEach(function(t,i){ if(ids.indexOf(t.id)!==-1) _removed.push({t:t,i:i}); });
   S.tasks = S.tasks.filter(function(t){return ids.indexOf(t.id)===-1;});
   saveState();
   playSound('delete'); vibrate(20);
   var cb = btn.closest('.conf-box'); if(cb) cb.remove();
-  toast(ids.length+' tarea'+(ids.length===1?'':'s')+' eliminada'+(ids.length===1?'':'s'));
+  toastUndo(ids.length+' tarea'+(ids.length===1?'':'s')+' eliminada'+(ids.length===1?'':'s'), function(){
+    _removed.forEach(function(r){ if(!S.tasks.some(function(t){return t.id===r.t.id;})) S.tasks.splice(Math.min(r.i,S.tasks.length),0,r.t); });
+    saveState(); render(); playSound('add');
+  });
   exitSelectMode();
 }
 function selBulkSetCategory(){
@@ -3324,7 +3387,7 @@ function render(){
   // cuándo se habilita.
   var fabReset = document.getElementById('fab-reset');
   if(fabReset){
-    fabReset.style.display = (onHoy && (!S.simpleMode || S.simpleModeFabReset!==false)) ? 'flex' : 'none';
+    fabReset.style.display = (onHoy && isWeekend() && !dailyResetUsedThisWeekend() && (!S.simpleMode || S.simpleModeFabReset!==false)) ? 'flex' : 'none';
     if(onHoy){
       var dailyAvailable = isWeekend() && !dailyResetUsedThisWeekend();
       fabReset.classList.toggle('fab-available', dailyAvailable);
@@ -3471,12 +3534,55 @@ function renderV2Header(){
             '<circle cx="17" cy="17" r="'+R+'" fill="none" stroke="'+col+'" stroke-width="3" stroke-dasharray="'+C.toFixed(2)+'" stroke-dashoffset="'+offset.toFixed(2)+'" stroke-linecap="butt" transform="rotate(-90 17 17)"/>'+
             '<text x="17" y="21" text-anchor="middle" font-size="9" font-weight="700" fill="'+col+'">'+info.lvl+'</text>'+
           '</svg>')+
-        ((!S.simpleMode && streakActive()) ? '<span style="font-size:12px;font-weight:700;color:var(--accent);">🔥 '+S.streak.days+'</span>' : '')+
+        ((!S.simpleMode && streakActive()) ? '<span style="font-size:12px;font-weight:700;color:var(--accent);display:inline-flex;align-items:center;gap:3px;">'+ico('flame',13,2)+S.streak.days+'</span>' : '')+
         (totalToday>0 ? '<span style="font-size:12px;font-weight:700;color:var(--ink);">'+dayPct+'%</span>' : '')+
       '</div>' : '')+
   '</div>';
 }
 
+function sortHoyList(list){
+  var m=S.hoySort||'manual'; if(m==='manual') return list;
+  var a=list.map(function(t,i){return {t:t,i:i};});
+  if(m==='hora'){
+    a.sort(function(x,y){
+      var hx=x.t.hora?mHoraToMins(x.t.hora):null, hy=y.t.hora?mHoraToMins(y.t.hora):null;
+      if(hx===null&&hy===null) return x.i-y.i; if(hx===null) return 1; if(hy===null) return -1;
+      return (hx-hy)||(x.i-y.i);
+    });
+  } else if(m==='crucial'){
+    a.sort(function(x,y){ return ((y.t.crucial?1:0)-(x.t.crucial?1:0))||(x.i-y.i); });
+  }
+  return a.map(function(o){return o.t;});
+}
+function setHoySort(k){ S.hoySort=k; saveState(); playSound('toggle'); render(); }
+function toggleHideDone(){ S.hideDone=!S.hideDone; saveState(); playSound('toggle'); render(); }
+function toggleHoyProgress(){ S.hoyProgressBar = S.hoyProgressBar===false; saveState(); playSound('toggle'); render(); }
+function toggleHoyNext(){ S.hoyNextHint = S.hoyNextHint===false; saveState(); playSound('toggle'); render(); }
+function hoyProgressHTML(){
+  if(S.hoyProgressBar===false) return '';
+  var list=S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===S.day && !isSkipped(t);});
+  var n=list.length;
+  if(!n) return '<div id="hoy-progress"></div>';
+  var done=list.filter(isDone).length;
+  var pct=Math.round(list.reduce(function(a,t){return a+tRatio(t);},0)/n*100);
+  return '<div id="hoy-progress" style="padding:10px 16px 0;"><div style="display:flex;align-items:center;gap:10px;">'+
+    '<div style="flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden;"><div style="width:'+pct+'%;height:100%;background:var(--accent);border-radius:3px;transition:width .35s ease;"></div></div>'+
+    '<span style="font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap;">'+done+' de '+n+' hechas</span></div></div>';
+}
+function updateHoyProgress(){ var el=document.getElementById('hoy-progress'); if(el) el.outerHTML=hoyProgressHTML(); }
+function hoyNextInfo(){
+  if(S.hoyNextHint===false) return null;
+  if(!(S.tab==='hoy'||S.tab==='dia')) return null;
+  if(S.day!==todayIdx() || weekPlanOffsetDays()) return null;
+  var now=new Date(), nm=now.getHours()*60+now.getMinutes(), cur=null, next=null, nextM=1e9;
+  S.tasks.forEach(function(t){
+    if(t.period!=='dia'||!t.hora||taskWeekdayThisWeek(t)!==S.day||isDone(t)||isSkipped(t)) return;
+    var st=mHoraToMins(t.hora), en=st+(t.duracion||60);
+    if(st<=nm && nm<en){ if(!cur) cur=t.id; }
+    else if(st>nm && st<nextM){ nextM=st; next=t.id; }
+  });
+  return cur?{id:cur,label:'Ahora'}:(next?{id:next,label:'Siguiente'}:null);
+}
 function renderHoyTasksSection(){
   var am = getActiveMode();
   var day = S.day;
@@ -3493,33 +3599,42 @@ function renderHoyTasksSection(){
   var crucial = filtered.filter(function(t){return t.crucial;});
   var visible = S.showHidden ? filtered : (onlyCrucial ? crucial : filtered);
   var hiddenCount = filtered.length - visible.length;
+  var _doneHidden = 0;
+  if(S.hideDone && S.activeCatFilter!=='__pending'){ var _b0 = visible.length; visible = visible.filter(function(t){return !isDone(t);}); _doneHidden = _b0 - visible.length; }
+  visible = sortHoyList(visible);
+  var _pendLike = (S.activeCatFilter==='__pending') || (S.hideDone && all.length>0 && !visible.length);
 
   var html = '<div style="padding:12px 16px;">';
 
   if(am){
     html += '<div style="margin-bottom:8px;">'+
-      (hiddenCount>0&&!S.showHidden?'<button onclick="S.showHidden=true;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">👁 Mostrar '+hiddenCount+' tarea(s) ocultada(s)</button>':'')+
-      (S.showHidden?'<button onclick="S.showHidden=false;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">🙈 Ocultar tareas del modo</button>':'')+
+      (hiddenCount>0&&!S.showHidden?'<button onclick="S.showHidden=true;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+ico('eye',14)+' Mostrar '+hiddenCount+' tarea(s) ocultada(s)</button>':'')+
+      (S.showHidden?'<button onclick="S.showHidden=false;render();" style="width:100%;background:var(--bg);border:none;border-radius:8px;padding:8px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+ico('eyeoff',14)+' Ocultar tareas del modo</button>':'')+
     '</div>';
   }
 
   // Reordenar ahora vive en el menú ⋮ del título del día (y al mantener presionada una tarea).
   // En este modo se muestran TODAS las tareas del día (sin filtro), en filas simples con flechas.
   if(S._reorder && all.length>1){
-    return html + '<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;"><span style="font-size:12px;font-weight:700;color:var(--ink);">Reordenando</span><button onclick="toggleReorder()" style="background:var(--accent);border:none;color:#fff;border-radius:14px;padding:5px 14px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">✓ Listo</button></div>' + renderReorderHTML(all, cats) + '</div>';
+    return html + '<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;"><span style="font-size:12px;font-weight:700;color:var(--ink);">Reordenando</span><button onclick="toggleReorder()" style="background:var(--accent);border:none;color:#fff;border-radius:14px;padding:5px 14px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;display:inline-flex;align-items:center;gap:5px;">'+ico('check2',13,2.4)+'Listo</button></div>' + renderReorderHTML(all, cats) + '</div>';
   }
 
   // Pedido: agrupar también por categoría en "Pendientes" (antes solo se
   // agrupaba en "Todas" — Pendientes siempre mostraba una lista plana).
-  var groupByCategory = cats.length > 0;
+  var groupByCategory = cats.length > 0 && S.hoySort!=='hora';
   var singleCatView = (S.activeCatFilter!=='all' && S.activeCatFilter!=='__pending');
 
+  if(_doneHidden>0 && visible.length){
+    html += '<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:11.5px;color:var(--muted);"><span style="flex:1;">'+_doneHidden+' hecha'+(_doneHidden===1?'':'s')+' oculta'+(_doneHidden===1?'':'s')+'</span><button onclick="toggleHideDone()" style="background:none;border:none;color:var(--accent);font-weight:700;font-size:11.5px;cursor:pointer;font-family:Inter,sans-serif;padding:4px 0;">Mostrar</button></div>';
+  }
   if(!visible.length){
+    var _eico = _pendLike?'check':(S.activeCatFilter!=='all'&&S.activeCatFilter!=='__pending')?'folder':(day===today?'leaf':'list');
     html += '<div style="padding:40px 16px;text-align:center;">'+
-        '<div style="font-size:38px;margin-bottom:10px;opacity:.35;">'+(S.activeCatFilter==='__pending'?'✅':S.activeCatFilter!=='all'?'🗂':(day===today?'🌱':'📋'))+'</div>'+
-        '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">'+(S.activeCatFilter==='__pending'?'¡Ya no queda nada pendiente!':S.activeCatFilter!=='all'?'Nada en esta categoría':(day===today?'Día en blanco':'Sin tareas este día'))+'</div>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">'+(S.activeCatFilter==='__pending'?'Todo lo de este día ya está completado.':day===today?'Agrega tu primera tarea del día':'Planifica este día agregando tareas')+'</div>'+
-        (S.activeCatFilter==='all'?'<button class="cbtn" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;font-weight:700;" onclick="openNew(\'dia\')">+ Agregar tarea</button>':'')+
+        '<div style="margin-bottom:10px;color:var(--muted);opacity:.45;">'+ico(_eico,40,1.4)+'</div>'+
+        '<div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">'+(_pendLike?'¡Ya no queda nada pendiente!':S.activeCatFilter!=='all'?'Nada en esta categoría':(day===today?'Día en blanco':'Sin tareas este día'))+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">'+(_pendLike?'Todo lo de este día ya está completado.':day===today?'Agrega tu primera tarea del día':'Planifica este día agregando tareas')+'</div>'+
+        (S.activeCatFilter==='all'&&!_pendLike?'<button class="cbtn" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;font-weight:700;" onclick="openNew(\'dia\')">+ Agregar tarea</button>':'')+
+        (S.hideDone&&_doneHidden>0&&!visible.length?'<div><button class="cbtn" style="margin-top:6px;" onclick="toggleHideDone()">Mostrar tareas hechas</button></div>':'')+
       '</div>';
   } else if(groupByCategory){
     var catGroups = {}, noCatTasks = [];
@@ -3578,7 +3693,15 @@ function renderHoyTasksSection(){
       '</div>';
     }
   } else {
-    html += visible.map(function(t){return taskHTML(t);}).join('');
+    var _seenTimed=false, _sepDone=false;
+    html += visible.map(function(t){
+      var sep='';
+      if(S.hoySort==='hora'){
+        if(t.hora) _seenTimed=true;
+        else if(_seenTimed && !_sepDone){ _sepDone=true; sep='<div style="font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:14px 0 4px;padding-top:10px;border-top:1px dashed var(--line);">Sin horario</div>'; }
+      }
+      return sep+taskHTML(t);
+    }).join('');
   }
 
   html += '</div>';
@@ -3600,13 +3723,18 @@ function renderHoy(){
   if(_wMsg && !_wMsg.text) _wMsg = null;
   var _tip = (am && am.tips && am.tips[0]) ? am.tips[0] : null;
   var _canAdd = _wkOn && !_wMsg;
+  if(_canAdd && !am){
+    var _wk = getWeekKey(); S.wkPromptWeeks = S.wkPromptWeeks || [];
+    if(S.wkPromptWeeks.indexOf(_wk)<0){ S.wkPromptWeeks.push(_wk); S.wkPromptWeeks = S.wkPromptWeeks.slice(-6); saveState(); }
+  }
+  var _promptAuto = _canAdd && (S.wkPromptWeeks||[]).length>=4;
   if(am || _wMsg){
     var _open = !!S._ctxOpen.ctx;
     var _expandable = !!(_tip || _wMsg || (am && _canAdd));
     html += '<div class="ctx-strip" style="'+(am?'background:'+am.color+'26;':'')+'" onclick="'+(_expandable?"toggleCtx('ctx')":'')+'">'+
       (am ? '<span style="font-size:15px;flex-shrink:0;">'+am.icon+'</span>'+
             '<span style="font-weight:700;font-size:12.5px;color:var(--ink);flex-shrink:0;">'+esc(am.name||'Modo')+(_wMsg?'':' activo')+'</span>' : '')+
-      (_wMsg ? (am ? '<span style="color:var(--muted);flex-shrink:0;">·</span>' : '<span style="font-size:15px;flex-shrink:0;">'+(_wMsg.emoji||'💬')+'</span>')+
+      (_wMsg ? (am ? '<span style="color:var(--muted);flex-shrink:0;">·</span>' : '<span style="font-size:15px;flex-shrink:0;display:inline-flex;">'+(_wMsg.emoji||ico('chat',15))+'</span>')+
                '<span style="font-size:12.5px;color:var(--ink-soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(_wMsg.text)+'</span>' : '')+
       (_expandable ? '<span class="ctx-strip-chevron" style="transform:'+(_open?'rotate(180deg)':'none')+';">▾</span>' : '')+
     '</div>';
@@ -3618,9 +3746,9 @@ function renderHoy(){
         ((!_wMsg && _canAdd) ? '<button onclick="event.stopPropagation();openWeeklyMessageEditor()" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;padding:0;">+ Agregar recordatorio de la semana</button>' : '')+
       '</div>';
     }
-  } else if(_canAdd){
+  } else if(_canAdd && !_promptAuto){
     html += '<div class="ctx-strip" style="color:var(--muted);" onclick="openWeeklyMessageEditor()">'+
-      '<span style="font-size:14px;flex-shrink:0;">💬</span><span style="font-size:12px;">Agregar recordatorio o intención de la semana</span>'+
+      '<span style="flex-shrink:0;display:inline-flex;">'+ico('chat',14)+'</span><span style="font-size:12px;">Agregar recordatorio o intención de la semana</span>'+
     '</div>';
   }
 
@@ -3643,6 +3771,7 @@ function renderHoy(){
   // es un valor especial de filtro ('__pending'), no un id en S.categories.
   // Por eso la barra se muestra siempre (antes solo aparecía si había
   // categorías creadas), para que "Pendientes" esté disponible igual.
+  html += hoyProgressHTML();
   var cats = S.categories || [];
   if(!S.activeCatFilter) S.activeCatFilter = 'all';
   html += '<div style="display:flex;align-items:flex-start;">'+
@@ -3737,13 +3866,13 @@ function softRefreshTasks(ids){
       var spans = secEl.querySelectorAll('.cat-sec-head > span');
       if(spans[1]) spans[1].textContent = act.filter(isDone).length+'/'+act.length;
     });
-    renderV2Header();
+    renderV2Header(); updateHoyProgress();
     return true;
   }catch(e){ return false; }
 }
 function refreshHoyTasks(){
   var sec = document.getElementById('hoy-tasks-section');
-  if(sec) sec.innerHTML = renderHoyTasksSection(); else render();
+  if(sec){ sec.innerHTML = renderHoyTasksSection(); updateHoyProgress(); } else render();
 }
 function toggleReorder(){ S._reorder = !S._reorder; refreshHoyTasks(); }
 function startReorder(){
@@ -3756,22 +3885,33 @@ function openHoyMenu(event){
   var prev = document.getElementById('task-menu-popup'); if(prev) prev.remove();
   var menu = document.createElement('div');
   menu.id = 'task-menu-popup';
-  menu.style.cssText = 'position:fixed;right:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:800;min-width:240px;overflow:hidden;';
+  menu.style.cssText = 'position:fixed;right:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:800;min-width:250px;overflow-y:auto;';
   var rect = (event.currentTarget||event.target).getBoundingClientRect();
-  menu.style.top = Math.min(rect.bottom+6, window.innerHeight-300)+'px';
-  menu._t = Date.now();
-  var wkOn = S.showWeeklyMessage!==false;
-  var I = function(d){return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+d+'</svg>';};
-  var items = [
-    {icon:I('<path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/>'), label:'Reordenar tareas', action:'startReorder()'},
+  var topPx = Math.max(8, Math.min(rect.bottom+6, window.innerHeight-420));
+  menu.style.top = topPx+'px'; menu.style.maxHeight = (window.innerHeight-topPx-12)+'px';
+  menu._t = Date.now(); menu._noAuto = true;
+  var sort = S.hoySort||'manual', dens = S.listDensity||'normal', wkOn = S.showWeeklyMessage!==false;
+  menu._main = [
+    {label:'Orden de la lista', icon:ico('sort',15), sub:[
+      {label:'Manual', check:sort==='manual', action:"setHoySort('manual')"},
+      {label:'Por hora', check:sort==='hora', action:"setHoySort('hora')"},
+      {label:'Cruciales primero', check:sort==='crucial', action:"setHoySort('crucial')"}]},
+    {label:S.hideDone?'Mostrar tareas hechas':'Ocultar tareas hechas', icon:ico(S.hideDone?'eye':'eyeoff',15), action:'toggleHideDone()'},
+    {label:'Densidad', icon:ico('rows',15), sub:[
+      {label:'Compacta', check:dens==='compact', action:"setListDensity('compact')"},
+      {label:'Normal', check:dens==='normal', action:"setListDensity('normal')"},
+      {label:'Cómoda', check:dens==='cozy', action:"setListDensity('cozy')"}]},
+    {label:'Plegar o desplegar categorías', icon:ico('folder',15), action:'toggleAllCatSections()'},
     {divider:true},
-    {icon:I('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'), label:(wkOn?'Ocultar':'Mostrar')+' recordatorio de la semana', action:'toggleShowWeeklyMessage()'},
-    {icon:I('<path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>'), label:'Despliegue de categorías…', action:'goToCategoryConfig()'}
+    {label:'Reordenar tareas', icon:ico('sort',15), action:'startReorder()'},
+    {divider:true},
+    {label:'Recordatorio de la semana', icon:ico('chat',15), sub:[
+      {label:'Escribir o editar…', action:'openWeeklyMessageEditor()'},
+      {label:wkOn?'Ocultar la franja':'Mostrar la franja', action:'toggleShowWeeklyMessage()'}]},
+    {label:'Reiniciar tareas de hoy…', icon:ico('reset',15), action:'askResetToday()'},
+    {label:'Configurar categorías…', icon:ico('folder',15), action:'goToCategoryConfig()'}
   ];
-  menu.innerHTML = items.map(function(it){
-    if(it.divider) return '<div style="height:1px;background:var(--line);margin:3px 0;"></div>';
-    return '<button onclick="closeTaskMenu();'+it.action+'" style="display:flex;align-items:center;gap:10px;width:100%;padding:13px 16px;background:none;border:none;font-size:13px;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;"><span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);">'+it.icon+'</span><span>'+it.label+'</span></button>';
-  }).join('');
+  taskMenuDraw(menu, menu._main, false);
   document.body.appendChild(menu);
   setTimeout(function(){
     document.addEventListener('click', function handler(e){
@@ -3798,27 +3938,31 @@ function renderReorderHTML(all, cats){
   var shown = cats.filter(function(c){return byCat[c.id] && byCat[c.id].length;});
   function taskRows(list){
     return list.map(function(t,i){
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px 8px 14px;border-bottom:1px solid var(--line-soft);">'+
+      return '<div data-drag-item data-id="'+t.id+'" style="display:flex;align-items:center;gap:4px;padding:6px 4px 6px 0;border-bottom:1px solid var(--line-soft);background:var(--paper);">'+
+        gripHTML()+
         '<span style="flex:1;min-width:0;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text||'(sin nombre)')+'</span>'+
         _reorderArrows("moveTaskInList('"+t.id+"',-1)","moveTaskInList('"+t.id+"',1)", i>0, i<list.length-1)+
       '</div>';
     }).join('');
   }
-  var html = '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">Usa las flechas para cambiar el orden.</div>';
+  var html = '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">Arrastra el asa o usa las flechas para cambiar el orden.</div>';
+  html += '<div data-drag-list data-drag-cb="hoyCats">';
   shown.forEach(function(c,ci){
-    html += '<div style="margin-bottom:14px;">'+
-      '<div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:2px solid '+c.color+'55;">'+
-        '<div style="width:9px;height:9px;border-radius:50%;background:'+c.color+';flex-shrink:0;"></div>'+
+    html += '<div data-drag-item data-id="'+c.id+'" style="margin-bottom:14px;background:var(--paper);">'+
+      '<div style="display:flex;align-items:center;gap:4px;padding:6px 4px 6px 0;border-bottom:2px solid '+c.color+'55;">'+
+        gripHTML()+
+        '<div style="width:9px;height:9px;border-radius:50%;background:'+c.color+';flex-shrink:0;margin:0 4px;"></div>'+
         '<span style="flex:1;font-size:12px;font-weight:700;color:'+c.color+';text-transform:uppercase;letter-spacing:.06em;">'+esc(c.name)+'</span>'+
         _reorderArrows("moveCategoryInList('"+c.id+"',-1)","moveCategoryInList('"+c.id+"',1)", ci>0, ci<shown.length-1)+
       '</div>'+
-      taskRows(byCat[c.id])+
+      '<div data-drag-list data-drag-cb="hoyTasks">'+taskRows(byCat[c.id])+'</div>'+
     '</div>';
   });
+  html += '</div>';
   if(noCat.length){
     html += '<div style="margin-bottom:14px;">'+
       (shown.length?'<div style="padding:6px 4px;border-bottom:2px dashed var(--line);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">Sin categoría</div>':'')+
-      taskRows(noCat)+
+      '<div data-drag-list data-drag-cb="hoyTasks">'+taskRows(noCat)+'</div>'+
     '</div>';
   }
   return html;
@@ -4681,7 +4825,7 @@ function renderYoPreferenciasScreen(){
   html += '<div class="card" style="margin-bottom:10px;">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);">💬 Recordatorio de la semana'+infoBtn('weekphrase')+'</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);display:flex;align-items:center;gap:6px;">'+ico('chat',15)+'Recordatorio de la semana'+infoBtn('weekphrase')+'</div>'+
         
       '</div>'+
       '<button class="tog" onclick="toggleShowWeeklyMessage()" style="background:'+(S.showWeeklyMessage!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
@@ -4689,6 +4833,8 @@ function renderYoPreferenciasScreen(){
       '</button>'+
     '</div>'+
   '</div>';
+
+  html += hoyPrefsHTML();
 
   html += '<div class="card" style="margin-top:10px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
     '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);display:flex;align-items:center;">Prellenar registros de tareas recurrentes'+infoBtn('prefill')+'</div>'+
@@ -5199,7 +5345,7 @@ function faqItems(){
       ['¿Cómo personalizo el temporizador?', 'Arrastra los ejercicios con el ícono de puntos para reordenarlos; cada uno puede tener color e ícono. Cada ejercicio puede ser por tiempo o por cantidad (con meta de repeticiones), y puedes contar con toques en la pantalla. Antes de empezar hay una cuenta previa configurable (5 s por defecto). Mientras corre ves en qué vuelta y ejercicio vas, el ejercicio siguiente, tu mejor marca y puedes sumar +5 s o +15 s; si algo interrumpe el audio (como una llamada), se pausa solo. Los ejercicios por cantidad o con toques pueden guardar su resultado en un registro de Marcas. En Yo → Temporizador eliges un sonido distinto para cada momento y subes el volumen hasta 300%. Guarda ejercicios y sets para reutilizarlos y agrégalos de a varios con “Agregar desde guardados”. En Energía → Plantillas → Temporizadores puedes organizar tus ejercicios en grupos, ordenarlos arrastrando, buscarlos y abrir cada uno para editarlo.'],
       ['¿Cuánta experiencia suma cada cosa en un seguimiento?', 'Tú decides, de 1 a 15 XP: al completar una tarea (o automática), por cada avance de la tarea, al completar un ítem del checklist y por cada avance de un ítem (por ejemplo, de 78 a 79 bloques). Son reglas generales del seguimiento y puedes personalizarlas tarea por tarea e incluso ítem por ítem. Subir y bajar el avance no repite XP; si reinicias la tarea, vuelve a sumar.'],
       ['¿Cómo uno un seguimiento con un registro?', 'En el seguimiento, sección "Registro asociado": la unión funciona en los dos sentidos. Lo que anotas en el registro suma los XP que elijas, y lo que suma XP en el seguimiento (tus tareas) queda anotado también en el registro, con el nombre de la tarea. Si borras una entrada, se quitan sus XP. Puedes apagar la parte de "anotar en el registro" si no la quieres.'],
-      ['¿Cómo anoto un movimiento rápido?', 'Con el botón "+" de la pestaña Registros y Proyectos: eliges el registro, escribes el monto y guardas. Debajo aparecen tus "Recientes": al tocar uno se rellena con su concepto y monto. En Hoy, toca dos veces seguidas el "+" para abrir lo mismo sin cambiar de pestaña. También puedes mantener presionado un registro de la lista.'],
+      ['¿Cómo anoto un movimiento rápido?', 'Con el botón "+" de la pestaña Registros: eliges el registro, escribes el monto y guardas. Debajo aparecen tus "Recientes": al tocar uno se rellena con su concepto y monto. En Hoy, toca dos veces seguidas el "+" para abrir lo mismo sin cambiar de pestaña. También puedes mantener presionado un registro de la lista.'],
       ['¿Cómo veo la semana anterior?', 'En Hoy, desliza hacia la izquierda desde el lunes (o toca la flecha de día anterior): la app te pregunta si quieres ver la semana anterior, solo para mirar, con lo que marcaste y lo que no, día por día.'],
       ['¿Qué pasa si reinicio la semana el fin de semana?', 'Pasas a ver la semana siguiente: los días muestran sus fechas y aparece la etiqueta "próxima semana". El lunes todo coincide solo.'],
       ['¿Cómo cobro a fin de mes o en N días?', 'En la tarea, sección Registro, elige "¿Cuándo se cobra o paga?". Al completarla, el movimiento queda como esperado con esa fecha. Si ya había un esperado, se abre una ventanilla directa para confirmarlo o dejarlo pendiente y que la app te pregunte de nuevo en unos días.'],
@@ -5228,7 +5374,7 @@ function faqItems(){
     ]],
     ['Modos y plantillas', [
       ['¿Dónde cambio de modo?', 'Toca la etiqueta del modo (☀️ Normal) junto al logo, arriba a la izquierda. Para crear, editar o ver tus modos: Yo → Personalizar → Modos.'],
-      ['¿Puedo usar el temporizador sin una tarea?', 'Sí. En la pestaña Enfoque eliges una cuenta regresiva rápida o una de tus rutinas (vienen Estudio y Entrenamiento de ejemplo, y puedes editarlas o borrarlas). Si prefieres no tener pestaña propia, en Yo → Enfoque puedes moverlo dentro de Registros y Proyectos.'],
+      ['¿Puedo usar el temporizador sin una tarea?', 'Sí. En la pestaña Enfoque eliges una cuenta regresiva rápida o una de tus rutinas (vienen Estudio y Entrenamiento de ejemplo, y puedes editarlas o borrarlas). Si prefieres no tener pestaña propia, en Yo → Enfoque puedes moverlo dentro de Registros.'],
       ['¿Qué hace el modo enfoque?', T.modohf],
       ['¿Qué es el modo de baja energía?', T.modebaja],
       ['¿Y si solo quiero bajar el ritmo?', T.modebaja2],
@@ -5244,7 +5390,7 @@ function faqItems(){
       ['¿Qué son las conexiones de un proyecto?', T.projlinks]
     ]],
     ['Registros', [
-      ['¿Qué son los registros?', 'Libretas con entradas fechadas, dentro de Registros y Proyectos: de Finanzas (ingresos y gastos, por tarea o sueltos como sueldo) o de Marcas (kilos, kilómetros, tiempos, bloques...). Las estadísticas y récords aparecen dentro de cada registro y en Yo → Estadísticas.'],
+      ['¿Qué son los registros?', 'Libretas con entradas fechadas, dentro de Registros: de Finanzas (ingresos y gastos, por tarea o sueltos como sueldo) o de Marcas (kilos, kilómetros, tiempos, bloques...). Las estadísticas y récords aparecen dentro de cada registro y en Yo → Estadísticas.'],
       ['¿Cuántos registros puedo tener?', T.reglimit],
       ['¿Cómo ligo una tarea a un registro?', T.regtask],
       ['¿Cómo funcionan las métricas y los récords?', T.regmet],
@@ -8425,7 +8571,27 @@ function toggleShowModeTips(){
 // Pedido: poder quitar del todo la franja de "Agregar recordatorio o
 // intención de la semana" en Hoy (tanto el aviso para agregarla como la
 // franja ya escrita, si prefieres no verla).
+function hoyPrefRow(label, tip, call, on, last){
+  return '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;'+(last?'':'border-bottom:1px solid var(--line-soft);')+'">'+
+    '<div style="flex:1;font-weight:600;font-size:13.5px;color:var(--ink);display:flex;align-items:center;">'+label+infoBtn(tip)+'</div>'+
+    '<button class="tog" onclick="'+call+'" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button></div>';
+}
+function hoyPrefsHTML(){
+  var so=S.hoySort||'manual';
+  var seg=[['manual','Manual'],['hora','Por hora'],['crucial','Cruciales']].map(function(o){
+    var on=so===o[0];
+    return '<button type="button" onclick="setHoySort(\''+o[0]+'\')" style="flex:1;padding:8px 4px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--muted)')+';font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+o[1]+'</button>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:10px;padding-top:6px;padding-bottom:6px;">'+
+    '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;padding:8px 0 0;">Pantalla Hoy</div>'+
+    hoyPrefRow('Barra de avance del día','hoyprog','toggleHoyProgress()',S.hoyProgressBar!==false)+
+    hoyPrefRow('Destacar Ahora / Siguiente','hoynext','toggleHoyNext()',S.hoyNextHint!==false)+
+    hoyPrefRow('Ocultar tareas hechas','hidedone','toggleHideDone()',!!S.hideDone)+
+    '<div style="padding:12px 0 10px;"><div style="font-weight:600;font-size:13.5px;color:var(--ink);display:flex;align-items:center;margin-bottom:8px;">Orden de la lista'+infoBtn('hoysort')+'</div><div style="display:flex;gap:6px;">'+seg+'</div></div>'+
+  '</div>';
+}
 function toggleShowWeeklyMessage(){
+  S.wkPromptWeeks=[];
   S.showWeeklyMessage = S.showWeeklyMessage===false ? true : false;
   saveState();
   render();
@@ -8896,7 +9062,7 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
     clHTML+='</div>';
   }
   var tagHTML=showPeriod?'<div style="margin-top:4px;"><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:'+(PC[t.period]||'var(--line)')+';color:var(--ink-soft);font-weight:600;">'+PL[t.period]+'</span></div>':'';
-  var crucialMark=t.crucial?'<span class="crucial-star" title="Tarea crucial">★</span>':'';
+  var crucialMark=t.crucial?'<span class="crucial-star" title="Tarea crucial" style="display:inline-flex;">'+ico('star',13,1.4)+'</span>':'';
   // Etiqueta de categoría (solo para tareas diarias)
   var category = (t.period==='dia' && t.categoryId) ? (S.categories||[]).find(function(c){return c.id===t.categoryId;}) : null;
   var categoryTag = category ? '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:'+category.color+';color:white;font-weight:600;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;" title="Categoría">'+esc(category.name)+'</span>' : '';
@@ -8906,6 +9072,9 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
   // solo dispara tras ~480ms sin moverse.
   var lpAttrs = 'ontouchstart="selLpStart(\'tasks\',\''+t.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'tasks\',\''+t.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()"';
   var skipped = isSkipped(t);
+  var _linked = hasLinks(t.clLinkUp)||(t.checklist&&t.checklist.some(function(i){return hasLinks(i.linkUp);}));
+  var _nx = (t.period==='dia') ? hoyNextInfo() : null;
+  var nextTag = (_nx && _nx.id===t.id) ? '<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;background:var(--accent);color:#fff;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">'+_nx.label+'</span>' : '';
   var skipTag = skipped ? '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:var(--line);color:var(--muted);font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;" title="Ignorada esta semana"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-1px;margin-right:3px;"><rect x="5" y="4" width="5" height="16" rx="1.2"/><rect x="14" y="4" width="5" height="16" rx="1.2"/></svg>Ignorada</span>' : '';
   return '<div class="task-item'+(justPopped?' row-glow':'')+'" id="ti-'+t.id+'" '+lpAttrs+(skipped?' style="opacity:.5;"':'')+'>'+
     '<div class="task-row">'+
@@ -8913,9 +9082,9 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       '<div style="flex:1;min-width:0;">'+
         '<div style="display:flex;align-items:center;gap:6px;">'+
           crucialMark+
-          '<span ondblclick="startInlineEdit(\''+t.id+'\')" id="tt-'+t.id+'" style="font-size:14px;color:'+(done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(done?'line-through':'none')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;flex:1;min-width:0;" title="Doble click para editar">'+esc(t.text)+'</span>'+
+          '<span onclick="if(_selLpFired){_selLpFired=false;return;}openEdit(\''+t.id+'\')" id="tt-'+t.id+'" style="font-size:14px;color:'+(done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(done?'line-through':'none')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex:1;min-width:0;" title="Toca para editar">'+esc(t.text)+'</span>'+
           skipTag+categoryTag+
-          horaTag+
+          horaTag+nextTag+
           // Pedido: poder escribir el avance directo (no solo tocando el
           // círculo repetidas veces) — útil cuando la meta es un número
           // grande, ej. una meta de 100.
@@ -8924,22 +9093,15 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
         '</div>'+
         ((hasQty||hasCL)?mpHTML(r):'')+tagHTML+
       '</div>'+
-      (hasCL?'<button onclick="expCL(\''+t.id+'\')" id="exp-'+t.id+'" style="background:none;border:none;color:var(--muted);font-size:14px;padding:0 3px;flex-shrink:0;transition:transform .2s;transform:'+(clIsOpen?'rotate(180deg)':'none')+';">▾</button>':'')+
+      (hasCL?'<button onclick="expCL(\''+t.id+'\')" id="exp-'+t.id+'" style="background:none;border:none;color:var(--muted);font-size:14px;padding:0;width:30px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .2s;transform:'+(clIsOpen?'rotate(180deg)':'none')+';">'+ico('chev',16,2)+'</button>':'')+
       // Botón de temporizador (pedido): abre la pantalla de ejecución con
       // sets/descansos. La casilla de la izquierda sigue funcionando normal
       // para marcarla a mano, sin usar el temporizador — no son excluyentes.
       (hasTimer?'<button onclick="event.stopPropagation();openTimerRun(\''+t.id+'\')" title="'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'Continuar temporizador':'Iniciar temporizador')+'" style="background:'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'var(--ink)':'var(--accent)')+';border:none;color:#fff;font-size:12px;padding:0;width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="13" height="13" style="margin-left:1px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.5-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z"/></svg></button>':'')+
-      // Botón editar — visible directo
-      '<button onclick="openEdit(\''+t.id+'\')" title="Editar" style="background:none;border:none;color:var(--muted);font-size:15px;padding:0 4px;flex-shrink:0;line-height:1;">✎</button>'+
-      // Botón vincular — pedido: ahora se puede vincular con tareas del
-      // mismo período (no solo "superior"), incluidas las anuales entre sí,
-      // así que el botón ya se muestra siempre, sin excluir "año". "Activo"
-      // refleja el sistema nuevo, multi-vínculo (clLinkUp/linkUp pueden
-      // guardar varios a la vez — ver normalizeLinks/hasLinks) — el campo
-      // viejo t.links ya no se usa para crear vínculos nuevos.
-      '<button onclick="openLinkModal(\''+t.id+'\')" title="Vincular con otra(s) tarea(s)" style="background:none;border:none;color:'+((hasLinks(t.clLinkUp)||(t.checklist&&t.checklist.some(function(i){return hasLinks(i.linkUp);})))?'var(--accent)':'var(--muted)')+';font-size:13px;padding:0 4px;flex-shrink:0;line-height:1;"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 9L9 5"/><path d="M8 3h3v3"/><path d="M6 11H3V8"/></svg></button>'+
+      // Insignia de vínculo: solo si la tarea está vinculada (editar y vincular viven en el menú ⋯ y al tocar el nombre)
+      (_linked?'<button onclick="event.stopPropagation();openLinkModal(\''+t.id+'\')" title="Vinculada — toca para ver o cambiar" aria-label="Vinculada" style="background:none;border:none;color:var(--accent);padding:0;width:28px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('link',15,1.9)+'</button>':'')+
       // Botón ⋯ menú
-      '<button onclick="openTaskMenu(\''+t.id+'\',event)" style="background:none;border:none;color:var(--muted);font-size:18px;padding:0 4px;flex-shrink:0;line-height:1;letter-spacing:1px;">⋯</button>'+
+      '<button onclick="openTaskMenu(\''+t.id+'\',event)" aria-label="Más opciones" style="background:none;border:none;color:var(--muted);padding:0;width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('dots',20)+'</button>'+
     '</div>'+clHTML+
   '</div>';
 }
@@ -8967,12 +9129,13 @@ function taskHTMLSelectable(t,showPeriod){
 function taskMenuDraw(menu, list, isSub){
   var h = isSub ? '<button onclick="taskMenuBack()" style="display:flex;align-items:center;width:100%;padding:12px 16px;min-height:44px;background:none;border:none;border-bottom:1px solid var(--line);font-size:13px;font-weight:700;color:var(--ink);font-family:Inter,sans-serif;cursor:pointer;text-align:left;">‹ Atrás</button>' : '';
   list.forEach(function(it,i){
-    var danger = it.danger || (!isSub && i===list.length-1);
-    if(!isSub && i===list.length-1 && list.length>1) h += '<div style="height:1px;background:var(--line);margin:3px 0;"></div>';
+    if(it.divider){ h += '<div style="height:1px;background:var(--line);margin:3px 0;"></div>'; return; }
+    var danger = it.danger || (!isSub && !menu._noAuto && i===list.length-1);
+    if(!isSub && !menu._noAuto && i===list.length-1 && list.length>1) h += '<div style="height:1px;background:var(--line);margin:3px 0;"></div>';
     var go = it.sub ? 'taskMenuOpen('+i+')' : 'closeTaskMenu();'+it.action;
     h += '<button onclick="'+go+'" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;min-height:44px;background:none;border:none;font-size:13px;color:'+(danger?'var(--bad)':'var(--ink)')+';font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:'+(danger?'var(--bad)':'var(--muted)')+';">'+(it.icon||'')+'</span>'+
-      '<span>'+it.label+'</span>'+(it.sub?'<span style="margin-left:auto;color:var(--muted);font-size:16px;">›</span>':'')+'</button>';
+      '<span>'+it.label+'</span>'+(it.check?'<span style="margin-left:auto;color:var(--accent);display:inline-flex;">'+ico('check2',16,2.4)+'</span>':'')+(it.sub?'<span style="margin-left:auto;color:var(--muted);font-size:16px;">›</span>':'')+'</button>';
   });
   menu.innerHTML = h;
 }
@@ -9057,14 +9220,17 @@ function openTaskMenu(id, event){
   
   var _by = function(p){ return items.filter(function(i){ return i.action && i.action.indexOf(p)===0; }); };
   var main = [];
+  main.push({label:'Editar', icon:ico('edit',15), action:"openEdit('"+id+"')"});
+  main.push({label:'Vincular con otras tareas', icon:ico('link',15), action:"openLinkModal('"+id+"')"});
   if(isDay){
     var _mv=_by('moveTaskTo'), _dp=_by('duplicateTask');
     var _og=items.filter(function(i){ return i.action && (i.action.indexOf('startReorder')===0 || i.action.indexOf('enterSelectMode')===0); });
     if(_dp[0]) _dp[0].label='Duplicar en este día';
-    main.push({label:'Mover…', icon:_mv[0].icon, sub:_mv});
-    main.push({label:'Duplicar…', icon:_dp[0].icon, sub:_dp});
-    ['openRegEntryForTask','openReminderPopup','toggleSkipTaskWeek'].forEach(function(p){ var x=_by(p)[0]; if(x) main.push(x); });
-    main.push({label:'Organizar…', icon:_og[0].icon, sub:_og});
+    main.push({label:'Mover y duplicar', icon:_mv[0].icon, sub:_mv.concat(_dp)});
+    var _av=[]; ['openReminderPopup','openRegEntryForTask'].forEach(function(q){ var x=_by(q)[0]; if(x) _av.push(x); });
+    main.push({label:'Avisos y registro', icon:ico('bell',15), sub:_av});
+    main.push({label:'Organizar', icon:_og[0].icon, sub:_og});
+    var _sk=_by('toggleSkipTaskWeek')[0]; if(_sk) main.push(_sk);
   }
   main.push(items[items.length-1]);
   menu._main = main;
@@ -9123,11 +9289,13 @@ var LINK_PICK_MODE = 'unit';
 var LINK_PICK_TASK_ID = null;
 var LINK_PICK_SOURCE_ITEM = null;
 var LINK_PICK_DIRTY = false;
+var LINK_OPEN = {};
+function lgIsOpen(period, n){ return LINK_OPEN[period]!==undefined ? LINK_OPEN[period] : n>0; }
 function openLinkModal(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
   LINK_PICK_MODE = 'unit'; // nueva sesión de vinculación — arranca en modo por defecto
-  LINK_PICK_DIRTY = false;
+  LINK_PICK_DIRTY = false; LINK_OPEN = {};
   linkPickerSheet(); // crea (o reutiliza) la hoja una sola vez por sesión
   if(t.checklist && t.checklist.length){
     openCLSourcePicker(id); // elegir cuál de sus ítems vincular (o la tarea completa)
@@ -9166,9 +9334,9 @@ function openCLSourcePicker(taskId){
   var wholeLinks = normalizeLinks(t.clLinkUp).map(function(l){return findCLItem(l.taskId,l.itemId);}).filter(Boolean);
   var wholeLabel = wholeLinks.length ? wholeLinks.map(function(linked){return esc(linked.task.text)+(linked.item?(' · '+esc(linked.item.text||'ítem')):' (tarea completa)');}).join(', ') : null;
   var wholeRow = '<button onclick="openLinkTargetPicker(\''+taskId+'\',null)" style="width:100%;text-align:left;padding:10px 12px;border:1.5px solid '+(wholeLinks.length?'var(--accent)':'var(--line)')+';background:'+(wholeLinks.length?'var(--accent-bg)':'var(--paper)')+';border-radius:10px;margin-bottom:10px;cursor:pointer;font-family:Inter,sans-serif;">'+
-    '<div style="font-size:13px;font-weight:700;color:var(--ink);">📦 Vincular la tarea COMPLETA</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Cada ítem que completes acá suma hacia el destino que elijas.</div>'+
-    (wholeLabel?'<div style="font-size:11px;color:var(--accent);margin-top:4px;">⬆ '+wholeLabel+'</div>':'')+
+    '<div style="font-size:13px;font-weight:700;color:var(--ink);">'+ico('box',15)+' Vincular la tarea completa</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Cada ítem completado suma hacia el destino.</div>'+
+    (wholeLabel?'<div style="font-size:11px;color:var(--accent);margin-top:4px;display:flex;align-items:center;gap:4px;">'+ico('up',11,2.2)+wholeLabel+'</div>':'')+
   '</button>'+
   '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 8px;">O vincula un ítem puntual</div>';
   var rows = t.checklist.map(function(it){
@@ -9176,14 +9344,14 @@ function openCLSourcePicker(taskId){
     var label = links.length ? links.map(function(linked){return esc(linked.task.text)+(linked.item?(' · '+esc(linked.item.text||'ítem')):' (tarea completa)');}).join(', ') : null;
     return '<button onclick="openLinkTargetPicker(\''+taskId+'\',\''+it.id+'\')" style="width:100%;text-align:left;padding:10px 12px;border:1.5px solid '+(links.length?'var(--accent)':'var(--line)')+';background:'+(links.length?'var(--accent-bg)':'var(--paper)')+';border-radius:10px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;">'+
       '<div style="font-size:13px;color:var(--ink);">'+esc(it.text||'(sin nombre)')+'</div>'+
-      (label?'<div style="font-size:11px;color:var(--accent);margin-top:2px;">⬆ '+label+'</div>':'<div style="font-size:11px;color:var(--muted);margin-top:2px;">sin vincular</div>')+
+      (label?'<div style="font-size:11px;color:var(--accent);margin-top:2px;display:flex;align-items:center;gap:4px;">'+ico('up',11,2.2)+label+'</div>':'<div style="font-size:11px;color:var(--muted);margin-top:2px;">sin vincular</div>')+
     '</button>';
   }).join('');
   sheet.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
       '<span class="serif" style="font-weight:700;font-size:19px;">Vincular</span>'+
       '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     ''+infoBtn('linkcl')+'</div>'+
-    
+    '<div style="font-size:12px;color:var(--muted);margin:0 0 12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</div>'+
     wholeRow+
     rows+
     '<button class="cbtn" style="width:100%;margin-top:6px;" onclick="closeLinkPicker()">Cerrar</button>';
@@ -9247,31 +9415,33 @@ function openLinkTargetPicker(taskId, sourceItemId){
         '<div onclick="toggleLinkGroup(\''+g.period+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg);">'+
           '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex:1;">'+PL[g.period]+(linksInGroup?' · '+linksInGroup+' vinculada'+(linksInGroup===1?'':'s'):'')+'</span>'+
           '<span style="font-size:11px;color:var(--muted);">'+g.tasks.length+'</span>'+
-          '<span id="lg-chev-'+g.period+'" style="transition:transform .15s;transform:rotate(-90deg);display:inline-flex;color:var(--muted);">'+
+          '<span id="lg-chev-'+g.period+'" style="transition:transform .15s;transform:'+(lgIsOpen(g.period,linksInGroup)?'rotate(0deg)':'rotate(-90deg)')+';display:inline-flex;color:var(--muted);">'+
             '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5 4 6 7.5 9.5 4"/></svg>'+
           '</span>'+
         '</div>'+
-        '<div id="lg-body-'+g.period+'" style="display:none;padding:8px;">'+rowsHTML+'</div>'+
+        '<div id="lg-body-'+g.period+'" style="display:'+(lgIsOpen(g.period,linksInGroup)?'block':'none')+';padding:8px;">'+rowsHTML+'</div>'+
       '</div>';
     }).join('');
   }
   var summary = currentLinks.length
-    ? '<div style="font-size:11px;color:var(--accent);font-weight:700;margin-bottom:10px;">Vinculado a '+currentLinks.length+' tarea'+(currentLinks.length===1?'':'s')+' — toca de nuevo para quitar una.</div>'
+    ? '<div style="font-size:11.5px;color:var(--accent);font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:5px;">'+ico('check2',13,2.4)+'Vinculada a '+currentLinks.length+' tarea'+(currentLinks.length===1?'':'s')+'</div>'
     : '';
-  var modeBar = '<div style="display:flex;gap:6px;margin-bottom:6px;">'+
+  var modeBar = mSecLabel('¿Cómo suma?','linkmode')+'<div style="display:flex;gap:6px;margin-bottom:6px;">'+
     '<button onclick="setLinkPickMode(\'unit\')" style="flex:1;padding:8px 4px;border-radius:8px;border:1.5px solid '+(LINK_PICK_MODE==='unit'?'var(--accent)':'var(--line)')+';background:'+(LINK_PICK_MODE==='unit'?'var(--accent-bg)':'var(--paper)')+';color:'+(LINK_PICK_MODE==='unit'?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">1 a 1</button>'+
     '<button onclick="setLinkPickMode(\'completion\')" style="flex:1;padding:8px 4px;border-radius:8px;border:1.5px solid '+(LINK_PICK_MODE==='completion'?'var(--accent)':'var(--line)')+';background:'+(LINK_PICK_MODE==='completion'?'var(--accent-bg)':'var(--paper)')+';color:'+(LINK_PICK_MODE==='completion'?'var(--accent)':'var(--muted)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Todo = 1 al completar</button>'+
   '</div>'+
-  '<div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;line-height:1.4;">Así sumará el próximo vínculo que marques abajo ('+(LINK_PICK_MODE==='unit'?'cada unidad de acá suma 1 unidad allá':'solo al completar esto al 100% se suma 1 allá')+'). Los vínculos que ya tenías no cambian solos — toca su etiqueta para cambiarles el modo.</div>';
+  '<div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.4;">'+(LINK_PICK_MODE==='unit'?'Cada unidad de aquí suma 1 allá.':'Al completar esto, se suma 1 allá.')+' Aplica al próximo vínculo que marques.</div>';
   // El botón "‹ volver" solo tiene sentido si esta tarea tiene checklist
   // propio (hay un paso 1 al cual volver) — si no, este ES el primer paso.
   var hasBack = t.checklist && t.checklist.length;
+  var _srcIt = sourceItemId ? (t.checklist||[]).find(function(i){return i.id===sourceItemId;}) : null;
+  var srcLabel = t.text + (_srcIt ? ' · '+(_srcIt.text||'ítem') : (hasBack ? ' (tarea completa)' : ''));
   sheet.innerHTML='<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">'+
       (hasBack?'<button onclick="openCLSourcePicker(\''+taskId+'\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:0 6px 0 0;line-height:1;">‹</button>':'')+
       '<span class="serif" style="font-weight:700;font-size:19px;flex:1;">Vincular con…</span>'+
       '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     ''+infoBtn('linkup')+'</div>'+
-    
+    '<div style="font-size:12px;color:var(--muted);margin:0 0 14px;display:flex;align-items:center;gap:6px;min-width:0;"><span style="color:var(--accent);display:inline-flex;">'+ico('link',13,2)+'</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(srcLabel)+'</span></div>'+
     modeBar+
     summary+
     body+
@@ -9284,6 +9454,7 @@ function toggleLinkGroup(period){
   var bodyEl=document.getElementById('lg-body-'+period), chev=document.getElementById('lg-chev-'+period);
   if(!bodyEl) return;
   var opening = bodyEl.style.display==='none';
+  LINK_OPEN[period] = opening;
   bodyEl.style.display = opening?'block':'none';
   if(chev) chev.style.transform = opening?'rotate(0deg)':'rotate(-90deg)';
 }
@@ -9673,6 +9844,7 @@ function wmSetEmoji(e){
 }
 
 function saveWeeklyMessage(){
+  S.wkPromptWeeks=[];
   var ta = document.getElementById('wm-text');
   if(!ta) return;
   var text = ta.value.trim();
@@ -10451,7 +10623,7 @@ function teSummaryHTML(){
 function teRegAreaHTML(){
   var regs = regList(); var t = TE.track, cur = t.regSources||[];
   var html = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;align-items:center;">Registro asociado'+infoBtn('trkreg')+'</div>';
-  if(!regs.length) return html+'<div style="font-size:12px;color:var(--muted);">Aún no tienes registros. Créalos en la pestaña Registros y Proyectos.</div>';
+  if(!regs.length) return html+'<div style="font-size:12px;color:var(--muted);">Aún no tienes registros. Créalos en la pestaña Registros.</div>';
   var xpSel = function(val, fn){ var o=''; for(var x=1;x<=15;x++) o+='<option value="'+x+'"'+(val===x?' selected':'')+'>'+x+' XP</option>'; return '<select class="finp" onchange="'+fn+'" style="margin:0;width:92px;font-size:13px;">'+o+'</select>'; };
   regs.forEach(function(r){
     var rs = cur.find(function(x){return x.regId===r.id;});
@@ -11512,7 +11684,7 @@ function renderYoTemporizadorScreen(){
   };
   var html = '<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Dónde mostrar Enfoque</div>'+
     opt('tab','Pestaña propia','Acceso directo en la barra inferior.')+
-    opt('seguimiento','Dentro de Registros y Proyectos','Libera una pestaña. También aparece en el botón + de Hoy.')+
+    opt('seguimiento','Dentro de Registros','Libera una pestaña. También aparece en el botón + de Hoy.')+
     '<button onclick="setTab(\'timer\')" class="cbtn" style="width:100%;margin:6px 0 22px;">Abrir Enfoque</button>';
   html += '<div style="display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:14px;">Sonidos y pantalla del temporizador'+infoBtn('timercfg')+'</div>';
   html += '<div class="fsec" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Sonido de cada momento</div>';
@@ -13762,7 +13934,15 @@ function propagate(t, justCompleted, delta){
     propagate(updParent, parentJustCompleted, addAmount);
   });
 }
-function delTask(id){S.tasks=S.tasks.filter(function(t){return t.id!==id;});saveState();render();playSound('delete');vibrate(20);}
+function delTask(id){
+  var idx=S.tasks.findIndex(function(t){return t.id===id;}); if(idx<0) return;
+  var task=S.tasks[idx];
+  S.tasks=S.tasks.filter(function(t){return t.id!==id;});saveState();render();playSound('delete');vibrate(20);
+  toastUndo('Tarea eliminada', function(){
+    if(S.tasks.some(function(t){return t.id===id;})) return;
+    S.tasks.splice(Math.min(idx,S.tasks.length),0,task); saveState(); render(); playSound('add');
+  });
+}
 // ¿Esta tarea recibe avance de otras vía el sistema de "vincular tarea"
 // (t.links, por cantidad/prog)? Se usa para no dejar activar un checklist
 // propio ahí — ver la nota en mToggleCLSection().
@@ -14316,7 +14496,13 @@ var INFO_TIPS = {
   modohf:'Este modo está pensado para períodos cortos de enfoque máximo, cuando quieres ver todas tus tareas sin límite artificial.',
   cats:'Organiza tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.',
   linkcl:'Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes ir y volver para vincular varios, sin cerrar esta hoja).',
-  linkup:'Al avanzar acá, avanzará automáticamente allá — puedes elegir varias tareas superiores a la vez y la meta de cada destino se recalcula sola.',
+  linkup:'Al avanzar acá, avanzará automáticamente allá. Solo se puede vincular hacia períodos superiores (semana, mes, semestre, año) y puedes elegir varias tareas a la vez; la meta de cada destino se recalcula sola. Toca una fila marcada para quitar el vínculo, o su etiqueta verde para cambiar cómo suma.',
+  linkmode:'1 a 1: cada unidad que avanzas acá suma 1 allá. Todo = 1 al completar: solo cuando esta tarea (o ítem) llega al 100% se suma 1 allá. Los vínculos que ya existen no cambian solos: toca su etiqueta verde para cambiarles el modo.',
+  notifperm:'Requiere que hayas activado los permisos de notificación en Yo → Notificaciones. El aviso llega a la hora y con la anticipación que elijas.',
+  hoyprog:'Una barra fina bajo el selector de día con cuántas tareas llevas hechas.',
+  hoynext:'En Hoy, marca con "Ahora" la tarea con horario que está en curso, o con "Siguiente" la próxima que viene.',
+  hidedone:'Esconde las tareas ya completadas del día para ver solo lo que falta. También se cambia desde el menú de opciones de Hoy.',
+  hoysort:'Manual respeta el orden que tú armaste. Por hora ordena según el horario de cada tarea. Cruciales primero sube las marcadas con estrella.',
   modeweek:'No exige el umbral sábado ni domingo — retómalo el lunes y esos dos días se suman solos a tu racha, sin cortarla.',
   modebaja:'Este modo está pensado para cuando estás fuera de tu rutina habitual y quieres bajar la exigencia sin perder del todo el hilo.',
   modebaja2:'Si solo quieres bajar el ritmo unos días sin usar este modo, considera un modo personalizado o una plantilla con menos tareas.',
@@ -14406,8 +14592,8 @@ function taskModalDayHTML(showFreshCL){
   return ''+
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">'+
       '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..." style="flex:1;min-width:0;margin:0;font-size:16px;padding:6px 0;"/>'+
-      '<button type="button" id="m-crucial-btn" onclick="mToggleCrucial()" title="Tarea crucial" aria-label="Tarea crucial" style="'+crucialBtnStyle()+'">'+(M.crucial?'★':'☆')+'</button>'+
-      (M.isNew?'<button type="button" onclick="fillGenericTask()" title="Sugerir una tarea genérica" aria-label="Sugerir una tarea genérica" style="width:38px;height:38px;border-radius:12px;border:1.5px dashed var(--line);background:transparent;font-size:17px;line-height:1;cursor:pointer;flex-shrink:0;padding:0;">🎲</button>':'')+
+      '<button type="button" id="m-crucial-btn" onclick="mToggleCrucial()" title="Tarea crucial" aria-label="Tarea crucial" style="'+crucialBtnStyle()+'">'+(M.crucial?ico('star',19,1.6):ico('star0',19,1.8))+'</button>'+
+      (M.isNew?'<button type="button" onclick="fillGenericTask()" title="Sugerir una tarea genérica" aria-label="Sugerir una tarea genérica" style="width:38px;height:38px;border-radius:12px;border:1.5px dashed var(--line);background:transparent;font-size:17px;line-height:1;cursor:pointer;flex-shrink:0;padding:0;color:var(--muted);display:flex;align-items:center;justify-content:center;">'+ico('dice',19,1.7)+'</button>':'')+
     '</div>'+
     mSecLabel('Categoría')+
     '<div id="m-cat-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'+mCatChipsInnerHTML()+'</div>'+
@@ -14479,7 +14665,7 @@ function taskModalDayHTML(showFreshCL){
       // necesitan aviso, así que se activa solo para la que uno elige.
       '<div id="m-notif-block" style="display:'+(M.hora?'block':'none')+';border-top:1px solid var(--line-soft);margin-top:'+(M.hora?12:0)+'px;padding-top:'+(M.hora?12:0)+'px;">'+
         '<div class="frow" style="margin-bottom:'+(M.notif&&M.notif.on?10:0)+'px;">'+
-          '<span style="font-size:13px;font-weight:600;color:var(--ink);">🔔 Recordatorio para esta tarea</span>'+
+          '<span style="font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px;">'+ico('bell',15)+'Recordatorio para esta tarea'+infoBtn('notifperm')+'</span>'+
           '<button class="tog" id="m-notif-tog" onclick="mToggleNotif()" style="background:'+(M.notif&&M.notif.on?'var(--accent)':'var(--muted-soft)')+';">'+
             '<span class="tok" style="left:'+(M.notif&&M.notif.on?22:2)+'px;"></span>'+
           '</button>'+
@@ -14499,17 +14685,20 @@ function showTaskModal(){
   // específica (M.hasDate) es de un solo uso, así que no aplica ahí.
   var showFreshCL = !isDay || (!M.hasDate && !M.oneShot) || M.repeatEvery>0;
   var overlay=document.createElement('div');overlay.className='overlay';overlay.id='task-modal';
-  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('task-modal');});
+  overlay.addEventListener('click',function(e){if(e.target===overlay)askCloseTaskModal();});
   // clItemsHTML() y clAddButtonHTML() ahora son funciones globales (definidas
   // junto a mRerenderCL más abajo) para que el re-render incremental después
   // de agregar/sacar un ítem use exactamente el mismo HTML que el render
   // inicial acá — antes estaban duplicadas y mRerenderCL usaba una versión
   // más chica e inconsistente.
-  overlay.innerHTML='<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
+  overlay.innerHTML='<div class="sheet" style="padding-top:0;padding-bottom:0;">'+
+    '<div style="position:sticky;top:0;z-index:20;background:var(--paper);display:flex;justify-content:space-between;align-items:center;padding:18px 0 12px;margin-bottom:8px;">'+
       '<span class="serif" style="font-weight:700;font-size:20px;">'+(M.isNew?(M.isEvent?'Nuevo evento':'Nueva tarea'):'Editar tarea')+'</span>'+
-      '<button onclick="removeOverlay(\'task-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
-    '</div>'+
+      '<div style="display:flex;align-items:center;gap:4px;">'+
+        (M.isNew?'':'<button type="button" onclick="mDelete()" title="Eliminar tarea" aria-label="Eliminar tarea" style="background:none;border:none;color:var(--bad);width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('trash',20)+'</button>')+
+        '<button onclick="askCloseTaskModal()" aria-label="Cerrar" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;width:38px;height:38px;">×</button>'+
+      '</div>'+
+    '</div><div>'+
     (isDay?taskModalDayHTML(showFreshCL):(
     '<label class="flbl">Nombre</label>'+
     '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..."/>'+
@@ -14564,13 +14753,47 @@ function showTaskModal(){
       '</div>'+
       '</div>'
     ))+(isDay?'':mRegistrySectionHTML())+
-    '<div style="display:flex;gap:8px;margin-top:'+(isDay?'22px':'4px')+';'+(isDay?'padding-top:16px;border-top:1px solid var(--line-soft);':'')+'">'+
+    '<div style="height:18px;"></div></div>'+
+    '<div style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
       '<button class="sbtn" onclick="mSave()">'+(M.isNew?'Crear':'Guardar')+'</button>'+
-      '<button class="cbtn" onclick="removeOverlay(\'task-modal\')">Cancelar</button>'+
+      '<button class="cbtn" onclick="askCloseTaskModal()">Cancelar</button>'+
     '</div>'+
   '</div>';
   document.body.appendChild(overlay);
+  if(!M._snapDone){ M._snapDone=true; M._snap=mSnap(); }
 }
+// Cambios sin guardar: al cerrar con X / Cancelar / tocar afuera / botón atrás
+function mSnap(){
+  try{
+    var nm=document.getElementById('m-name'), di=document.getElementById('m-date-input'), c={};
+    Object.keys(M).forEach(function(k){ if(k==='moreOpen'||k.charAt(0)==='_') return; c[k]=M[k]; });
+    return JSON.stringify([c, nm?nm.value:'', di?di.value:'']);
+  }catch(e){ return Math.random()+''; }
+}
+function mIsDirty(){ return !!(M && M._snap!=null && document.getElementById('task-modal') && mSnap()!==M._snap); }
+function askCloseTaskModal(){
+  if(!document.getElementById('task-modal')) return;
+  if(!mIsDirty()){ removeOverlay('task-modal'); return; }
+  confirmDiscardTask();
+}
+function confirmDiscardTask(){
+  if(document.getElementById('task-discard')) return;
+  var box=document.createElement('div'); box.className='conf-box'; box.id='task-discard';
+  box.innerHTML='<div class="conf-inner" style="text-align:center;">'+
+    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:6px;">¿Guardar los cambios?</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;line-height:1.5;">Hiciste cambios que todavía no se guardan.</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+      '<button class="sbtn" onclick="taskDiscardChoice(\'save\')">Guardar</button>'+
+      '<button class="cbtn" style="color:var(--bad);" onclick="taskDiscardChoice(\'discard\')">Descartar cambios</button>'+
+      '<button class="tbtn" style="text-align:center;text-decoration:none;" onclick="taskDiscardChoice(\'keep\')">Seguir editando</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function taskDiscardChoice(a){
+  var b=document.getElementById('task-discard'); if(b) b.remove();
+  if(a==='save') mSave(); else if(a==='discard') removeOverlay('task-modal');
+}
+function mDelete(){ var id=M.task.id; removeOverlay('task-modal'); setTimeout(function(){ delTask(id); },80); }
 function mToggleMore(){
   M.moreOpen = !M.moreOpen;
   var area = document.getElementById('m-more-area');
@@ -14808,8 +15031,7 @@ function mSetDuracion(min){
 // cambia, sin tener que actualizar cada pieza suelta por separado.
 function mNotifAreaHTML(){
   var hh=(M.notif&&M.notif.hh)||0, mm=(M.notif&&M.notif.mm!=null)?M.notif.mm:15;
-  return '<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Requiere que hayas activado los permisos de notificación en Yo → Notificaciones.</div>'+
-    notifPresetChips(hh, mm, 'mSetNotifPreset')+
+  return notifPresetChips(hh, mm, 'mSetNotifPreset')+
     '<div style="display:flex;align-items:center;justify-content:center;gap:14px;background:var(--paper);border-radius:12px;padding:12px;margin-bottom:8px;">'+
       '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">'+
         '<button type="button" onclick="mNudgeNotifHH(1)" style="width:30px;height:24px;border-radius:8px;border:1.5px solid var(--line);background:var(--paper);font-size:13px;cursor:pointer;color:var(--ink);">+</button>'+
@@ -14862,7 +15084,7 @@ function mNudgeNotifMM(delta){
 function mToggleCrucial(){
   M.crucial=!M.crucial;
   var starBtn=document.getElementById('m-crucial-btn');
-  if(starBtn){starBtn.style.cssText=crucialBtnStyle();starBtn.textContent=M.crucial?'★':'☆';}
+  if(starBtn){starBtn.style.cssText=crucialBtnStyle();starBtn.innerHTML=M.crucial?ico('star',19,1.6):ico('star0',19,1.8);}
   if(M.crucial){ playSound('crucial'); vibrate(15); }
 }
 function openNewCategoryFromModal(){
@@ -15225,6 +15447,10 @@ function dragDone(cb, ids){
     var map = {}; M.timer.sets.forEach(function(x){ map[x.id]=x; });
     M.timer.sets = ids.map(function(i){return map[i];}).filter(Boolean);
     mRerenderTimerArea(); playSound('toggle');
+  } else if(cb==='hoyTasks'){
+    S.tasks = reorderSubset(S.tasks, ids); saveState(); playSound('toggle'); refreshHoyTasks();
+  } else if(cb==='hoyCats'){
+    S.categories = reorderSubset(S.categories||[], ids); saveState(); playSound('toggle'); refreshHoyTasks();
   } else if(cb==='exGroups'){
     S.exerciseGroups = reorderSubset(S.exerciseGroups||[], ids); saveState(); render();
   } else if(cb==='regs'){
@@ -15739,7 +15965,7 @@ function timerSetRegHTML(set){
   if(!(set.kind==='reps' || set.tap || askOn)) return askHTML;
   var regs = regList().filter(function(r){return r.kind==='metrics' && (r.metrics||[]).some(function(m){return (m.name||'').trim();});});
   var lbl = askHTML+'<div style="font-size:11px;color:var(--muted);margin:12px 0 5px;">Guardar el resultado en un registro</div>';
-  if(!regs.length) return lbl+'<div style="font-size:11px;color:var(--muted);line-height:1.5;">Para anotar tus marcas, crea un registro de tipo Marcas en la pestaña Registros y Proyectos.</div>';
+  if(!regs.length) return lbl+'<div style="font-size:11px;color:var(--muted);line-height:1.5;">Para anotar tus marcas, crea un registro de tipo Marcas en la pestaña Registros.</div>';
   var cur = regs.find(function(r){return r.id===set.regId;});
   var sel = 'width:100%;margin:0 0 6px;font-size:13px;';
   return lbl+'<select class="finp" onchange="mSetSetReg(\''+set.id+'\',this.value)" style="'+sel+'"><option value="">No guardar (solo mejor marca del temporizador)</option>'+
@@ -17145,7 +17371,7 @@ var MAIN_TOUR = [
   {
     target: '#bottom-nav',
     title: 'Navegación principal',
-    body: 'Aquí están las 5 secciones de la app: Hoy, Plan, Registros y Proyectos, Enfoque y Yo.',
+    body: 'Aquí están las 5 secciones de la app: Hoy, Plan, Registros, Enfoque y Yo.',
   },
   {
     target: '#fab-wrap .fab',
@@ -17161,14 +17387,14 @@ var MAIN_TOUR = [
   },
   {
     target: '#bnav-proyectos',
-    title: 'Registros y proyectos',
+    title: 'Registros',
     body: 'Aquí llevas tus registros (finanzas, marcas y hábitos) y tus proyectos. Crea proyectos con carta Gantt, secciones y subtareas. Al abrir uno por primera vez viene con una estructura de ejemplo para que puedas editarla.',
     onEnter: function(){ setTab('proyectos'); }
   },
   {
     target: '#bnav-timer',
     title: 'Enfoque',
-    body: 'Inicia una cuenta regresiva o tus rutinas (estudio, entrenamiento…) sin necesidad de una tarea. Si prefieres, lo puedes mover dentro de Registros y Proyectos desde Yo → Enfoque.',
+    body: 'Inicia una cuenta regresiva o tus rutinas (estudio, entrenamiento…) sin necesidad de una tarea. Si prefieres, lo puedes mover dentro de Registros desde Yo → Enfoque.',
     onEnter: function(){ setTab('timer'); }
   },
   {
@@ -18161,7 +18387,18 @@ if(S.notifPermission === 'granted') scheduleNotifications();
     // de opciones, animaciones de logro, etc. Los elementos permanentes
     // (contenido, nav inferior, toast, splash, el "ghost" del swipe...) ya
     // existían antes de empezar a observar, así que nunca disparan esto.
-    return node.nodeType === 1 && node.parentNode === document.body;
+    if(node.nodeType !== 1 || node.parentNode !== document.body) return false;
+    // Nodos que nunca son un modal (scripts, estilos, enlaces de descarga...)
+    return !/^(SCRIPT|STYLE|LINK|META|A|AUDIO|VIDEO|INPUT|IFRAME)$/.test(node.tagName);
+  }
+
+  // ¿Sigue siendo un modal/overlay real y visible? (si no, es un "fantasma")
+  function isLiveModal(nd){
+    if(!nd || !nd.isConnected) return false;
+    var cs; try{ cs = getComputedStyle(nd); }catch(err){ return true; }
+    if(cs.display==='none' || cs.visibility==='hidden') return false;
+    var r = nd.getBoundingClientRect();
+    return (r.width>0 && r.height>0);
   }
 
   var mo = new MutationObserver(function(mutations){
@@ -18194,6 +18431,11 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   function closeTopModal(){
     var node = trackedModals[trackedModals.length-1];
     if(!node) return;
+    if(node.id==='task-modal' && typeof mIsDirty==='function' && mIsDirty()){
+      try{ history.pushState({navModal:true}, ''); }catch(e){}
+      confirmDiscardTask();
+      return;
+    }
     handlingPop = true;
     if(node.id==='project-view'){
       // BUGFIX: la vista de proyecto no es un overlay genérico — abrirla
@@ -18227,6 +18469,21 @@ if(S.notifPermission === 'granted') scheduleNotifications();
   window.addEventListener('popstate', function(e){
     var _leaving = S._yoLeaving; S._yoLeaving = false;
     if(syntheticBack){ syntheticBack = false; return; }
+    // BUGFIX (doble "atrás" la primera vez): cualquier nodo agregado al <body>
+    // reserva una entrada de historial. Si quedó alguno que ya no es un modal
+    // real (fuera del DOM, oculto o sin tamaño), esa entrada "fantasma" se
+    // comía el primer "atrás" y la pantalla no cambiaba. Ahora se purgan los
+    // fantasmas y, si no queda ningún modal real, se retrocede de nuevo
+    // (una vez por fantasma) para que un solo "atrás" haga lo esperado.
+    var _ghosts = 0;
+    trackedModals = trackedModals.filter(function(nd){
+      if(isLiveModal(nd)) return true;
+      _ghosts++; return false;
+    });
+    if(!trackedModals.length && _ghosts){
+      try{ history.go(-_ghosts); }catch(err){}
+      return;
+    }
     if(trackedModals.length){
       closeTopModal();
       return;
@@ -18264,7 +18521,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.11';
+var APP_VERSION = '2026.10.01.12';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
