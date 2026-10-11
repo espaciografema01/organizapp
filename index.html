@@ -320,6 +320,9 @@ button:active{transform:scale(0.96);}
 .overlay.closing .sheet{animation:down .18s ease forwards;}
 @keyframes down{from{transform:translateY(0);}to{transform:translateY(100%);}}
 
+.stk-bar::before{content:'';position:absolute;left:-22px;right:-22px;top:-34px;height:34px;background:linear-gradient(to top,var(--paper),rgba(0,0,0,0));pointer-events:none;transition:opacity .2s;}
+.stk-bar::after{content:'↓ más abajo';position:absolute;left:50%;top:-24px;transform:translateX(-50%);font-size:10.5px;font-weight:700;color:var(--muted);background:var(--bg);border:1px solid var(--line-soft);border-radius:999px;padding:2px 9px;pointer-events:none;transition:opacity .2s;white-space:nowrap;}
+.stk-bar.at-end::before,.stk-bar.at-end::after{opacity:0;}
 .sheet{background:var(--paper);border-radius:20px 20px 0 0;padding:22px 22px 50px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;animation:up .25s ease;}
 @keyframes up{from{transform:translateY(100%);}to{transform:translateY(0);}}
 @keyframes pop{0%{transform:scale(0.7);opacity:0;}60%{transform:scale(1.05);opacity:1;}100%{transform:scale(1);opacity:1;}}
@@ -1141,6 +1144,20 @@ async function importFromCalendar(){
 // ════════════════════════════════════════════════════════════════════════════
 // ☁️ SYNC INTELIGENTE (Merge local + cloud)
 // ════════════════════════════════════════════════════════════════════════════
+// Representación canónica para comparar datos locales vs. nube: claves
+// ordenadas y sin null/undefined/arreglos-vacíos-por-defecto irrelevantes.
+function canonSyncStr(v){
+  function c(x){
+    if(Array.isArray(x)) return x.map(c);
+    if(x && typeof x==='object'){
+      var o={}; Object.keys(x).sort().forEach(function(k){
+        var y=x[k]; if(y===undefined||y===null) return; o[k]=c(y);
+      }); return o;
+    }
+    return x;
+  }
+  try{ return JSON.stringify(c(v)); }catch(e){ return String(Math.random()); }
+}
 async function syncWithCloud(){
   if(!currentUser || !db) return;
   try {
@@ -1192,7 +1209,23 @@ async function syncWithCloud(){
       // anteriores, así que comparar contra ella podía pisar datos nuevos
       // de este dispositivo con una copia vieja de la nube sin avisar.
       // En vez de eso, preguntamos directamente qué copia mantener.
-      var sameData = JSON.stringify(cloud.tasks||[]) === JSON.stringify(S.tasks||[]);
+      // BUGFIX: antes se comparaba con JSON.stringify directo. Firestore
+      // guarda los objetos con las claves en otro orden (alfabético) y
+      // convierte/descarta valores vacíos, así que los datos "iguales"
+      // nunca se veían iguales y el aviso aparecía en CADA inicio, aunque
+      // el usuario ya hubiera elegido. Ahora se compara de forma canónica
+      // (sin importar el orden de claves ni null/undefined), y además,
+      // si la nube no cambió desde la última vez que ESTE dispositivo
+      // sincronizó (misma marca lastSync), no hay nada que decidir: lo
+      // local es lo más reciente y simplemente se sube.
+      var sameData = canonSyncStr(cloud.tasks||[]) === canonSyncStr(S.tasks||[]);
+      var _lastLocalSync = null; try{ _lastLocalSync = localStorage.getItem('og6-lastSync'); }catch(e){}
+      var cloudUnchangedSinceMe = !!(cloud.lastSync && _lastLocalSync && cloud.lastSync === _lastLocalSync);
+      if(cloudUnchangedSinceMe && !sameData){
+        applySyncResult(cloud, false);
+        pushToCloud();
+        return;
+      }
       if(cloudHasTasks && localHasTasks && !sameData){
         window._pendingCloudData = cloud;
         showSyncConflictModal(cloud);
@@ -1352,6 +1385,7 @@ function resolveSyncConflict(choice){
   var cloud = window._pendingCloudData || {};
   window._pendingCloudData = null;
   if(choice==='cloud'){
+    try{ if(cloud.lastSync) localStorage.setItem('og6-lastSync', cloud.lastSync); }catch(e){}
     applySyncResult(cloud, true);
   } else {
     // Mantener lo local: subimos nuestra versión a la nube para que quede
@@ -2332,6 +2366,7 @@ function loadState(){
     var sr=localStorage.getItem('og6-streakrisk');if(sr)S.streakRisk=Object.assign({on:false,hh:21,mm:0},JSON.parse(sr));
     var sm=localStorage.getItem('og6-simplemode');if(sm!==null)S.simpleMode=sm==='1';
     var ldn=localStorage.getItem('og6-listdensity');if(ldn)S.listDensity=ldn;
+    var _sw=localStorage.getItem('og6-swipeplan');if(_sw!==null)S.swipePlan=_sw==='1';
     var smfr=localStorage.getItem('og6-simplemodefabreset');if(smfr!==null)S.simpleModeFabReset=smfr==='1';
     var cst=localStorage.getItem('og6-calsubtab');if(cst)S.calendariosSubTab=cst;
     var ghw=localStorage.getItem('og6-ganttweekends');if(ghw!==null)S.ganttHideWeekends=ghw==='1';
@@ -2467,6 +2502,7 @@ function _saveStateNow(){
     _lsSet('og6-periodresetused',JSON.stringify(S.periodResetUsed||{}));
     _lsSet('og6-simplemode',S.simpleMode?'1':'0');
     _lsSet('og6-listdensity',S.listDensity||'normal');
+    _lsSet('og6-swipeplan',S.swipePlan===false?'0':'1');
     _lsSet('og6-simplemodefabreset',S.simpleModeFabReset===false?'0':'1');
     _lsSet('og6-calsubtab',S.calendariosSubTab||'semanal');
     _lsSet('og6-ganttweekends',S.ganttHideWeekends?'1':'0');
@@ -4990,6 +5026,17 @@ function renderYoPreferenciasScreen(){
     ):'')+
   '</div>';
 
+  html += '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
+      '<div style="flex:1;">'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);">Deslizar en Plan'+infoBtn('swipeplan')+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Cambiar de período, semana/mes o sección deslizando el dedo.</div>'+
+      '</div>'+
+      '<button class="tog" onclick="S.swipePlan=(S.swipePlan===false);saveState();render()" style="background:'+(S.swipePlan!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
+        '<span class="tok" style="left:'+(S.swipePlan!==false?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div></div>';
+
   // Pedido: poder desactivar SOLO la racha, manteniendo niveles/XP activos
   // (distinto de "Modo simplificado", que apaga todo junto). Solo tiene
   // sentido mostrarla si el modo simplificado está apagado — si no, la
@@ -6019,7 +6066,7 @@ function regEditorBodyHTML(){
       return '<button type="button" onclick="reSetColor(\''+c+'\')" style="width:28px;height:28px;border-radius:50%;border:'+(r.color===c?'3px solid var(--ink)':'2px solid transparent')+';background:'+c+';cursor:pointer;padding:0;"></button>';
     }).join('')+'</div>'+
     '<div style="height:18px;"></div></div>'+
-    '<div style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
+    '<div class="stk-bar" style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
       '<button class="sbtn" onclick="saveRegEditor()">'+(RE.isNew?'Crear':'Guardar')+'</button>'+
       '<button class="cbtn" onclick="askCloseRegEditor()">Cancelar</button>'+
     '</div>';
@@ -8470,7 +8517,7 @@ function openPTaskEditor(pid,sid,tid,parentTid){
     '<label class="flbl" style="margin-top:12px;display:flex;align-items:center;">Empieza después de…'+infoBtn('ptdep')+'</label>'+
     '<select id="pet-after" class="finp"><option value="">— Sin dependencia —</option>'+opts.map(function(it){ return '<option value="'+it.t.id+'"'+(node.after===it.t.id?' selected':'')+'>'+esc(it.num+' '+it.t.name)+'</option>'; }).join('')+'</select>'+
     '<div style="height:18px;"></div></div>'+
-    '<div style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
+    '<div class="stk-bar" style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
       '<button class="sbtn" onclick="savePT()">'+(isNew?'Crear':'Guardar')+'</button>'+
       '<button class="cbtn" onclick="askClosePT()">Cancelar</button>'+
     '</div></div>';
@@ -9927,13 +9974,20 @@ var LINK_PICK_TASK_ID = null;
 var LINK_PICK_SOURCE_ITEM = null;
 var LINK_PICK_DIRTY = false;
 var LINK_OPEN = {};
+var LINK_OPEN_ITEMS = {};
+function lgItemsOpen(tid, n){ return LINK_OPEN_ITEMS[tid]!==undefined ? LINK_OPEN_ITEMS[tid] : n>0; }
+function toggleLinkItems(tid){
+  var bd=document.getElementById('lgi-body-'+tid), ch=document.getElementById('lgi-chev-'+tid); if(!bd) return;
+  var op = bd.style.display==='none'; LINK_OPEN_ITEMS[tid]=op;
+  bd.style.display = op?'block':'none'; if(ch) ch.style.transform = op?'rotate(0deg)':'rotate(-90deg)';
+}
 function lgIsOpen(period, n){ return LINK_OPEN[period]!==undefined ? LINK_OPEN[period] : n>0; }
 function openLinkModal(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
   if(t.period==='año'){ toast('Las tareas anuales no se vinculan: no hay un período superior'); return; }
   LINK_PICK_MODE = 'unit'; // nueva sesión de vinculación — arranca en modo por defecto
-  LINK_PICK_DIRTY = false; LINK_OPEN = {};
+  LINK_PICK_DIRTY = false; LINK_OPEN = {}; LINK_OPEN_ITEMS = {};
   linkPickerSheet(); // crea (o reutiliza) la hoja una sola vez por sesión
   if(t.checklist && t.checklist.length){
     openCLSourcePicker(id); // elegir cuál de sus ítems vincular (o la tarea completa)
@@ -10044,21 +10098,26 @@ function openLinkTargetPicker(taskId, sourceItemId){
         return ht && ht.period===g.period;
       }).length;
       var rowsHTML = g.tasks.map(function(h){
-        // Pedido/bugfix: SIEMPRE se ofrece "toda la tarea" como destino,
-        // tenga o no checklist propio el destino — antes, si el destino
-        // tenía checklist, solo se listaban sus ítems y un vínculo previo
-        // hacia "toda la tarea h" quedaba invisible (y por lo tanto
-        // imposible de desvincular) apenas h ganaba un checklist.
+        // Jerarquía: cada objetivo es UNA fila (vincular la tarea completa);
+        // si tiene checklist, sus ítems quedan plegados bajo un "▸ N ítems"
+        // y solo se despliegan si el usuario quiere vincular uno puntual
+        // (o si ya hay un ítem vinculado ahí, para que no quede oculto).
         var wholeLinkObj = currentLinks.find(function(l){return l.taskId===h.id && !l.itemId;});
-        var wholeRow = linkRowButton(taskId, sourceItemId, h.id, '', esc(h.text)+' <span style="color:var(--muted);">· (tarea completa)</span>', wholeLinkObj);
-        if(h.checklist && h.checklist.length){
-          var itemRows = h.checklist.map(function(it){
-            var linkObj = currentLinks.find(function(l){return l.taskId===h.id && l.itemId===it.id;});
-            return linkRowButton(taskId, sourceItemId, h.id, it.id, esc(h.text)+' <span style="color:var(--muted);">· '+esc(it.text||'(sin nombre)')+'</span>', linkObj);
-          }).join('');
-          return wholeRow + itemRows;
-        }
-        return wholeRow;
+        var hasItems = h.checklist && h.checklist.length;
+        var itemLinks = hasItems ? currentLinks.filter(function(l){return l.taskId===h.id && l.itemId;}).length : 0;
+        var wholeLbl = esc(h.text)+(hasItems?' <span style="color:var(--muted);font-size:11px;">· completa</span>':'');
+        var wholeRow = linkRowButton(taskId, sourceItemId, h.id, '', wholeLbl, wholeLinkObj);
+        if(!hasItems) return '<div style="margin-bottom:6px;">'+wholeRow+'</div>';
+        var open = lgItemsOpen(h.id, itemLinks);
+        var itemRows = h.checklist.map(function(it){
+          var linkObj = currentLinks.find(function(l){return l.taskId===h.id && l.itemId===it.id;});
+          return linkRowButton(taskId, sourceItemId, h.id, it.id, esc(it.text||'(sin nombre)'), linkObj);
+        }).join('<div style="height:5px;"></div>');
+        return '<div style="margin-bottom:8px;">'+
+          '<div style="display:flex;gap:6px;align-items:stretch;"><div style="flex:1;min-width:0;display:flex;">'+wholeRow.replace('<button ','<button data-fill="1" ')+'</div>'+
+            '<button onclick="toggleLinkItems(\''+h.id+'\')" aria-label="Ver ítems del checklist" style="flex-shrink:0;border:1.5px solid '+(itemLinks?'var(--accent)':'var(--line)')+';background:'+(itemLinks?'var(--accent-bg)':'var(--paper)')+';color:'+(itemLinks?'var(--accent)':'var(--muted)')+';border-radius:10px;padding:0 10px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:inherit;">'+h.checklist.length+' ítems<span id="lgi-chev-'+h.id+'" style="display:inline-flex;transition:transform .15s;transform:'+(open?'rotate(0deg)':'rotate(-90deg)')+';"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5 4 6 7.5 9.5 4"/></svg></span></button></div>'+
+          '<div id="lgi-body-'+h.id+'" style="display:'+(open?'block':'none')+';margin:6px 0 0 14px;padding-left:10px;border-left:2px solid var(--line-soft);">'+itemRows+'</div>'+
+        '</div>';
       }).join('');
       return '<div style="border:1px solid var(--line-soft);border-radius:10px;margin-bottom:8px;overflow:hidden;">'+
         '<div onclick="toggleLinkGroup(\''+g.period+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:var(--bg);">'+
@@ -10733,13 +10792,47 @@ function doPeriodReset(period){
   toast('✓ Tareas de '+PL[period].toLowerCase()+' reiniciadas');
 }
 
+function periodTabsHTML(){
+  var sel=S.period;
+  return enabledGoalPeriods().map(function(p){
+    return '<button class="period-tab-v2'+(sel===p?' active':'')+'" data-period="'+p+'" onclick="S.period=\''+p+'\';render()">'+
+      '<span class="ptab-ic">'+periodIconSVG(p,17,1.8)+'</span>'+
+      '<span class="ptab-lbl">'+PL[p]+'</span>'+
+    '</button>';
+  }).join('');
+}
+// Pista de deslizar: muestra los períodos vecinos ("‹ Semana · Semestre ›").
+// Sin circularidad: en los extremos ese lado queda vacío.
+function swipePlanOn(){ return S.swipePlan!==false; }
+function periodSwipeHintHTML(){
+  if(!swipePlanOn()) return '<div style="height:12px;"></div>';
+  var ps=enabledGoalPeriods(); var i=ps.indexOf(S.period);
+  if(ps.length<2||i<0) return '<div style="height:12px;"></div>';
+  var prev=i>0?ps[i-1]:null, next=i<ps.length-1?ps[i+1]:null;
+  var side=function(txt,al){ return '<span style="flex:1;text-align:'+al+';">'+txt+'</span>'; };
+  return '<div style="display:flex;align-items:center;font-size:10.5px;font-weight:600;color:var(--muted-soft);margin:0 4px 10px;letter-spacing:.02em;">'+
+    side(prev?'‹ '+PL[prev]:'','left')+
+    '<span style="flex:0 0 auto;">'+infoBtn('swipeplan')+'</span>'+
+    side(next?PL[next]+' ›':'','right')+'</div>';
+}
+function setPeriodTabsActive(){
+  var row=document.querySelector('#period-tabs-fixed .period-tab-row'); if(!row) return;
+  Array.prototype.forEach.call(row.querySelectorAll('.period-tab-v2'),function(b){ b.classList.toggle('active', b.getAttribute('data-period')===S.period); });
+  var h=document.querySelector('#period-tabs-fixed > div:last-child'); 
+  if(h){ var tmp=document.createElement('div'); tmp.innerHTML=periodSwipeHintHTML(); h.replaceWith(tmp.firstChild); }
+}
 function renderGoals(){
   // Pedido: se quitó el título "Objetivos" de acá (ya está la pestaña de
   // arriba) y se separó el contenido de abajo en su propio contenedor con
   // id fijo (objetivos-swipe-area), para poder deslizar entre semana/mes/
   // semestre/año sin animar ni reconstruir las 3 pestañas de Plan de arriba
   // (ver renderObjetivosSwipeArea y el gesto de swipe más abajo).
-  return '<div id="objetivos-swipe-area" style="overflow:hidden;position:relative;">'+renderObjetivosSwipeArea()+'</div>';
+  // Franja de períodos FIJA (no se desliza con el contenido): solo cambia
+  // cuál está activo. Debajo, la pista de vecinos; luego el área animada.
+  var _av = enabledGoalPeriods();
+  if(_av.indexOf(S.period)===-1) S.period = _av[0] || 'semana';
+  return '<div id="period-tabs-fixed"><div class="period-tab-row" style="margin-bottom:6px;">'+periodTabsHTML()+'</div>'+periodSwipeHintHTML()+'</div>'+
+    '<div id="objetivos-swipe-area" style="overflow:hidden;position:relative;">'+renderObjetivosSwipeArea()+'</div>';
 }
 // Contenido que se anima/reemplaza al deslizar entre períodos dentro de
 // Objetivos — separado de renderGoals() para poder refrescar SOLO esto.
@@ -10812,12 +10905,6 @@ function renderObjetivosSwipeArea(){
   var sel=S.period;
   var mine=S.tasks.filter(function(t){return t.period===sel;});
   var doneN=mine.filter(isDone).length;
-  var ptabs=availablePeriods.map(function(p){
-    return '<button class="period-tab-v2'+(sel===p?' active':'')+'" onclick="S.period=\''+p+'\';render()">'+
-      '<span class="ptab-ic">'+periodIconSVG(p,17,1.8)+'</span>'+
-      '<span class="ptab-lbl">'+PL[p]+'</span>'+
-    '</button>';
-  }).join('');
   var progBar=mine.length?'<div style="margin-bottom:16px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px;"><span>Progreso del período</span><span>'+doneN+' de '+mine.length+' completadas</span></div>'+mpHTML(doneN/mine.length,5)+'</div>':'';
   var emptyMsgs = {
     semana:{icon:periodIconSVG('semana',36,1.5),msg:'Sin objetivos esta semana',sub:'¿Qué te gustaría lograr en los próximos 7 días?'},
@@ -10859,8 +10946,7 @@ function renderObjetivosSwipeArea(){
         return '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:'+(i<2?9:0)+'px;"><span style="width:20px;height:20px;border-radius:10px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(i+1)+'</span><span style="font-size:12px;color:var(--ink-soft);line-height:1.45;"><b style="color:var(--ink);">'+x[0]+'.</b> '+x[1]+'</span></div>';
       }).join('')+'</div>'
   );
-  return '<div class="period-tab-row">'+ptabs+'</div>'+
-    periodCloseCardHTML(sel)+progBar+tasksHTML+
+  return periodCloseCardHTML(sel)+progBar+tasksHTML+
     (mine.length?'<button class="addtbtn" onclick="openNew(\''+sel+'\')">+ Agregar tarea</button>':'');
 }
 
@@ -12673,7 +12759,7 @@ function renderProgress(){
   var seg = S.simpleMode ? 'stats' : (S._progSeg || 'logros');
   var head = S.simpleMode ? '' :
     mSegHTML('prog-seg', [['logros','Logros'],['stats','Estadísticas']], seg, 'setProgSeg')+'<div style="height:14px;"></div>';
-  return head + (seg==='stats' ? renderYoEstadisticasScreen() : renderProgressLogros());
+  return head + '<div id="progreso-swipe-area" style="overflow:hidden;position:relative;">'+(seg==='stats' ? renderYoEstadisticasScreen() : renderProgressLogros())+'</div>';
 }
 function renderProgressLogros(){
   if(S.simpleMode){
@@ -15488,6 +15574,7 @@ var INFO_TIPS = {
   modedur:'Tras esa cantidad de días el modo termina solo. Si activas "Preguntar si quiero prorrogar", dos días antes (y al terminar) te ofrece extenderlo de 1 a 7 días, tantas veces como quieras.',
   modecool:'Después de usar este modo queda deshabilitado esa cantidad de días, para que no se vuelva rutina. "Ninguno" lo deja siempre disponible.',
   cats:'Organiza tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.',
+  swipeplan:'Puedes deslizar el dedo a izquierda o derecha para pasar al período vecino (Objetivos), a la semana/mes anterior o siguiente (Calendario), o entre Logros y Estadísticas (Progreso). Se puede desactivar en Yo → Personalización.',
   linkcl:'Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes ir y volver para vincular varios, sin cerrar esta hoja).',
   linkup:'Al avanzar acá, avanzará automáticamente allá. Solo se puede vincular hacia períodos superiores (semana, mes, semestre, año) y puedes elegir varias tareas a la vez; la meta de cada destino se recalcula sola. Toca una fila marcada para quitar el vínculo, o su etiqueta verde para cambiar cómo suma.',
   linkmode:'1 a 1: cada unidad que avanzas acá suma 1 allá. Todo = 1 al completar: solo cuando esta tarea (o ítem) llega al 100% se suma 1 allá. Los vínculos que ya existen no cambian solos: toca su etiqueta verde para cambiarles el modo.',
@@ -15751,7 +15838,7 @@ function showTaskModal(){
       '</div>'
     ))+(isDay?'':mRegistrySectionHTML())+
     '<div style="height:18px;"></div></div>'+
-    '<div style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
+    '<div class="stk-bar" style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
       '<button class="sbtn" onclick="mSave()">'+(M.isNew?'Crear':'Guardar')+'</button>'+
       '<button class="cbtn" onclick="askCloseTaskModal()">Cancelar</button>'+
     '</div>'+
@@ -19106,281 +19193,213 @@ renderProjectBtn();
 // Programar notificaciones del día si el permiso ya fue concedido
 if(S.notifPermission === 'granted') scheduleNotifications();
 
-// ── Swipe horizontal en #content — animación suave + circular ──────────────
+// ── Swipe horizontal en #content ───────────────────────────────────────────
+// Regla unificada para Plan: deslizar mueve entre los VECINOS del selector
+// que tienes arriba del contenido (sin dar vueltas al llegar al extremo):
+//   Objetivos → período anterior/siguiente · Calendario → semana/mes
+//   anterior/siguiente · Progreso → Logros ↔ Estadísticas.
+// Un solo movimiento: el contenido sigue al dedo 1:1 (con resistencia en
+// los extremos), y al soltar termina el desplazamiento y entra el nuevo.
+// Hoy (días) y Energía (Modos) conservan su animación de siempre.
 (function(){
   var c = document.getElementById('content');
   if(!c) return;
 
   var sx=0, sy=0, startTime=0;
   var dragging=false, axis=null; // null | 'x' | 'y'
-  var swipeMode=null; // null | 'hoy' | 'plan' | 'energia' — se fija en touchstart
-  // Pedido: que deslizar ENCIMA de la grilla semanal (no solo del título de
-  // la fecha) también pueda cambiar de semana. La grilla también scrollea
-  // horizontalmente sola cuando no entran todas las columnas, así que si el
-  // gesto arrancó ahí dejamos que ese scroll nativo ocurra normal (no lo
-  // seguimos con nuestra animación) y solo si el arrastre total termina
-  // siendo GRANDE lo tomamos como "cambiar de semana" al soltar el dedo.
-  var weekGridDrag=false;
-
-  // Overlay de feedback visual durante el drag
-  var ghost = document.createElement('div');
-  ghost.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:9;opacity:0;transition:opacity .15s;display:flex;align-items:center;justify-content:center;font-size:40px;';
-  document.body.appendChild(ghost);
+  var swipeMode=null; // null | 'hoy' | 'objetivos' | 'calendarios' | 'progreso' | 'energia'
+  var chainWrap=null, chainStartLeft=0; // grilla semanal con scroll propio (encadenado al llegar al borde)
 
   function isDefaultLayout(){ return (S.interfaceLayout||'default')==='default'; }
-  function isHoy(){ return (S.tab==='hoy'||S.tab==='dia') && isDefaultLayout(); }
-  // Energía (Modos / Plantillas) se puede recorrer deslizando, igual que
-  // los días en Hoy. Pedido: Plan (Objetivos/Progreso) ya NO cambia de
-  // subpestaña al deslizar — dentro de Calendarios, en cambio, deslizar
-  // mueve entre meses o semanas (ver mode 'calendarios' más abajo).
   function energiaSubtabs(){ return ['modos']; }
   function currentSwipeMode(){
     if(!isDefaultLayout()) return null;
     if(S.tab==='hoy'||S.tab==='dia') return 'hoy';
-    if(S.tab==='horario') return 'calendarios';
-    // Pedido: dentro de Plan → Objetivos, deslizar mueve entre semana/mes/
-    // semestre/año — pero OJO, esto no debe dispararse en Progreso ni en
-    // Calendarios (que ya tienen su propio significado para el swipe), así
-    // que se agrega como modo aparte, distinto de 'calendarios'.
-    if(S.tab==='plan'||S.tab==='objetivos') return 'objetivos';
+    if(S.tab==='horario') return swipePlanOn() ? 'calendarios' : null;
+    if(S.tab==='plan'||S.tab==='objetivos') return swipePlanOn() ? 'objetivos' : null;
+    if(S.tab==='progreso') return (swipePlanOn() && !S.simpleMode) ? 'progreso' : null;
     if(S.tab==='energia'||S.tab==='modos'||S.tab==='plantillas') return 'energia';
     return null;
   }
+  function isPlanMode(m){ return m==='objetivos'||m==='calendarios'||m==='progreso'; }
   function currentSubtab(mode){
     if(mode==='energia') return (S.tab==='plantillas')?'plantillas':'modos';
     return null;
   }
-  // Dentro de Calendarios → Semanal hay una grilla que se desplaza
-  // horizontalmente por sí misma (ver id="horario-scroll-wrap") cuando no
-  // entran todas las columnas; si el gesto empieza ahí Y hace falta ese
-  // scroll, dejamos que sea un scroll normal en vez de cambiar de semana.
-  function startedOnHorarioScroll(target){
-    var wrap = document.getElementById('horario-scroll-wrap');
-    return !!(wrap && wrap.contains(target) && wrap.scrollWidth > wrap.clientWidth + 4);
-  }
-  // BUGFIX: la barra de categorías ("Todas / Estudio / Trabajo / ...") en
-  // Hoy también se desplaza horizontalmente cuando hay muchas categorías —
-  // sin este chequeo, arrastrar el dedo ahí para ver las categorías de más
-  // a la derecha se interpretaba a la vez como "cambiar de día", y los dos
-  // gestos se pisaban entre sí.
   function startedOnCatTabsScroll(target){
     var wrap = document.getElementById('cat-tabs-bar');
     return !!(wrap && wrap.contains(target) && wrap.scrollWidth > wrap.clientWidth + 4);
   }
+  // ¿El gesto arrancó sobre algo que scrollea horizontal por sí mismo o
+  // sobre algo que se arrastra/edita? Entonces no es un gesto de Plan.
+  function hScrollAncestor(target){
+    var el=target;
+    while(el && el!==c && el.nodeType===1){
+      if(el.scrollWidth>el.clientWidth+4){
+        var ox=getComputedStyle(el).overflowX;
+        if(ox==='auto'||ox==='scroll') return el;
+      }
+      el=el.parentNode;
+    }
+    return null;
+  }
+  function blockedTarget(target){
+    return !!(target.closest && target.closest('input,textarea,select,[contenteditable],[data-drag-item],[data-drag-list],.no-swipe'));
+  }
+  function planNeighbors(mode){
+    if(mode==='objetivos'){ var ps=enabledGoalPeriods(); return {list:ps, idx:ps.indexOf(S.period)}; }
+    if(mode==='progreso'){ var sg=['logros','stats']; return {list:sg, idx:sg.indexOf(S._progSeg||'logros')}; }
+    return null;
+  }
+  function hasNeighbor(mode, goRight){
+    var n=planNeighbors(mode);
+    if(!n) return true; // calendario: siempre hay semana/mes siguiente
+    var i=n.idx<0?0:n.idx;
+    return goRight ? i>0 : i<n.list.length-1;
+  }
+  function areaEl(mode){
+    if(mode==='objetivos') return document.getElementById('objetivos-swipe-area');
+    if(mode==='progreso') return document.getElementById('progreso-swipe-area');
+    if(mode==='calendarios') return document.getElementById((S.calendariosSubTab||'semanal')==='mensual' ? 'cal-days-viewport' : 'horario-scroll-wrap') || document.getElementById('calendarios-swipe-area');
+    return null;
+  }
+  function springBack(el){
+    if(!el) return;
+    el.style.transition='transform .25s cubic-bezier(.25,.46,.45,.94)';
+    el.style.transform='';
+  }
+  function doSwap(mode, goRight){
+    if(mode==='objetivos'){
+      var n=planNeighbors(mode); S.period=n.list[goRight?n.idx-1:n.idx+1];
+      var a=document.getElementById('objetivos-swipe-area'); if(a) a.innerHTML=renderObjetivosSwipeArea();
+      setPeriodTabsActive();
+    } else if(mode==='progreso'){
+      S._progSeg = goRight ? 'logros' : 'stats'; render();
+    } else if(mode==='calendarios'){
+      if((S.calendariosSubTab||'semanal')==='mensual'){
+        if(S.calGridExpanded!==false) calNav(goRight?-1:1); else calNavWeek(goRight?-1:1);
+      } else weekNav(goRight?-1:1);
+    }
+  }
 
   c.addEventListener('touchstart', function(e){
     swipeMode = currentSwipeMode();
+    chainWrap = null;
     if(!swipeMode) return;
-    weekGridDrag = false;
-    if(swipeMode==='calendarios' && (S.calendariosSubTab||'semanal')==='semanal' && startedOnHorarioScroll(e.target)){
-      weekGridDrag = true; // se sigue registrando el gesto, pero sin el efecto de "seguir el dedo" (ver touchmove/touchend)
-    } else if(swipeMode==='hoy' && startedOnCatTabsScroll(e.target)){
-      swipeMode = null; // dejar que la barra de categorías scrollee normalmente
-      return;
+    var tg = e.target;
+    if(isPlanMode(swipeMode)){
+      if(blockedTarget(tg)){ swipeMode=null; return; }
+      var hs = hScrollAncestor(tg);
+      if(hs){
+        if(swipeMode==='calendarios' && hs.id==='horario-scroll-wrap'){ chainWrap=hs; chainStartLeft=hs.scrollLeft; }
+        else { swipeMode=null; return; }
+      }
+    } else if(swipeMode==='hoy' && startedOnCatTabsScroll(tg)){
+      swipeMode = null; return;
     }
-    sx = e.touches[0].clientX;
-    sy = e.touches[0].clientY;
-    startTime = Date.now();
-    dragging = true;
-    axis = null;
-    c.style.transition = 'none';
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    startTime = Date.now(); dragging = true; axis = null;
+    if(!isPlanMode(swipeMode)) c.style.transition = 'none';
   }, {passive:true});
 
   c.addEventListener('touchmove', function(e){
     if(!dragging||!swipeMode) return;
     var dx = e.touches[0].clientX - sx;
     var dy = e.touches[0].clientY - sy;
-
-    // Determinar eje al inicio del gesto
     if(!axis){
-      if(Math.abs(dx)>8||Math.abs(dy)>8){
-        axis = Math.abs(dx)>Math.abs(dy) ? 'x' : 'y';
-      }
+      if(Math.abs(dx)>8||Math.abs(dy)>8) axis = Math.abs(dx)>Math.abs(dy) ? 'x' : 'y';
       return;
     }
     if(axis !== 'x') return;
-    // Si el gesto empezó sobre la grilla semanal, se deja que scrollee sola
-    // (no se sigue el dedo con nuestra traslación) — recién se decide si
-    // fue "cambiar de semana" al soltar, según qué tan largo fue en total.
-    if(weekGridDrag) return;
-
-    // Seguir el dedo con traslación suave
+    if(isPlanMode(swipeMode)){
+      if(chainWrap) return; // la grilla scrollea sola; se decide al soltar
+      var el = areaEl(swipeMode); if(!el) return;
+      var w = el.clientWidth || 320;
+      var move = dx;
+      if(!hasNeighbor(swipeMode, dx>0)) move = dx*0.25; // resistencia en el extremo
+      move = Math.max(-w, Math.min(w, move));
+      el.style.transition='none';
+      el.style.transform='translateX('+move+'px)';
+      return;
+    }
     c.style.transform = 'translateX('+dx*0.35+'px)';
-
-    // Sin overlay — la animación de salida ya da el feedback
   }, {passive:true});
 
   c.addEventListener('touchend', function(e){
     if(!dragging) return;
     dragging = false;
-    ghost.style.opacity = '0';
+    var mode = swipeMode;
+    var cw = chainWrap; chainWrap = null;
 
-    if(!swipeMode || axis !== 'x'){
-      c.style.transition = 'transform .2s ease';
-      c.style.transform = '';
-      axis = null;
-      swipeMode = null;
-      weekGridDrag = false;
+    if(!mode || axis !== 'x'){
+      if(!mode || !isPlanMode(mode)){ c.style.transition = 'transform .2s ease'; c.style.transform = ''; }
+      else springBack(areaEl(mode));
+      axis = null; swipeMode = null;
       return;
     }
 
     var dx = e.changedTouches[0].clientX - sx;
     var dy = e.changedTouches[0].clientY - sy;
     var elapsed = Date.now() - startTime;
-    // Pedido: si el gesto arrancó sobre la grilla semanal (que también
-    // scrollea sola), se pide un arrastre bastante más largo ("deslizar
-    // harto") antes de tomarlo como "cambiar de semana", para no
-    // pelearse con el scroll corto y normal de la grilla.
-    var threshold = weekGridDrag ? 110 : (elapsed < 250 ? 30 : 60); // swipe rápido = menos recorrido requerido
+    var goRight = dx > 0;
 
-    if(Math.abs(dx) < threshold || Math.abs(dy) > Math.abs(dx)*0.9){
-      // Cancelar — volver al lugar con rebote (si fue un drag de grilla,
-      // la transformación de #content nunca se tocó, así que este reset
-      // es inofensivo de todas formas)
-      c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
-      c.style.transform = '';
-      axis = null;
-      swipeMode = null;
-      weekGridDrag = false;
+    // ── Plan: Objetivos / Calendario / Progreso ──
+    if(isPlanMode(mode)){
+      axis = null; swipeMode = null;
+      var el = areaEl(mode);
+      var thr = elapsed < 250 ? 40 : 70; // un solo criterio para todo Plan
+      var ok = Math.abs(dx) >= thr && Math.abs(dy) <= Math.abs(dx)*0.9;
+      if(ok && cw){
+        // Grilla con scroll propio: solo se cambia de semana si el dedo NO la
+        // movió y ya estaba en el borde de ese lado (como un scroll encadenado).
+        var maxL = cw.scrollWidth - cw.clientWidth;
+        var moved = Math.abs(cw.scrollLeft - chainStartLeft) > 2;
+        var atEdge = goRight ? chainStartLeft <= 2 : chainStartLeft >= maxL-2;
+        ok = !moved && atEdge;
+      }
+      if(!ok || !hasNeighbor(mode, goRight) || !el){ if(!cw) springBack(el); return; }
+      el.style.transition='transform .14s ease-out';
+      el.style.transform='translateX('+(goRight?'100%':'-100%')+')';
+      setTimeout(function(){
+        doSwap(mode, goRight);
+        var after = areaEl(mode);
+        if(!after) return;
+        after.style.transition='none';
+        after.style.transform='translateX('+(goRight?'-100%':'100%')+')';
+        requestAnimationFrame(function(){ requestAnimationFrame(function(){
+          after.style.transition='transform .22s cubic-bezier(.25,.46,.45,.94)';
+          after.style.transform='';
+        }); });
+      }, 140);
       return;
     }
 
-    // Si es Energía pero solo tiene 1-2 sub-pestañas, calculamos a cuál
-    // saltar; si el modo es 'hoy' seguimos con la lógica original de día.
-    var mode = swipeMode;
-    var goRight = dx > 0; // dedo hacia la derecha = ítem anterior (día/pestaña/mes/semana previo)
+    // ── Hoy / Energía (sin cambios) ──
+    var threshold = (elapsed < 250 ? 30 : 60);
+    if(Math.abs(dx) < threshold || Math.abs(dy) > Math.abs(dx)*0.9){
+      c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
+      c.style.transform = '';
+      axis = null; swipeMode = null;
+      return;
+    }
     var nextSubtab = null;
     if(mode==='energia'){
       var subtabs = energiaSubtabs();
       var cur = currentSubtab(mode);
       var idx = subtabs.indexOf(cur);
       if(idx<0) idx=0;
-      if(subtabs.length<2){ // nada a donde ir — cancelar con rebote
+      if(subtabs.length<2){
         c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
         c.style.transform = '';
-        axis = null; swipeMode = null; weekGridDrag = false;
+        axis = null; swipeMode = null;
         return;
       }
       var nextIdx = goRight ? (idx===0?subtabs.length-1:idx-1) : (idx===subtabs.length-1?0:idx+1);
       nextSubtab = subtabs[nextIdx];
     }
-
-    // Pedido: dentro de Calendarios, deslizar mueve entre meses/semanas —
-    // pero sin re-animar la pestaña Plan entera (subpestañas, toggle
-    // Semanal/Mensual, cabecera del mes, agenda de abajo...), que se sentía
-    // como un refresh de golpe. En Mensual, además, ahora es un deslizamiento
-    // de verdad (no un fundido): el mes se va entero hacia un lado mientras
-    // el que entra se ve "acercarse" desde el borde opuesto — para eso usa
-    // su propio recorte (#cal-days-viewport, con overflow:hidden). En
-    // Semanal se mantiene el fundido suave de siempre, acotado a la grilla.
-    if(mode==='calendarios'){
-      c.style.transition = 'transform .12s ease-out';
-      c.style.transform = '';
-      var calSub = S.calendariosSubTab||'semanal';
-      var isMonthSlide = calSub==='mensual';
-      var targetId = isMonthSlide ? 'cal-days-viewport' : 'horario-scroll-wrap';
-      var calAreaBefore = document.getElementById(targetId);
-      if(calAreaBefore){
-        if(isMonthSlide){
-          calAreaBefore.style.transition = 'transform .16s ease-out';
-          calAreaBefore.style.transform = 'translateX('+(goRight?'100%':'-100%')+')';
-        } else {
-          calAreaBefore.style.transition = 'transform .14s ease-out, opacity .14s';
-          calAreaBefore.style.transform = 'translateX('+(goRight?'-8%':'8%')+')';
-          calAreaBefore.style.opacity = '0';
-        }
-      }
-      setTimeout(function(){
-        var sub = S.calendariosSubTab||'semanal';
-        if(sub==='mensual'){
-          if(S.calGridExpanded!==false) calNav(goRight?-1:1);
-          else calNavWeek(goRight?-1:1);
-        } else {
-          weekNav(goRight?-1:1);
-        }
-        var calAreaAfter = document.getElementById(targetId);
-        if(calAreaAfter){
-          if(isMonthSlide){
-            calAreaAfter.style.transition = 'none';
-            calAreaAfter.style.transform = 'translateX('+(goRight?'-100%':'100%')+')';
-            requestAnimationFrame(function(){
-              requestAnimationFrame(function(){
-                calAreaAfter.style.transition = 'transform .22s cubic-bezier(.25,.46,.45,.94)';
-                calAreaAfter.style.transform = '';
-              });
-            });
-          } else {
-            calAreaAfter.style.transition = 'none';
-            calAreaAfter.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
-            calAreaAfter.style.opacity = '0';
-            requestAnimationFrame(function(){
-              requestAnimationFrame(function(){
-                calAreaAfter.style.transition = 'transform .18s ease-out, opacity .16s';
-                calAreaAfter.style.transform = '';
-                calAreaAfter.style.opacity = '1';
-              });
-            });
-          }
-        }
-      }, 160);
-      axis = null;
-      swipeMode = null;
-      weekGridDrag = false;
-      return;
-    }
-
-    // Pedido: dentro de Objetivos, deslizar cambia de período (semana → mes
-    // → semestre → año) de forma fluida — pero solo en esa área
-    // (period-tab-row + lista de tareas), sin re-animar ni reconstruir las
-    // 3 pestañas de Plan de arriba ni nada más. Mismo tipo de deslizamiento
-    // "de verdad" que usa el mes en Calendarios (un lado se va, el otro
-    // entra desde el borde opuesto), acotado a #objetivos-swipe-area.
-    if(mode==='objetivos'){
-      c.style.transition = 'transform .12s ease-out';
-      c.style.transform = '';
-      var periods = enabledGoalPeriods();
-      var curIdx = periods.indexOf(S.period);
-      if(curIdx<0) curIdx = 0;
-      if(periods.length<2){ // nada a donde ir — cancelar con rebote
-        c.style.transition = 'transform .25s cubic-bezier(.25,.46,.45,.94)';
-        c.style.transform = '';
-        axis = null; swipeMode = null; weekGridDrag = false;
-        return;
-      }
-      // dedo hacia la derecha (goRight) = período anterior, igual que el resto de los gestos
-      var nextPeriodIdx = goRight ? (curIdx===0?periods.length-1:curIdx-1) : (curIdx===periods.length-1?0:curIdx+1);
-      var objArea = document.getElementById('objetivos-swipe-area');
-      if(objArea){
-        objArea.style.transition = 'transform .16s ease-out';
-        objArea.style.transform = 'translateX('+(goRight?'100%':'-100%')+')';
-      }
-      setTimeout(function(){
-        S.period = periods[nextPeriodIdx];
-        var objAreaAfter = document.getElementById('objetivos-swipe-area');
-        if(objAreaAfter){
-          objAreaAfter.innerHTML = renderObjetivosSwipeArea();
-          objAreaAfter.style.transition = 'none';
-          objAreaAfter.style.transform = 'translateX('+(goRight?'-100%':'100%')+')';
-          requestAnimationFrame(function(){
-            requestAnimationFrame(function(){
-              objAreaAfter.style.transition = 'transform .22s cubic-bezier(.25,.46,.45,.94)';
-              objAreaAfter.style.transform = '';
-            });
-          });
-        }
-      }, 160);
-      axis = null;
-      swipeMode = null;
-      weekGridDrag = false;
-      return;
-    }
-
-    // Transición suave: fade + pequeño desplazamiento (misma animación para
-    // día y sub-pestañas de Energía)
     c.style.transition = 'transform .14s ease-out, opacity .14s';
     c.style.transform = 'translateX('+(goRight?'-8%':'8%')+')';
     c.style.opacity = '0';
-
     setTimeout(function(){
       if(mode==='hoy'){
         var _blocked = false;
@@ -19389,7 +19408,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
           if(goRight){ if(pd>0) S._pwDay = pd-1; else _blocked = true; }
           else { if(pd<6) S._pwDay = pd+1; else { S._prevWeek = false; S.day = 0; } }
         } else if(goRight && S.day===0){
-          _blocked = true;   // lunes → a la izquierda: en vez de saltar al domingo de la misma semana, ofrece ver la anterior
+          _blocked = true;
         } else if(goRight){ S.day = S.day-1; }
         else { S.day = S.day === 6 ? 0 : S.day + 1; }
         if(_blocked){ c.style.transition='none'; c.style.transform=''; c.style.opacity='1'; if(!S._prevWeek) askPrevWeek(); return; }
@@ -19403,7 +19422,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
         c.style.transform = 'translateX('+(goRight?'6%':'-6%')+')';
         c.style.opacity = '0';
         c.scrollTop = 0;
-        setTab(nextSubtab); // ya hace render() y toca el sonido de cambio de pestaña
+        setTab(nextSubtab);
       }
       requestAnimationFrame(function(){
         requestAnimationFrame(function(){
@@ -19413,23 +19432,32 @@ if(S.notifPermission === 'granted') scheduleNotifications();
         });
       });
     }, 130);
-
-    axis = null;
-    swipeMode = null;
-    weekGridDrag = false;
+    axis = null; swipeMode = null;
   }, {passive:true});
 
-  // Limpiar si se cancela el touch
   c.addEventListener('touchcancel', function(){
-    dragging = false;
-    axis = null;
-    swipeMode = null;
-    weekGridDrag = false;
-    ghost.style.opacity = '0';
+    var m=swipeMode;
+    dragging = false; axis = null; swipeMode = null; chainWrap = null;
+    if(m && isPlanMode(m)){ springBack(areaEl(m)); return; }
     c.style.transition = 'transform .2s ease';
     c.style.transform = '';
     c.style.opacity = '1';
   }, {passive:true});
+})();
+
+// Pista visual en barras fijas (Guardar/Cancelar): difuminado + "↓ más abajo"
+// mientras quede contenido por desplazar; desaparece al llegar al final.
+(function(){
+  function upd(){
+    document.querySelectorAll('.stk-bar').forEach(function(b){
+      var sc=b.closest('.sheet'); if(!sc) return;
+      b.classList.toggle('at-end', sc.scrollHeight-sc.scrollTop-sc.clientHeight<28);
+    });
+  }
+  var q=null; function sched(){ if(q) return; q=setTimeout(function(){q=null;upd();},60); }
+  document.addEventListener('scroll',upd,true);
+  window.addEventListener('resize',sched);
+  try{ new MutationObserver(sched).observe(document.body,{childList:true,subtree:true}); }catch(e){}
 })();
 
 // ── Botón "atrás" del sistema (o gesto de volver) ───────────────────────────
@@ -19593,7 +19621,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.15';
+var APP_VERSION = '2026.10.01.16';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
