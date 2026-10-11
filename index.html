@@ -46,13 +46,19 @@ body.theme-dark {
   --paper:#252525;
   --ink:#f5f5f5;
   --ink-soft:#d0d0d0;
-  --accent:#ff9966;
-  --accent-soft:#ff8844;
-  --accent-bg:#332211;
-  --muted:#888888;
+  --accent:#5bb0b5;
+  --accent-soft:#2f6a6f;
+  --accent-bg:#1b2c2e;
+  --muted:#8c9296;
   --muted-soft:#555555;
   --line:#333333;
   --line-soft:#2a2a2a;
+}
+/* Acento claro (turquesa): los botones rellenos con él llevan texto oscuro. */
+body.theme-dark .sbtn,
+body.theme-dark [style*="background:var(--accent);color:white"],
+body.theme-dark [style*="background:var(--accent);color:#fff"]{
+  color:#0c1f21 !important;
 }
 body.theme-sepia {
   --bg:#f4eee3;
@@ -1449,7 +1455,7 @@ function getLevelColor(lvl){
   if(S.theme==='terracota' || S.theme==='dark' || S.theme==='galaxia'){
     var accentColors = {
       terracota:['#ffcaa8','#ffd6ba','#ffc199','#ffb98f','#ffdcc4','#ffab7a','#ffc199','#ffb98f'],
-      dark:['#ff9966','#ffab7a','#ff8844','#ffb98f','#ff9966','#ffab7a','#ff8844','#ffb98f'],
+      dark:['#5bb0b5','#7cc4c8','#3f9499','#9ad3d6','#5bb0b5','#7cc4c8','#3f9499','#9ad3d6'],
       galaxia:['#d4a847','#e0b95c','#c99a3a','#d4a847','#e0b95c','#c99a3a','#d4a847','#e0b95c']
     };
     var arr = accentColors[S.theme];
@@ -1565,7 +1571,7 @@ function getDonanteLimit(){
   return DONANTE_LIMITS_BY_LEVEL[Math.min(lvl-1, DONANTE_LIMITS_BY_LEVEL.length-1)] || DONANTE_LIMITS_BY_LEVEL[0];
 }
 
-// Hiperfoco (Donante): mientras está activo, sube el límite a 50/período.
+// Hiperproductividad (Donante): mientras está activo, sube el límite a 50/período.
 var TASK_LIMITS_HIPERFOCO = {
   dia: 50,
   semana: 50,
@@ -1578,7 +1584,7 @@ var TASK_LIMITS_HIPERFOCO = {
 var MAX_CHECKLIST_ITEMS_FREE = 10;
 // Días que el usuario queda bloqueado tras llegar al límite
 var TASK_BLOCK_DAYS = 7;
-// Hiperfoco: dura 7 días, cooldown 30 días entre activaciones (gratuito: 1 vez cada 6 meses)
+// Hiperproductividad: dura 7 días, cooldown 30 días entre activaciones (gratuito: 1 vez cada 6 meses)
 var HIPERFOCO_DAYS = 7;
 var HIPERFOCO_COOLDOWN_DAYS = 30;
 
@@ -1850,7 +1856,7 @@ var S = {
   interfaceLayout:'default', // 'default' | 'compact' | 'agenda'
   _compactSection:'dia',
   _agendaSection:'semana', // 'default' | 'white' | 'black'
-  // Hiperfoco (premium): {activeSince, lastUsed} ISO dates
+  // Hiperproductividad (premium): {activeSince, lastUsed} ISO dates
   hiperfoco:{activeSince:null,lastUsed:null},
   // Plantillas guardadas: array de {id, name, tasks:[{...,day}]}
   templates:[],
@@ -3022,7 +3028,7 @@ function getActiveMode(){
   // o `am.type==='custom'` fallaba siempre y mostraba "Normal" aunque
   // Baja Energía (o un modo personalizado) estuviera realmente activo.
   if(S.activeMode.type==='baja')return Object.assign({id:'baja'},S.bajaEnergia,{name:'Baja Energía',type:'baja'});
-  if(S.activeMode.type==='vacaciones')return Object.assign({id:'vacaciones'},S.vacaciones,{name:'Vacaciones',icon:'🌴',color:'#a8c499',type:'vacaciones'});
+  if(S.activeMode.type==='vacaciones'){ S.activeMode=null; if(S.modeTaskBackup){S.tasks=S.modeTaskBackup;S.modeTaskBackup=null;} return null; } // modo retirado: ahora es un modo personalizado sugerido
   // BUGFIX CRÍTICO: si S.modes se corrompe (null/undefined) o si el modo
   // personalizado activo fue borrado pero S.activeMode todavía lo apunta,
   // esto lanzaba una excepción. Como getActiveMode() se llama en CADA
@@ -3042,33 +3048,88 @@ function getActiveMode(){
 // Cooldown "una vez por semestre" aplicado a modos predeterminados en plan gratuito
 var FREE_MODE_COOLDOWN_DAYS = 30; // 1 mes
 
-function bajaCanActivate(){
-  // Plan ilimitado: sin cooldowns nunca
-  if(isIlimitado())return{ok:true};
-  var be=S.bajaEnergia;
-  if(!be.activeSince)return{ok:true};
-  var since=new Date(be.activeSince);
-  var plan=getPlan();
-  // Gratuito: una vez por semestre. Donante: sin cooldown (isIlimitado).
-  var cooldownDays = plan==='free' ? FREE_MODE_COOLDOWN_DAYS : (be.daysLimit+(be.cooldownMonths||3)*30);
-  var until=new Date(since.getTime()+cooldownDays*86400000);
-  if(new Date()<until){
-    var daysLeft=Math.ceil((until-new Date())/86400000);
-    return{ok:false,daysLeft:daysLeft};
-  }
-  return{ok:true};
+var BAJA_DAYS = 7;
+function bajaCanActivate(){ return {ok:true}; } // sin período de espera
+function bajaEndDate(){
+  var be=S.bajaEnergia; if(!be||!be.activeSince) return null;
+  var d=new Date(be.activeSince+'T00:00:00'); if(isNaN(d)) return null;
+  d.setDate(d.getDate()+BAJA_DAYS+(be.extraDays||0));
+  return d;
 }
 function bajaRemainingDays(){
-  var be=S.bajaEnergia;
-  if(!be.activeSince)return 0;
-  var since=new Date(be.activeSince);
-  // Ilimitado: sin límite de días
-  if(isIlimitado())return 999;
-  var end=new Date(since.getTime()+be.daysLimit*86400000);
-  return Math.max(0,Math.ceil((end-new Date())/86400000));
+  var e=bajaEndDate(); if(!e) return 0;
+  return Math.max(0,Math.ceil((e-new Date())/86400000));
 }
 
-// ── Hiperfoco (premium) ───────────────────────────────────────────────────
+// ── Fin / prórroga de modos con duración (Baja Energía y modos propios) ─────
+function modeExtInfo(){
+  var am=S.activeMode; if(!am) return null;
+  if(am.type==='baja'){
+    if(!bajaEndDate()) return null;
+    return {kind:'baja', name:'Baja Energía', rem:bajaRemainingDays(), ask:true, base:BAJA_DAYS, extra:(S.bajaEnergia.extraDays||0), since:S.bajaEnergia.activeSince};
+  }
+  if(am.type==='custom'){
+    var m=(S.modes||[]).find(function(x){return x.id===am.id;});
+    if(!m || !(m.durationDays>0) || !am.since) return null;
+    var d=new Date(am.since+'T00:00:00'); d.setDate(d.getDate()+m.durationDays+(am.extra||0));
+    return {kind:'custom', id:m.id, name:m.name, rem:Math.max(0,Math.ceil((d-new Date())/86400000)), ask:!!m.askExtend, base:m.durationDays, extra:(am.extra||0), since:am.since};
+  }
+  return null;
+}
+function checkModeLifecycle(tries){
+  tries=tries||0;
+  var i=modeExtInfo(); if(!i || i.rem>2) return;
+  if(!i.ask){ if(i.rem<=0) endTimedMode(i.kind,i.id); return; }
+  var key=i.kind+(i.id||'')+':'+todayStr()+':'+(i.rem<=0?'end':'soon');
+  if(S._extAsked===key) return;
+  if(document.querySelector('.overlay, .conf-box')){ if(tries<6) setTimeout(function(){ checkModeLifecycle(tries+1); }, 5000); return; }
+  S._extAsked=key; showExtendPrompt(i);
+}
+function endTimedMode(kind,id){
+  var nm = kind==='baja' ? 'Baja Energía' : ((S.modes||[]).find(function(x){return x.id===id;})||{}).name;
+  var b=document.getElementById('ext-prompt'); if(b) b.remove();
+  if(kind==='baja') deactivateBaja(); else toggleCustomMode(id);
+  toast('«'+(nm||'Modo')+'» terminó');
+}
+function showExtendPrompt(i){
+  var old=document.getElementById('ext-prompt'); if(old) old.remove();
+  var box=document.createElement('div'); box.className='conf-box'; box.id='ext-prompt';
+  var kindArg="'"+i.kind+"','"+(i.id||'')+"'";
+  box.innerHTML='<div class="conf-inner" style="text-align:center;">'+
+    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:6px;">'+(i.rem>0?esc(i.name)+' termina '+(i.rem===1?'mañana':'en '+i.rem+' días'):esc(i.name)+' ya terminó')+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.5;margin-bottom:12px;">¿Quieres extenderlo? Elige cuántos días más (puedes volver a extenderlo cuando quieras).</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px;">'+[1,2,3,4,5,6,7].map(function(n){
+      return '<button onclick="extendMode('+kindArg+','+n+')" style="padding:10px 0;border-radius:9px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+'+n+'</button>';
+    }).join('')+'</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+
+      '<button class="cbtn" style="font-size:13px;" onclick="endTimedMode('+kindArg+')">Terminar el modo</button>'+
+      '<button class="tbtn" style="text-align:center;text-decoration:none;" onclick="document.getElementById(\'ext-prompt\').remove()">Decidir después</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function extendMode(kind,id,n){
+  var i=modeExtInfo(); if(!i) return;
+  var elapsed=Math.ceil((new Date()-new Date(i.since+'T00:00:00'))/86400000);
+  var endDays=Math.max(i.base+i.extra, elapsed)+n;
+  var extra=endDays-i.base;
+  if(kind==='baja') S.bajaEnergia.extraDays=extra; else if(S.activeMode) S.activeMode.extra=extra;
+  var b=document.getElementById('ext-prompt'); if(b) b.remove();
+  saveState(); render();
+  toast('Extendido '+n+' día'+(n===1?'':'s'));
+}
+function modeLockText(m){
+  if(m && m.disabledUntil && todayStr()<m.disabledUntil) return 'Disponible el '+fmtShortDate(m.disabledUntil);
+  return '';
+}
+// Umbral diario vigente: modo activo > Hiperproductividad > umbral base
+function modeThreshold(base){
+  var am=getActiveMode();
+  if(am && am.lowThresh) return am.lowThresh;
+  if(isHiperfocoActive() && S.hiperfoco && S.hiperfoco.thresh) return S.hiperfoco.thresh;
+  return base;
+}
+
+// ── Hiperproductividad (premium) ───────────────────────────────────────────────────
 // Devuelve el plan actual: 'free', 'donante'
 // Cuentas autorizadas para probar la suscripción sin pagar (vista previa). Pon aquí TU correo.
 // Mientras la lista esté vacía, la vista previa queda desactivada para todo el mundo.
@@ -3123,7 +3184,7 @@ function isPremium(){
   return getPlan() !== 'free';
 }
 // Alias histórico: el plan Donante (único plan pago) hereda el trato que antes
-// tenía el tier "ilimitado" — Hiperfoco sin duración fija ni cooldown.
+// tenía el tier "ilimitado" — Hiperproductividad sin duración fija ni cooldown.
 function isIlimitado(){
   return isPremium();
 }
@@ -3137,17 +3198,15 @@ function isHiperfocoActive(){
 }
 function hiperfocoCanActivate(){
   if(isHiperfocoActive())return{ok:false,reason:'active'};
-  // Ilimitado: sin cooldown
+  // Donante: sin límite
   if(isIlimitado())return{ok:true};
-  if(S.hiperfoco&&S.hiperfoco.lastUsed){
-    var last=new Date(S.hiperfoco.lastUsed);
-    var plan=getPlan();
-    // Gratuito: una vez por semestre. Donante: sin cooldown (isIlimitado).
-    var cooldownDays = plan==='free' ? FREE_MODE_COOLDOWN_DAYS : HIPERFOCO_COOLDOWN_DAYS;
-    var available=new Date(last.getTime()+cooldownDays*86400000);
-    if(new Date()<available){
-      var daysLeft=Math.ceil((available-new Date())/86400000);
-      return{ok:false,reason:'cooldown',daysLeft:daysLeft};
+  // Una vez por mes calendario
+  var ls = S.hiperfoco && (S.hiperfoco.lastStart || S.hiperfoco.lastUsed);
+  if(ls){
+    var last=new Date(ls), now=new Date();
+    if(last.getFullYear()===now.getFullYear() && last.getMonth()===now.getMonth()){
+      var next=new Date(now.getFullYear(), now.getMonth()+1, 1);
+      return{ok:false,reason:'cooldown',daysLeft:Math.ceil((next-now)/86400000)};
     }
   }
   return{ok:true};
@@ -3163,44 +3222,57 @@ function activateHiperfoco(){
   var info=hiperfocoCanActivate();
   if(!info.ok){
     if(info.reason==='cooldown')toast('Disponible en '+info.daysLeft+' días');
-    else if(info.reason==='active')toast('Hiperfoco ya está activo');
+    else if(info.reason==='active')toast('Hiperproductividad ya está activa');
     return;
   }
   // Aviso explicativo antes de activar — mismo patrón que Baja Energía.
   showHiperfocoWarning();
 }
+var HF_THRESH = [85,90,95,100];
 function showHiperfocoWarning(){
-  var plan=getPlan();
-  var cooldownDays = isIlimitado() ? 0 : (plan==='free' ? FREE_MODE_COOLDOWN_DAYS : HIPERFOCO_COOLDOWN_DAYS);
+  window._hfThr = (S.hiperfoco && S.hiperfoco.thresh) || 0.9;
   var box=document.createElement('div');box.className='conf-box';
   box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
     '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🎯</div>'+
-    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Hiperfoco'+infoBtn('modohf')+'</div>'+
-    
-    '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
+    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Hiperproductividad'+infoBtn('modohf')+'</div>'+
+    '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
       '<div>· Dura <b>'+HIPERFOCO_DAYS+' días</b></div>'+
       '<div>· Sube el límite a <b>hasta '+TASK_LIMITS_HIPERFOCO.dia+' tareas visibles</b> por período</div>'+
-      (cooldownDays>0?'<div style="margin-top:6px;color:var(--accent);font-weight:600;">Una vez usado, queda inhabilitado por '+cooldownDays+' días.</div>':'')+
+      '<div>· Tu meta diaria sube mientras esté activo</div>'+
+      (isIlimitado()?'':'<div style="margin-top:6px;color:var(--accent);font-weight:600;">Se puede usar una vez al mes.</div>')+
     '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">Úsalo con intención: subir el límite de tareas no reemplaza descansar cuando corresponde.</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Meta diaria durante el modo</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:14px;" id="hf-thr-btns">'+HF_THRESH.map(function(v){
+      var on=Math.round(window._hfThr*100)===v;
+      return '<button onclick="hfPickThr('+v+')" data-v="'+v+'" style="flex:1;padding:8px 2px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+v+'%</button>';
+    }).join('')+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;">Úsalo con intención: subir el ritmo no reemplaza descansar cuando corresponde.</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
-      '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();doActivateHiperfoco();">Sí, activar Hiperfoco</button>'+
+      '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();doActivateHiperfoco();">Sí, activar Hiperproductividad</button>'+
       '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
     '</div></div>';
   document.body.appendChild(box);
 }
+function hfPickThr(v){
+  window._hfThr=v/100;
+  document.querySelectorAll('#hf-thr-btns button').forEach(function(b){
+    var on=parseInt(b.getAttribute('data-v'),10)===v;
+    b.style.borderColor=on?'var(--accent)':'var(--line)'; b.style.background=on?'var(--accent-bg)':'var(--paper)'; b.style.color=on?'var(--accent)':'var(--ink-soft)';
+  });
+}
+function setHfThr(v){ if(!S.hiperfoco) return; S.hiperfoco.thresh=v/100; saveState(); render(); }
 function doActivateHiperfoco(){
-  S.hiperfoco={activeSince:new Date().toISOString(),lastUsed:S.hiperfoco?S.hiperfoco.lastUsed:null};
+  S.hiperfoco={activeSince:new Date().toISOString(),lastUsed:S.hiperfoco?S.hiperfoco.lastUsed:null,lastStart:new Date().toISOString(),thresh:window._hfThr||0.9};
   S.hiperfocoUsedCount = (S.hiperfocoUsedCount||0) + 1;
   saveState();
   checkMedals();
   render();
-  toast('🎯 Hiperfoco activado por 7 días');
+  toast('🎯 Hiperproductividad activada por 7 días');
 }
 function deactivateHiperfoco(){
-  S.hiperfoco={activeSince:null,lastUsed:new Date().toISOString()};
+  S.hiperfoco=Object.assign({},S.hiperfoco,{activeSince:null,lastUsed:new Date().toISOString()});
   saveState();render();
-  toast('Hiperfoco desactivado');
+  toast('Hiperproductividad desactivada');
 }
 
 // Devuelve los límites de tareas vigentes (free / premium / hiperfoco)
@@ -3628,7 +3700,7 @@ function renderRecoveryScreen(tab, err){
 // ── V2 Header compacto siempre visible ────────────────────────────────────
 function modeChipInfo(){
   var am = getActiveMode();
-  if(isHiperfocoActive()) return {icon:'🎯',name:'Hiperfoco',on:true};
+  if(isHiperfocoActive()) return {icon:'🎯',name:'Hiperproductividad',on:true};
   if(isVacacionesActive()) return {icon:'🌴',name:'Vacaciones',on:true};
   if(am) return {icon:am.icon||(am.type==='baja'?'🔋':'⚡'),name:am.name||'Modo',on:true};
   return {icon:'☀️',name:'Normal',on:false};
@@ -3715,7 +3787,7 @@ function hoyProgressHTML(){
   var done=list.filter(isDone).length;
   var ratio=list.reduce(function(a,t){return a+tRatio(t);},0)/n;
   var pct=Math.round(ratio*100);
-  var am=getActiveMode(), thr=(am&&am.lowThresh)?am.lowThresh:((S.streakCfg&&S.streakCfg.threshold)||0.8);
+  var thr=modeThreshold((S.streakCfg&&S.streakCfg.threshold)||0.8);
   var thrPct=Math.round(thr*100), reached=ratio>=thr-1e-9;
   return '<div id="hoy-progress" style="padding:10px 16px 0;"><div style="display:flex;align-items:center;gap:10px;">'+
     '<div title="Tu meta del día: '+thrPct+'%" style="position:relative;flex:1;height:6px;border-radius:3px;background:var(--line);">'+
@@ -4436,7 +4508,7 @@ function renderEnergySimple(){
 
   // ── Estado actual ─────────────────────────────────────────────────────────
   var modeName = 'Normal', modeDesc = 'Sin modo activo. Rindo a mi ritmo habitual.', modeIcon = '☀️', modeColor = 'var(--accent)';
-  if(hiperfoco){ modeName='Hiperfoco'; modeDesc='Enfoque máximo activado. Hasta 50 tareas visibles por período. '+hiperfocoRemainingDays()+' días restantes.'; modeIcon='🎯'; }
+  if(hiperfoco){ modeName='Hiperproductividad'; modeDesc='Hasta 50 tareas visibles por período · meta diaria '+Math.round(((S.hiperfoco&&S.hiperfoco.thresh)||0.9)*100)+'%'+(isIlimitado()?'':' · '+hiperfocoRemainingDays()+' días restantes')+'.'; modeIcon='🎯'; }
   else if(vacaciones){ modeName='Vacaciones'; modeDesc='Modo descanso activo. Solo tareas cruciales.'; modeIcon='🌴'; }
   else if(am && am.type==='baja'){ modeName='Baja Energía'; modeDesc='Ritmo bajo, pero a buen ritmo. Solo '+S.bajaEnergia.maxTasks+' tareas/día'+(S.bajaEnergia.onlyCrucial?', solo cruciales':'')+'. '+bajaRemainingDays()+' días restantes.'; modeIcon=S.bajaEnergia.icon||'🌙'; modeColor=S.bajaEnergia.color||'var(--accent)'; }
   else if(am && am.type==='custom'){
@@ -4458,15 +4530,12 @@ function renderEnergySimple(){
   '</div>';
 
   // ── Configuración del modo activo (solo si hay uno) ────────────────────
-  if(vacaciones){
-    // BUGFIX: openEditVacaciones() ya existía completo (umbral, máx. tareas,
-    // mensaje de apoyo) pero no tenía ningún botón real que lo abriera —
-    // Baja Energía y modos personalizados sí tenían su "Editar configuración".
+  if(hiperfoco){
+    var _ht=Math.round(((S.hiperfoco&&S.hiperfoco.thresh)||0.9)*100);
     html += '<div class="card" style="margin-bottom:10px;">'+
-      '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Configuración · Vacaciones</div>'+
-      '<button onclick="openEditVacaciones()" style="background:none;border:1.5px solid var(--line);border-radius:10px;width:100%;padding:10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;">'+
-        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Editar configuración'+
-      '</button>'+
+      '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Configuración · Hiperproductividad</div>'+
+      '<div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">Meta diaria durante el modo</div>'+
+      '<div style="display:flex;gap:6px;">'+HF_THRESH.map(function(v){ var on=_ht===v; return '<button onclick="setHfThr('+v+')" style="flex:1;padding:8px 2px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+v+'%</button>'; }).join('')+'</div>'+
     '</div>';
   }
   if(am && am.type==='baja'){
@@ -4518,7 +4587,7 @@ function renderEnergySimple(){
           '<span style="font-size:22px;">'+m.icon+'</span>'+
           '<div style="flex:1;min-width:0;">'+
             '<div style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(m.name)+'</div>'+
-            '<div style="font-size:11px;color:var(--muted);">'+(m.maxTasks||5)+' tareas · umbral '+(m.lowThresh?Math.round(m.lowThresh*100)+'%':'—')+'</div>'+
+            '<div style="font-size:11px;color:var(--muted);">'+(m.onlyCrucial?'solo cruciales · ':'')+'meta '+(m.lowThresh?Math.round(m.lowThresh*100)+'%':'—')+(m.durationDays?' · '+m.durationDays+' d':'')+(m.cooldownDays?' · bloqueo '+m.cooldownDays+' d':'')+'</div>'+
           '</div>'+
           '<button onclick="openEditMode(\''+m.id+'\')" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:4px;" title="Editar">'+
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>'+
@@ -4528,7 +4597,8 @@ function renderEnergySimple(){
           '</button>'+
           (isActive
             ? '<button onclick="deactivateCurMode();render();" class="cbtn" style="font-size:11px;padding:6px 10px;flex-shrink:0;">Off</button>'
-            : '<button onclick="toggleCustomMode(\''+m.id+'\')" class="sbtn" style="font-size:11px;padding:6px 10px;flex-shrink:0;">Activar</button>'
+            : (modeLockText(m) ? '<span style="font-size:10.5px;color:var(--muted);text-align:right;flex-shrink:0;max-width:84px;line-height:1.3;">'+modeLockText(m)+'</span>'
+              : '<button onclick="toggleCustomMode(\''+m.id+'\')" class="sbtn" style="font-size:11px;padding:6px 10px;flex-shrink:0;">Activar</button>')
           )+
         '</div>'+
       '</div>';
@@ -4588,36 +4658,20 @@ function openEnergySheet(){
         '<span style="font-size:22px;">'+(S.bajaEnergia.icon||'🌙')+'</span>'+
         '<div style="flex:1;">'+
           '<div style="font-weight:700;font-size:14px;color:'+(isBajaAct?'var(--accent)':'var(--ink)')+';">Baja Energía'+(isBajaAct?' — Activo':'')+'</div>'+
-          '<div style="font-size:11px;color:var(--muted);">'+(canBaja.ok?S.bajaEnergia.maxTasks+' tareas/día · hasta '+S.bajaEnergia.daysLimit+'d':'No disponible — en '+canBaja.daysLeft+' días')+'</div>'+
+          '<div style="font-size:11px;color:var(--muted);">'+(S.bajaEnergia.maxTasks+' tareas/día · 7 días, extensible')+'</div>'+
         '</div>'+
       '</button>'+
 
-      // Vacaciones — BUGFIX: activateVacaciones() y toda su configuración
-      // (umbral, plantilla, mensaje de apoyo) ya existían completos, pero
-      // esta opción nunca se mostraba aquí — el modo era imposible de activar.
-      (vacaciones
-        ? '<button onclick="deactivateVacaciones();document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
-            '<span style="font-size:22px;">🌴</span>'+
-            '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--accent);">Vacaciones — Activo</div><div style="font-size:11px;color:var(--muted);">Toca para desactivar</div></div>'+
-          '</button>'
-        : '<button onclick="'+(canVac.ok?"activateVacaciones();document.getElementById('energy-sheet').remove();render()":"null")+'" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;opacity:'+(canVac.ok?1:0.5)+';" '+(canVac.ok?'':'disabled')+'>'+
-            '<span style="font-size:22px;">🌴</span>'+
-            '<div style="flex:1;">'+
-              '<div style="font-weight:700;font-size:14px;color:var(--ink);">Vacaciones</div>'+
-              '<div style="font-size:11px;color:var(--muted);">'+(canVac.ok?'Máx. '+S.vacaciones.maxTasks+' tareas/día · solo cruciales':'No disponible — en '+canVac.daysLeft+' días')+'</div>'+
-            '</div>'+
-          '</button>'
-      )+
       (hiperfoco
         ? '<button onclick="deactivateHiperfoco();document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
             '<span style="font-size:22px;">🎯</span>'+
-            '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--accent);">Hiperfoco — Activo</div><div style="font-size:11px;color:var(--muted);">'+hiperfocoRemainingDays()+' días restantes · toca para desactivar</div></div>'+
+            '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--accent);">Hiperproductividad — Activa</div><div style="font-size:11px;color:var(--muted);">'+(isIlimitado()?'':hiperfocoRemainingDays()+' días restantes · ')+'toca para desactivar</div></div>'+
           '</button>'
         : '<button onclick="'+(canHF.ok?"activateHiperfoco();document.getElementById('energy-sheet').remove();render()":"null")+'" style="width:100%;display:flex;align-items:center;gap:12px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;opacity:'+(canHF.ok?1:0.5)+';" '+(canHF.ok?'':'disabled')+'>'+
             '<span style="font-size:22px;">🎯</span>'+
             '<div style="flex:1;">'+
-              '<div style="font-weight:700;font-size:14px;color:var(--ink);">Hiperfoco</div>'+
-              '<div style="font-size:11px;color:var(--muted);">'+(canHF.ok?'Desbloquea todas las tareas por '+HIPERFOCO_DAYS+' días':'No disponible — en '+canHF.daysLeft+' días')+'</div>'+
+              '<div style="font-weight:700;font-size:14px;color:var(--ink);">Hiperproductividad</div>'+
+              '<div style="font-size:11px;color:var(--muted);">'+(canHF.ok?'Más tareas y meta más alta · '+HIPERFOCO_DAYS+' días':'Ya la usaste este mes — vuelve en '+canHF.daysLeft+' días')+'</div>'+
             '</div>'+
           '</button>'
       )+
@@ -4628,7 +4682,7 @@ function openEnergySheet(){
         var isAct = S.activeMode&&S.activeMode.type==='custom'&&S.activeMode.id===m.id;
         return '<button onclick="toggleCustomMode(\''+m.id+'\');document.getElementById(\'energy-sheet\').remove();render();" style="width:100%;display:flex;align-items:center;gap:12px;background:'+(isAct?'var(--accent-bg)':'var(--bg)')+';border:1.5px solid '+(isAct?'var(--accent)':'var(--line)')+';border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;">'+
           '<span style="font-size:22px;">'+m.icon+'</span>'+
-          '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:'+(isAct?'var(--accent)':'var(--ink)')+';">'+esc(m.name)+'</div><div style="font-size:11px;color:var(--muted);">'+(m.maxTasks||5)+' tareas/día'+(isAct?' · Activo':'')+'</div></div>'+
+          '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:'+(isAct?'var(--accent)':'var(--ink)')+';">'+esc(m.name)+'</div><div style="font-size:11px;color:var(--muted);">'+(modeLockText(m)||((m.lowThresh?'meta '+Math.round(m.lowThresh*100)+'%':'')+(m.durationDays?' · '+m.durationDays+' d':'')))+(isAct?' · Activo':'')+'</div></div>'+
         '</button>';
       }).join('')+
 
@@ -4774,7 +4828,7 @@ function renderYoMain(){
 
   html += yoSectionHTML('Comportamiento',
     yoRowHTML('preferencias','⚙️','Preferencias', prefSub, false, 'modo simplificado racha xp niveles sonido efectos consejos sugerencias mensaje recordatorio semana prellenar registros')+
-    yoRowHTML('modos','🔋','Modos', (function(){ var m=modeChipInfo(); return m.on ? esc(m.name)+' activo' : 'Normal · Baja energía, Hiperfoco…'; })(), false, 'modos energia baja hiperfoco vacaciones personalizado ritmo descanso')+
+    yoRowHTML('modos','🔋','Modos', (function(){ var m=modeChipInfo(); return m.on ? esc(m.name)+' activo' : 'Normal · Baja energía, Hiperproductividad…'; })(), false, 'modos energia baja hiperfoco hiperproductividad vacaciones personalizado ritmo descanso')+
     yoRowHTML('plantillas','🗓️','Plantillas de semana', (S.templates||[]).length ? (S.templates.length+' guardada'+(S.templates.length===1?'':'s')) : 'Guarda una semana tipo y reutilízala', false, 'plantillas semana tipo guardar aplicar reutilizar horario')+
     yoRowHTML('periodos','📆','Períodos', periodsSub, false, 'periodos semana mes semestre año objetivos desactivar')+
     yoRowHTML('temporizador','⚡','Enfoque', timerCfgSummary(), true, 'enfoque temporizador timer sonidos vibrar pantalla ejercicios rutinas estudio entrenamiento pestaña ubicacion seguimiento barra')
@@ -4971,7 +5025,7 @@ function renderYoPreferenciasScreen(){
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
         '<div style="font-weight:700;font-size:14px;color:var(--ink);">Consejos y tareas sugeridas</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Muestra los consejos y tareas rápidas de Baja Energía, Hiperfoco y Vacaciones.</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Muestra los consejos y tareas rápidas de Baja Energía e Hiperproductividad.</div>'+
       '</div>'+
       '<button class="tog" onclick="toggleShowModeTips()" style="background:'+(S.showModeTips!==false?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;">'+
         '<span class="tok" style="left:'+(S.showModeTips!==false?22:2)+'px;"></span>'+
@@ -5018,7 +5072,7 @@ function renderYoTemaScreenBase(){
   var FREE_THEMES = ['light','dark','bosque'];  // Disponibles sin pagar
   var themes=[
     {id:'light',     name:'Blanco',    color:'#c97842', bg:'#ffffff'},
-    {id:'dark',      name:'Oscuro',    color:'#ff9966', bg:'#1a1a1a'},
+    {id:'dark',      name:'Oscuro',    color:'#5bb0b5', bg:'#1a1a1a'},
     {id:'bosque',    name:'Bosque',    color:'#5a7c4a', bg:'#e8ebe0'},
     {id:'terracota', name:'Terracota', color:'#e8875a', bg:'#a84e2a'},
     {id:'sepia',     name:'Sepia',     color:'#a1887f', bg:'#f4eee3'},
@@ -6319,7 +6373,7 @@ function checkExpectedReminders(tries){
   S._askedRem[list[0].e.id] = 1;
   openExpectedQuick(list[0].reg.id, list[0].e.id);
 }
-document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(function(){ try{ checkExpectedReminders(); }catch(e){} }, 800); });
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(function(){ try{ checkExpectedReminders(); checkModeLifecycle(); }catch(e){} }, 800); });
 function regLastByLabel(reg, label){
   var es = regEntries(reg).filter(function(e){return (e.label||'')===label && e.status!=='expected';}).sort(function(a,b){return (b.ts||0)-(a.ts||0);});
   return es[0] || null;
@@ -9802,7 +9856,9 @@ function openTaskMenu(id, event){
   var _by = function(p){ return items.filter(function(i){ return i.action && i.action.indexOf(p)===0; }); };
   var main = [];
   main.push({label:'Editar', icon:ico('edit',15), action:"openEdit('"+id+"')"});
-  main.push({label:'Vincular con otras tareas', icon:ico('link',15), action:"openLinkModal('"+id+"')"});
+  // Las tareas anuales no se pueden vincular: solo se vincula hacia un período superior y no hay uno por encima del año.
+  var _lt=S.tasks.find(function(x){return x.id===id;});
+  if(!_lt || _lt.period!=='año') main.push({label:'Vincular con otras tareas', icon:ico('link',15), action:"openLinkModal('"+id+"')"});
   if(isDay){
     var _mv=_by('moveTaskTo'), _dp=_by('duplicateTask');
     var _og=items.filter(function(i){ return i.action && (i.action.indexOf('startReorder')===0 || i.action.indexOf('enterSelectMode')===0); });
@@ -9875,6 +9931,7 @@ function lgIsOpen(period, n){ return LINK_OPEN[period]!==undefined ? LINK_OPEN[p
 function openLinkModal(id){
   var t = S.tasks.find(function(x){return x.id===id;});
   if(!t) return;
+  if(t.period==='año'){ toast('Las tareas anuales no se vinculan: no hay un período superior'); return; }
   LINK_PICK_MODE = 'unit'; // nueva sesión de vinculación — arranca en modo por defecto
   LINK_PICK_DIRTY = false; LINK_OPEN = {};
   linkPickerSheet(); // crea (o reutiliza) la hoja una sola vez por sesión
@@ -11907,6 +11964,8 @@ function timerSkip(delta){
   var elapsed = timerElapsed();
   var curIdx = timerStepIndexAt(elapsed);
   if(delta>0 && TR.steps[curIdx].open){ timerCompleteStep(); return; }
+  // Último paso: adelantar = terminar el temporizador (antes no hacía nada)
+  if(delta>0 && curIdx>=TR.steps.length-1){ cancelScheduledTimerAudio(); timerFinish(); return; }
   cancelScheduledTimerAudio();
   var newIdx = Math.max(0, Math.min(TR.steps.length-1, curIdx+delta));
   var ns = TR.steps[newIdx];
@@ -12372,9 +12431,50 @@ function openTimerHistDetail(id){
     (h.rounds>1?row('Vueltas',h.rounds):'')+
     (h.exercises&&h.exercises.length?row('Ejercicios',esc(h.exercises.join(', '))):'')+
     (res?row('Resultados',res):'')+
-    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="cbtn" style="flex:1;" onclick="openTimerHistGroup(\''+id+'\')">Cambiar grupo</button>'+
+    (h.loggedReg?row('Anotado en',esc(h.loggedReg)):'')+
+    (regList().length?'<button class="sbtn" style="width:100%;margin-top:14px;" onclick="openTimerHistToReg(\''+id+'\')">'+(h.loggedReg?'Anotar de nuevo en un registro':'Anotar en un registro')+'</button>':'')+
+    '<div style="display:flex;gap:8px;margin-top:10px;"><button class="cbtn" style="flex:1;" onclick="openTimerHistGroup(\''+id+'\')">Cambiar grupo</button>'+
     '<button class="cbtn" style="flex:1;color:var(--bad);" onclick="deleteTimerHist(\''+id+'\')">Eliminar</button></div></div>';
   document.body.appendChild(ov);
+}
+// Llevar una sesión del historial a un registro (Marcas o Hábitos), aunque no haya partido desde una tarea
+function openTimerHistToReg(id){
+  var h=timerHistLive().find(function(x){return x.id===id;}); if(!h) return;
+  var regs=regList().filter(function(r){return r.kind!=='finance';});
+  removeOverlay('hist-detail'); removeOverlay('hist-toreg');
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='hist-toreg';
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('hist-toreg'); });
+  ov.innerHTML='<div class="sheet"><div class="serif" style="font-weight:700;font-size:18px;margin-bottom:4px;">Anotar en un registro</div>'+
+    '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;">'+esc(h.name)+' · '+fmtDur(h.sec||0)+'. Se abre la hoja del registro con lo que se pueda prellenar; tú confirmas.</div>'+
+    (regs.length ? regs.map(function(r){
+      return '<button onclick="timerHistToReg(\''+id+'\',\''+r.id+'\')" style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:var(--bg);border:1.5px solid var(--line);border-left:4px solid '+r.color+';border-radius:12px;padding:11px 12px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);font-size:14px;font-weight:700;">'+regIcon(r)+'<span style="flex:1;">'+esc(r.name)+'</span><span style="font-size:11px;font-weight:600;color:var(--muted);">'+(r.kind==='habit'?'Hábito':'Marcas')+'</span></button>';
+    }).join('') : '<div style="font-size:13px;color:var(--muted);padding:10px 0;">No tienes registros de Marcas o Hábitos. Crea uno en Registros.</div>')+
+    '<button class="cbtn" style="width:100%;" onclick="removeOverlay(\'hist-toreg\')">Cancelar</button></div>';
+  document.body.appendChild(ov);
+}
+function timerHistToReg(id,regId){
+  var h=timerHistLive().find(function(x){return x.id===id;}); var reg=regById(regId); if(!h||!reg) return;
+  removeOverlay('hist-toreg');
+  S.timerHistory=S.timerHistory.map(function(x){ return x.id===id ? Object.assign({},x,{loggedReg:reg.name,updatedAt:Date.now()}) : x; });
+  saveState();
+  if(reg.kind==='habit'){ openRegEntry(regId,{date:h.date}); return; }
+  var label = (h.exercises&&h.exercises.length===1) ? h.exercises[0] : h.name;
+  openRegEntry(regId,{date:h.date,label:label});
+  // Prellenado de métricas según nombre/unidad
+  setTimeout(function(){
+    var r0=(h.results||[])[0]||{};
+    (reg.metrics||[]).forEach(function(m){
+      var el=document.getElementById('en-m-'+m.id); if(!el || el.value) return;
+      var key=((m.name||'')+' '+(m.unit||'')).toLowerCase(), v=null;
+      if(/min/.test(key)) v=Math.round((h.sec||0)/60*10)/10;
+      else if(/\bseg|\bsec|\bs\b/.test(key)) v=h.sec||0;
+      else if(/hora|\bh\b/.test(key)) v=Math.round((h.sec||0)/360)/10;
+      else if(/rep|serie/.test(key) && r0.n!=null) v=r0.n;
+      else if(/kg|peso|lb/.test(key) && r0.w) v=r0.w;
+      else if(/vuelta|ronda/.test(key)) v=h.rounds||1;
+      if(v!=null && v>0) el.value=String(v);
+    });
+  },80);
 }
 function openTimerHistGroup(id){
   removeOverlay('hist-detail'); removeOverlay('hist-group');
@@ -12680,9 +12780,12 @@ function calAgendaData(dateKey){
   var dated = S.tasks.filter(function(t){return t.period==='dia' && t.date===dateKey;});
   var rec = S.tasks.filter(function(t){return t.period==='dia' && !t.date && t.day===wIdx;});
   var hideRec = !!S.calAgendaHideRecurring;
+  // Tareas "pausadas" (ignoradas esta semana): no cuentan ni se pueden tildar; se listan aparte, deshabilitadas
+  var skipped = inCur ? dated.concat(rec).filter(isSkipped) : [];
+  if(skipped.length){ dated = dated.filter(function(t){return skipped.indexOf(t)===-1;}); rec = rec.filter(function(t){return skipped.indexOf(t)===-1;}); }
   var interactive = dated.concat(inCur && !hideRec ? rec : []);
   var ghost = (!inCur && isFuture && !hideRec) ? rec.filter(function(t){return !t.oneShotWeek;}) : [];
-  return {date:d, isFuture:isFuture, inCur:inCur, interactive:interactive, ghost:ghost, hasRecurring:rec.length>0};
+  return {date:d, isFuture:isFuture, inCur:inCur, interactive:interactive, ghost:ghost, skipped:skipped, hasRecurring:rec.length>0};
 }
 function calGroupSort(list){
   return list.slice().sort(function(a,b){
@@ -12803,6 +12906,15 @@ function renderCalMonthAgenda(dateKey){
   if(noCat.length){
     html += (catSections.length||timed.length ? calSectionLabel(timed.length||catSections.length?'Durante el día':'', noCat.length) : '')+
       calGroupSort(noCat).map(function(t){return calTaskRowHTML(t, canTicket, {});}).join('');
+  }
+  if(A.skipped && A.skipped.length){
+    html += calSectionLabel('Pausadas esta semana', A.skipped.length)+
+      A.skipped.map(function(t){
+        return '<div style="display:flex;align-items:center;gap:11px;padding:9px 2px;border-bottom:1px solid var(--line-soft);"><span style="width:23px;text-align:center;color:var(--muted-soft);display:flex;justify-content:center;">'+ico('clock',14,1.8)+'</span>'+
+          (t.hora?'<span style="font-size:11px;font-weight:700;color:var(--muted);width:40px;">'+esc(t.hora)+'</span>':'')+
+          '<span style="flex:1;font-size:13.5px;color:var(--muted);text-decoration:line-through;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+
+          '<button onclick="toggleSkipTaskWeek(\''+t.id+'\')" style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Reactivar</button></div>';
+      }).join('');
   }
   if(A.ghost.length){
     html += calSectionLabel('Se repite cada semana', A.ghost.length)+
@@ -13074,8 +13186,17 @@ function openDayDetail(dateKey){
   var recurring = inCurrentWeek ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx;}) : [];
   var dated = S.tasks.filter(function(t){return t.period==='dia'&&t.date===dateKey;});
   var combined = recurring.concat(dated);
+  // Pausadas (ignoradas esta semana): se muestran deshabilitadas y no cuentan para el %
+  var pausedList = inCurrentWeek ? combined.filter(isSkipped) : [];
+  combined = combined.filter(function(t){ return pausedList.indexOf(t)===-1; });
 
   var body='';
+  if(inCurrentWeek && combined.length){
+    var _pr = combined.reduce(function(a,t){return a+tRatio(t);},0)/combined.length;
+    body += '<div style="text-align:center;padding:6px 0 14px;border-bottom:1px solid var(--line-soft);margin-bottom:12px;">'+
+      '<div style="font-size:26px;font-weight:800;color:var(--ink);">'+combined.filter(isDone).length+'/'+combined.length+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;">tareas activas ('+Math.round(_pr*100)+'%)'+(pausedList.length?' · '+pausedList.length+' pausada'+(pausedList.length===1?'':'s')+' no cuenta'+(pausedList.length===1?'':'n'):'')+'</div></div>';
+  }
   var hist = (S.dailyHistory||{})[dateKey];
   if(!inCurrentWeek && hist){
     // Pedido: este % ahora coincide con el que decide el umbral — incluye
@@ -13100,8 +13221,17 @@ function openDayDetail(dateKey){
         '<span onclick="closeDayDetail();openEdit(\''+t.id+'\')" style="flex:1;font-size:13px;color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';cursor:pointer;">'+esc(t.text)+(t.date?'':' <span style="font-size:9px;color:var(--muted-soft);">· recurrente</span>')+'</span>'+
       '</div>';
     }).join('');
-  } else if(!hist || inCurrentWeek){
+  } else if((!hist || inCurrentWeek) && !pausedList.length){
     body += '<div style="font-size:12px;color:var(--muted-soft);text-align:center;padding:18px 0;">Sin tareas para este día.</div>';
+  }
+  if(pausedList.length){
+    body += '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 2px;">Pausadas esta semana · '+pausedList.length+'</div>'+
+      pausedList.map(function(t){
+        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);opacity:.65;">'+
+          '<div style="width:19px;height:19px;border-radius:5px;border:1.5px dashed var(--muted-soft);flex-shrink:0;"></div>'+
+          '<span style="flex:1;font-size:13px;color:var(--muted);text-decoration:line-through;">'+esc(t.text)+'</span>'+
+          '<button onclick="toggleSkipTaskWeek(\''+t.id+'\');reopenDayDetail(\''+dateKey+'\')" style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Reactivar</button></div>';
+      }).join('');
   }
   // No se pueden agregar tareas nuevas a días que ya pasaron — solo se puede
   // revisar lo archivado. Para días de hoy en adelante, el botón sigue igual.
@@ -13408,11 +13538,11 @@ function showBajaWarning(){
     '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Baja Energía</div>'+
     '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para momentos en los que necesitas reducir el ritmo y exigirte menos.</div>'+
     '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
-      '<div>· Dura hasta <b>'+be.daysLimit+' días</b></div>'+
+      '<div>· Dura <b>'+BAJA_DAYS+' días</b>; antes de terminar te pregunto si quieres extenderlo</div>'+
       '<div>· Solo verás <b>'+be.maxTasks+' tareas/día</b></div>'+
       '<div>· Umbral de racha baja a <b>'+Math.round((be.lowThresh||0.4)*100)+'%</b></div>'+
       (be.onlyCrucial?'<div>· Solo tareas marcadas ★ cruciales</div>':'')+
-      '<div style="margin-top:6px;color:var(--accent);font-weight:600;">Una vez usado, queda inhabilitado por '+(be.daysLimit + (be.cooldownMonths||3)*30)+' días.</div>'+
+      '<div style="margin-top:6px;color:var(--accent);font-weight:600;">Sin período de espera: puedes volver a usarlo cuando lo necesites.</div>'+
     '</div>'+
     // Invitación a agendar sesión
     '<div style="background:var(--accent-bg);border:1px solid var(--accent-soft);border-radius:10px;padding:12px;margin-bottom:14px;">'+
@@ -13435,6 +13565,7 @@ function _continueBajaActivation(){
 }
 function doActivateBaja(){
   S.bajaEnergia.activeSince=todayStr();
+  S.bajaEnergia.extraDays=0;
   S.activeMode={type:'baja'};
   S.bajaUsedCount = (S.bajaUsedCount||0) + 1;
   // Aplicar plantilla si está asociada
@@ -13452,9 +13583,7 @@ function deactivateBaja(){
 }
 
 // ── Modo Vacaciones ────────────────────────────────────────────────────────
-function isVacacionesActive(){
-  return S.activeMode && S.activeMode.type==='vacaciones';
-}
+function isVacacionesActive(){ return false; }
 function vacacionesCanActivate(){
   // Donante: sin cooldown
   if(isPremium())return{ok:true};
@@ -13522,13 +13651,18 @@ function toggleCustomMode(id){
       S.tasks = S.modeTaskBackup;
       S.modeTaskBackup = null;
     }
+    var _m0=(S.modes||[]).find(function(m){return m.id===id;});
+    if(_m0 && _m0.cooldownDays>0){ _m0.disabledUntil=localDateStr(addDaysLocal(new Date(),_m0.cooldownDays)); }
     S.activeMode=null;S.showHidden=false;
     saveState();render();
-    toast('Modo desactivado');
+    toast('Modo desactivado'+((_m0&&_m0.cooldownDays>0)?' · deshabilitado '+_m0.cooldownDays+' días':''));
   } else {
     var mode = S.modes.find(function(m){return m.id===id;});
     if(!mode) return;
-    S.activeMode={type:'custom',id:id};
+    var _lock = modeLockText(mode);
+    if(_lock){ toast('«'+mode.name+'» está deshabilitado · '+_lock); return; }
+    mode.usedCount=(mode.usedCount||0)+1;
+    S.activeMode={type:'custom',id:id,since:todayStr(),extra:0};
     // Si tiene plantilla asociada, aplicarla
     if(mode.templateId){
       var tpl = (S.templates||[]).find(function(t){return t.id===mode.templateId;});
@@ -13690,7 +13824,7 @@ function openEditBaja(){
     '</div>'+
     '<label class="flbl">Umbral de racha durante modo activo</label>'+
     '<div style="display:flex;gap:8px;margin-bottom:16px;" id="be-thresh-btns">'+
-      [30,40,50].map(function(v){var on=Math.round((be.lowThresh||0.4)*100)===v;return '<button onclick="beSetThresh('+v+')" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:13px;">'+v+'%</button>';}).join('')+
+      [10,20,30,40].map(function(v){var on=Math.round((be.lowThresh||0.4)*100)===v;return '<button onclick="beSetThresh('+v+')" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:13px;">'+v+'%</button>';}).join('')+
     '</div>'+
     '<div class="fsec"><div class="frow">'+
       '<span style="font-size:13px;font-weight:600;color:var(--ink);">Solo tareas cruciales</span>'+
@@ -13725,7 +13859,7 @@ function openEditBaja(){
 function beSetThresh(v){
   S.bajaEnergia.lowThresh=v/100;
   document.querySelectorAll('#be-thresh-btns button').forEach(function(b,i){
-    var vals=[30,40,50],on=vals[i]===v;
+    var vals=[10,20,30,40],on=vals[i]===v;
     b.style.border='1.5px solid '+(on?'var(--accent)':'var(--line)');
     b.style.background=on?'var(--accent-bg)':'var(--paper)';
     b.style.color=on?'var(--accent)':'var(--ink-soft)';
@@ -14292,7 +14426,7 @@ function clearActiveTemplate(){
 
 var MM={};
 function openNewMode(){
-  MM={isNew:true,mode:{id:uid(),name:'',color:'#e8c5a8',icon:'🌙',tips:[''],onlyCrucial:false,templateId:null,lowThresh:0.7}};
+  MM={isNew:true,mode:{id:uid(),name:'',color:'#e8c5a8',icon:'🌙',tips:[''],onlyCrucial:false,templateId:null,lowThresh:0.7,durationDays:0,cooldownDays:0,askExtend:false}};
   showModeModal();
 }
 function openEditMode(id){
@@ -14324,17 +14458,28 @@ function showModeModal(){
       '<span class="serif" style="font-weight:700;font-size:20px;">'+(MM.isNew?'Nuevo modo':'Editar modo')+'</span>'+
       '<button onclick="removeOverlay(\'mode-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
-    '<label class="flbl">Nombre</label><input id="mm-name" class="finp" value="'+esc(m.name)+'" placeholder="Ej. Modo enfocado"/>'+
+    '<label class="flbl">Nombre</label><input id="mm-name" class="finp" value="'+esc(m.name)+'" placeholder="Ej. Vacaciones, Exámenes, Viaje" oninput="MM.mode.name=this.value"/>'+
+    (MM.isNew?'<div style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px;"><span style="font-size:11px;color:var(--muted);align-self:center;">Sugerencias:</span>'+MM_PRESETS.map(function(pr,i){ return '<button type="button" onclick="mmPreset('+i+')" style="padding:5px 10px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+pr.icon+' '+pr.name+'</button>'; }).join('')+'</div>':'')+
     '<div style="display:flex;gap:12px;">'+
       '<div style="flex:1;"><label class="flbl">Umbral de racha en este modo</label>'+
       '<div style="display:flex;gap:6px;margin-top:6px;">'+
-        [70,80,90,100].map(function(v){
+        [50,60,70,80,90,100].map(function(v){
           var on = Math.round((m.lowThresh||0.7)*100)===v;
           return '<button onclick="mmSetThresh('+v+')" id="mmt-'+v+'" style="flex:1;padding:8px 2px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+v+'%</button>';
         }).join('')+
       '</div>'+
     '</div>'+ 
     '</div>'+
+    '<label class="flbl" style="display:flex;align-items:center;">Duración'+infoBtn('modedur')+'</label>'+
+    '<div id="mmf-durationDays" style="display:flex;gap:6px;margin-bottom:14px;">'+mmChipsHTML('durationDays',[[0,'Sin límite'],[3,'3 d'],[7,'7 d'],[14,'14 d'],[30,'30 d']],m.durationDays||0)+'</div>'+
+    '<label class="flbl" style="display:flex;align-items:center;">Bloqueo tras usarlo'+infoBtn('modecool')+'</label>'+
+    '<div id="mmf-cooldownDays" style="display:flex;gap:6px;margin-bottom:14px;">'+mmChipsHTML('cooldownDays',[[0,'Ninguno'],[3,'3 d'],[7,'7 d'],[14,'14 d'],[30,'30 d']],m.cooldownDays||0)+'</div>'+
+    '<div class="fsec"><div class="frow">'+
+      '<span style="font-size:13px;font-weight:600;color:var(--ink);">Preguntar si quiero prorrogar</span>'+
+      '<button class="tog" id="mm-ext-tog" onclick="mmToggleExt()" style="background:'+(m.askExtend?'var(--accent)':'var(--muted-soft)')+';">'+
+        '<span class="tok" style="left:'+(m.askExtend?22:2)+'px;"></span>'+
+      '</button>'+
+    '</div></div>'+
     '<div class="fsec"><div class="frow">'+
       '<span style="font-size:13px;font-weight:600;color:var(--ink);">Solo tareas cruciales</span>'+
       '<button class="tog" id="mm-crucial-tog" onclick="mmToggleCrucial()" style="background:'+(m.onlyCrucial?'var(--accent)':'var(--muted-soft)')+';">'+
@@ -14351,6 +14496,29 @@ function showModeModal(){
     '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="mmSave()">Guardar</button><button class="cbtn" onclick="removeOverlay(\'mode-modal\')">Cancelar</button></div>'+
   '</div>';
   document.body.appendChild(overlay);
+}
+var MM_PRESETS = [
+  {name:'Vacaciones', icon:'🌴', color:'#4fae6b', lowThresh:0.5, durationDays:7, askExtend:true},
+  {name:'Exámenes', icon:'📚', color:'#4f8dc9', lowThresh:0.9, durationDays:14, askExtend:true},
+  {name:'Viaje', icon:'✈️', color:'#2fa39a', lowThresh:0.5, durationDays:7, askExtend:true}
+];
+function mmPreset(i){ var pr=MM_PRESETS[i]; if(!pr) return; Object.assign(MM.mode, pr); showModeModal(); }
+function mmChipsHTML(field, opts, cur){
+  return opts.map(function(o){
+    var on=cur===o[0];
+    return '<button type="button" onclick="mmSetField(\''+field+'\','+o[0]+')" style="flex:1;padding:8px 2px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent)':'var(--ink-soft)')+';font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+o[1]+'</button>';
+  }).join('');
+}
+function mmSetField(field,v){
+  MM.mode[field]=v;
+  var el=document.getElementById('mmf-'+field);
+  var opts=[[0,field==='durationDays'?'Sin límite':'Ninguno'],[3,'3 d'],[7,'7 d'],[14,'14 d'],[30,'30 d']];
+  if(el) el.innerHTML=mmChipsHTML(field,opts,v);
+}
+function mmToggleExt(){
+  MM.mode.askExtend=!MM.mode.askExtend;
+  var tog=document.getElementById('mm-ext-tog');
+  if(tog){tog.style.background=MM.mode.askExtend?'var(--accent)':'var(--muted-soft)';var k=tog.querySelector('.tok');if(k)k.style.left=(MM.mode.askExtend?22:2)+'px';}
 }
 function mmToggleCrucial(){
   MM.mode.onlyCrucial=!MM.mode.onlyCrucial;
@@ -14382,7 +14550,8 @@ function mmSave(){
     icon:icon,
     tips:MM.mode.tips||[],
     templateId:templateId,
-    lowThresh: MM.mode.lowThresh||0.7
+    lowThresh: MM.mode.lowThresh||0.7,
+    durationDays: MM.mode.durationDays||0, cooldownDays: MM.mode.cooldownDays||0, askExtend: !!MM.mode.askExtend
   });
   var idx=S.modes.findIndex(function(m){return m.id===saved.id;});
   if(idx>=0)S.modes[idx]=saved;else S.modes.push(saved);
@@ -15315,7 +15484,9 @@ var INFO_TIPS = {
   weekphrase:'La franja de arriba en Hoy para escribir una frase o intención de la semana (o el aviso para agregarla si aún no tienes una).',
   dailyreview:'Un aviso a la hora que elijas, en los días que elijas, para revisar tus tareas y tickear las que ya tengas listas.',
   notifdef:'Valor por defecto al activar "🔔 Recordatorio" en una tarea con horario. Cada tarea puede después ajustar el suyo propio.',
-  modohf:'Este modo está pensado para períodos cortos de enfoque máximo, cuando quieres ver todas tus tareas sin límite artificial.',
+  modohf:'Hiperproductividad es para períodos cortos de máximo ritmo: ves más tareas y tu meta diaria sube al porcentaje que elijas (85–100%). Se puede usar una vez al mes.',
+  modedur:'Tras esa cantidad de días el modo termina solo. Si activas "Preguntar si quiero prorrogar", dos días antes (y al terminar) te ofrece extenderlo de 1 a 7 días, tantas veces como quieras.',
+  modecool:'Después de usar este modo queda deshabilitado esa cantidad de días, para que no se vuelva rutina. "Ninguno" lo deja siempre disponible.',
   cats:'Organiza tus tareas diarias por categoría (ej: Trabajo, Tiempo libre, Salud). Aparecen como etiquetas en cada tarea.',
   linkcl:'Esta tarea tiene checklist propio — puedes vincularla completa, o elegir qué ítem puntual quieres vincular (puedes ir y volver para vincular varios, sin cerrar esta hoja).',
   linkup:'Al avanzar acá, avanzará automáticamente allá. Solo se puede vincular hacia períodos superiores (semana, mes, semestre, año) y puedes elegir varias tareas a la vez; la meta de cada destino se recalcula sola. Toca una fila marcada para quitar el vínculo, o su etiqueta verde para cambiar cómo suma.',
@@ -17439,7 +17610,8 @@ function tasksForDateKey(dateKey){
   var d = parseLocalDate(dateKey);
   var wIdx = dayIdxFromDate(d);
   var recurring = isSameWeekAsToday(d) ? S.tasks.filter(function(t){return t.period==='dia'&&!t.date&&t.day===wIdx&&!isSkipped(t);}) : [];
-  var dated = S.tasks.filter(function(t){return t.period==='dia'&&t.date===dateKey;});
+  var _cur = isSameWeekAsToday(d);
+  var dated = S.tasks.filter(function(t){return t.period==='dia'&&t.date===dateKey&&!(_cur&&isSkipped(t));});
   return recurring.concat(dated);
 }
 // ¿Sigue "dentro de gracia" el día dateKey? (hoy mismo, o el día
@@ -17474,7 +17646,7 @@ function evaluateDayHistory(dateKey, weekendSkipAllowed){
   var dayTasks = tasksForDateKey(dateKey);
   if(!dayTasks.length) return prev||null;
   var am=getActiveMode();
-  var thr=am&&am.lowThresh?am.lowThresh:S.streakCfg.threshold;
+  var thr=modeThreshold(S.streakCfg.threshold);
   var completed = dayTasks.filter(isDone).length; // cuántas quedaron 100% completas — para mostrar "3/5"
   // Pedido: el avance PARCIAL de una tarea con cantidad específica o con
   // checklist también debe contar como porcentaje parcial hacia el umbral
@@ -17636,13 +17808,13 @@ var MEDALS_CATALOG = [
   },
   {
     id:'use-vacaciones', emoji:'🌴', title:'Descansar es poder',
-    desc:'Activa modo Vacaciones al menos una vez.',
+    desc:'Activa un modo de descanso (Baja Energía o uno propio) al menos una vez.',
     reward:{type:'xp', value:10, label:'+10 XP'},
-    check:function(){return (S.vacacionesUsedCount||0) > 0;}
+    check:function(){return (S.vacacionesUsedCount||0) > 0 || (S.bajaUsedCount||0) > 0 || (S.modes||[]).some(function(m){return (m.usedCount||0)>0;});}
   },
   {
     id:'use-hiperfoco', emoji:'🎯', title:'Tunelero',
-    desc:'Activa Hiperfoco al menos una vez.',
+    desc:'Activa Hiperproductividad al menos una vez.',
     reward:{type:'xp', value:15, label:'+15 XP'},
     check:function(){return (S.hiperfocoUsedCount||0) > 0;}
   },
@@ -18736,7 +18908,7 @@ function scheduleStreakRiskWarning(){
           var partial = dayTasks.reduce(function(s,tk){return s+tRatio(tk);},0);
           var ratio = partial/dayTasks.length;
           var am = getActiveMode();
-          var thr = (am&&am.lowThresh) ? am.lowThresh : (S.streakCfg?S.streakCfg.threshold:0.7);
+          var thr = modeThreshold(S.streakCfg?S.streakCfg.threshold:0.7);
           if(ratio < thr){
             new Notification('Gramifica', {body:'🔥 Tu racha está en riesgo — llevas '+Math.round(ratio*100)+'% de '+Math.round(thr*100)+'% hoy. ¡Todavía puedes lograrlo!', icon:'/icon-192.png'});
           }
@@ -19421,7 +19593,7 @@ if(S.notifPermission === 'granted') scheduleNotifications();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.14';
+var APP_VERSION = '2026.10.01.15';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
@@ -19446,7 +19618,7 @@ checkForUpdate();
 loadState();           // Cargar datos guardados en localStorage (¡debe ir primero!)
 try{ localStorage.removeItem('og6-dev-premium-preview'); }catch(e){}
 try{ Object.keys(S.timerSessions||{}).forEach(function(k){ if(S.timerSessions[k].date!==todayStr()) delete S.timerSessions[k]; }); }catch(e){}
-setTimeout(function(){ try{ checkExpectedReminders(); }catch(e){} }, 2500); // limpia la bandera vieja; solo vuelve a existir si activa la cuenta de desarrollador
+setTimeout(function(){ try{ checkExpectedReminders(); checkModeLifecycle(); }catch(e){} }, 2500); // limpia la bandera vieja; solo vuelve a existir si activa la cuenta de desarrollador
 // El primer escalón del historial debe saber en qué pestaña está la app: así "atrás" desde
 // una pantalla de Yo nunca cae en una pestaña sin relación.
 try{ var _h0 = {navTab:S.tab||'hoy'}; if((S.tab||'hoy')==='yo') _h0.navYoScreen = null; history.replaceState(_h0, ''); }catch(e){}
