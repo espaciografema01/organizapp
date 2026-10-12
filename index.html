@@ -1236,6 +1236,7 @@ async function syncWithCloud(){
         taskBlocks: S.taskBlocks,
         medals: S.medals||[],
         levelTracks: S.levelTracks||[],
+        shareData: shareCloudPayload(),
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
         registries: S.registries||[],
@@ -1358,6 +1359,7 @@ function applySyncResult(cloud, useCloud){
       if(Array.isArray(cloud.modes)) S.modes = cloud.modes;
       if(cloud.activeMode !== undefined) S.activeMode = cloud.activeMode;
       if(cloud.streakCfg) S.streakCfg = cloud.streakCfg;
+      try{ shareMergeCloud(cloud); }catch(e){}
       if(cloud.timerCfg) S.timerCfg = Object.assign({}, S.timerCfg, cloud.timerCfg);
       // Preferencia + marcadores de "hasta qué ciclo ya se reinició": viajan
       // juntos con las tareas de la nube, para que otro dispositivo no vuelva
@@ -1479,6 +1481,7 @@ function pushToCloud(){
       taskBlocks: S.taskBlocks,
       medals: S.medals||[],
       levelTracks: S.levelTracks||[],
+      shareData: shareCloudPayload(),
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
       registries: S.registries||[],
@@ -2417,6 +2420,7 @@ function loadState(){
     var na=localStorage.getItem('og6-notifasked');if(na)S.notifAskedDate=na;
     var drr=localStorage.getItem('og6-dailyreviewreminder');if(drr)S.dailyReviewReminder=Object.assign({on:false,hh:20,mm:0,days:[0,1,2,3,4,5,6]},JSON.parse(drr));
     var qh=localStorage.getItem('og6-quiethours');if(qh)S.quietHours=Object.assign({on:false,startHH:22,startMM:0,endHH:8,endMM:0},JSON.parse(qh));
+    try{var shd=localStorage.getItem('og6-sharedata');if(shd){var _o=JSON.parse(shd)||{};S.shareCfg=_o.cfg||undefined;S.recordLog=_o.rec||[];S.bestStreak=_o.best||0;S.streakMilestones=_o.ms||{};S.goalLog=_o.goals||[];S.shareSeen=_o.seen||{};}}catch(e){}
     var sr=localStorage.getItem('og6-streakrisk');if(sr)S.streakRisk=Object.assign({on:false,hh:21,mm:0},JSON.parse(sr));
     var sm=localStorage.getItem('og6-simplemode');if(sm!==null)S.simpleMode=sm==='1';
     var ldn=localStorage.getItem('og6-listdensity');if(ldn)S.listDensity=ldn;
@@ -2565,6 +2569,7 @@ function _saveStateNow(){
     _lsSet('og6-notiftiming',JSON.stringify(S.notifTiming||{hh:0,mm:15}));
     _lsSet('og6-dailyreviewreminder',JSON.stringify(S.dailyReviewReminder||{on:false,hh:20,mm:0,days:[0,1,2,3,4,5,6]}));
     _lsSet('og6-quiethours',JSON.stringify(S.quietHours||{on:false,startHH:22,startMM:0,endHH:8,endMM:0}));
+    _lsSet('og6-sharedata',JSON.stringify({cfg:S.shareCfg||null,rec:S.recordLog||[],best:S.bestStreak||0,ms:S.streakMilestones||{},goals:S.goalLog||[],seen:S.shareSeen||{}}));
     _lsSet('og6-streakrisk',JSON.stringify(S.streakRisk||{on:false,hh:21,mm:0}));
     _lsSet('og6-projecttourseen',S.projectTourSeen?'1':'0');
     _lsSet('og6-leveltipseen',S.levelTipSeen?'1':'0');
@@ -2669,6 +2674,8 @@ var ICO_PATHS={
   folder:'<path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/>',
   eye:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/>',
   eyeoff:'<path d="M3 3l18 18"/><path d="M10.6 5.6c.46-.07.92-.1 1.4-.1 6.4 0 10 6.5 10 6.5a17 17 0 0 1-3.2 3.9M6.5 7.6A16.5 16.5 0 0 0 2 12s3.6 6.5 10 6.5c1.5 0 2.8-.3 4-.9"/>',
+  share:'<circle cx="6" cy="12" r="2.3"/><circle cx="17.5" cy="6" r="2.3"/><circle cx="17.5" cy="18" r="2.3"/><path d="m8 10.9 7.4-3.7M8 13.1l7.4 3.7"/>',
+  open:'<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4.5"/>',
   flame:'<path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.2 2-4.2.2 1.4.9 2 1.7 2.2C10.3 8 10.6 5.5 12 3z"/>',
   chat:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
   bell:'<path d="M18 15.5V11a6 6 0 0 0-12 0v4.5L4 18h16l-2-2.5z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
@@ -4960,6 +4967,7 @@ function renderYoMain(){
     yoRowHTML('preferencias','sliders','Preferencias', prefSub, false, 'modo simplificado racha xp niveles sonido efectos consejos sugerencias mensaje recordatorio semana prellenar registros')+
     yoRowHTML('modos','battery','Modos', (function(){ var m=modeChipInfo(); return m.on ? esc(m.name)+' activo' : 'Normal · Baja energía, Hiperproductividad…'; })(), false, 'modos energia baja hiperfoco hiperproductividad vacaciones personalizado ritmo descanso')+
     yoRowHTML('plantillas','layers','Plantillas de semana', (S.templates||[]).length ? (S.templates.length+' guardada'+(S.templates.length===1?'':'s')) : 'Guarda una semana tipo y reutilízala', false, 'plantillas semana tipo guardar aplicar reutilizar horario')+
+    yoRowHTML('compartir','share','Tarjetas para compartir', 'Racha, récords y resúmenes para redes', false, 'compartir tarjetas imagen redes instagram logro racha record resumen meta privacidad')+
     yoRowHTML('periodos','calgrid','Períodos', periodsSub, false, 'periodos semana mes semestre año objetivos desactivar')+
     yoRowHTML('temporizador','target','Enfoque', timerCfgSummary(), true, 'enfoque temporizador timer sonidos vibrar pantalla ejercicios rutinas estudio entrenamiento pestaña ubicacion seguimiento barra')
   );
@@ -4996,13 +5004,13 @@ function renderYoScreenWrap(screen){
     perfil:'Perfil', plan:'Nivel de acceso', preferencias:'Preferencias',
     tema:'Tema visual', categorias:'Categorías', periodos:'Períodos', notificaciones:'Notificaciones', calendario:'Google Calendar',
     estadisticas:'Estadísticas', modos:'Modos', temporizador:'Enfoque', faq:'Preguntas frecuentes', plantillas:'Plantillas de semana',
-    ayuda:'Ayuda', datos:'Datos y privacidad'
+    ayuda:'Ayuda', datos:'Datos y privacidad', compartir:'Tarjetas para compartir'
   };
   var renderers = {
     perfil:renderYoPerfilScreen, plan:renderYoPlanScreen, preferencias:renderYoPreferenciasScreen,
     tema:renderYoTemaScreen, categorias:renderYoCategoriasScreen, periodos:renderYoPeriodosScreen, notificaciones:renderYoNotificacionesScreen, calendario:renderYoCalendarioScreen,
     estadisticas:renderYoEstadisticasScreen, modos:renderEnergySimple, temporizador:renderYoTemporizadorScreen, faq:renderYoFaqScreen, plantillas:renderTemplates,
-    ayuda:renderYoAyudaScreen, datos:renderYoDatosScreen
+    ayuda:renderYoAyudaScreen, datos:renderYoDatosScreen, compartir:renderYoCompartirScreen
   };
   if(!renderers[screen]){ S.yoScreen=null; return renderYoMain(); }
   var html = '<div style="padding:16px 16px 90px;">';
@@ -8570,7 +8578,7 @@ function buildGanttView(p){
 function openAddTaskModal(pid, sid, parentTaskId){ openPTaskEditor(pid, sid, null, parentTaskId||null); }
 function openAddTaskToSection(pid,sid){ openPTaskEditor(pid,sid,null,null); }
 function openEditProjectTask(pid,sidHint,tid){ openPTaskEditor(pid,sidHint,tid,null); }
-var PT = null;
+var PTE = null;
 function openPTaskEditor(pid,sid,tid,parentTid){
   var p=(S.projects||[]).find(function(x){return x.id===pid;});
   if(!p) return;
@@ -8582,7 +8590,7 @@ function openPTaskEditor(pid,sid,tid,parentTid){
   if(!sec) return;
   var isNew=!node;
   if(isNew) node={name:'',start:(p.start||todayStr()),end:'',pct:0,notes:'',after:'',children:[]};
-  PT={pid:pid,sid:sec.id,tid:tid||null,parent:parentTid||null,isNew:isNew};
+  PTE={pid:pid,sid:sec.id,tid:tid||null,parent:parentTid||null,isNew:isNew};
   var leaf=!node.children||!node.children.length;
   var opts=[]; (p.sections||[]).forEach(function(sc,si){ flattenForConexiones(sc.tasks||[],(si+1)+'.').forEach(function(it){
     if(it.t.id===tid) return;
@@ -8622,7 +8630,7 @@ function openPTaskEditor(pid,sid,tid,parentTid){
       '<button class="cbtn" onclick="askClosePT()">Cancelar</button>'+
     '</div></div>';
   pRoot().appendChild(ov);
-  PT.snap=ptSnap();
+  PTE.snap=ptSnap();
   if(isNew) setTimeout(function(){ var i=document.getElementById('pet-name'); if(i) i.focus(); },60);
 }
 function ptSnap(){
@@ -8631,7 +8639,7 @@ function ptSnap(){
 }
 function askClosePT(){
   var ov=document.getElementById('pt-editor'); if(!ov) return;
-  if(!PT || PT.snap===ptSnap()){ ov.remove(); return; }
+  if(!PTE || PTE.snap===ptSnap()){ ov.remove(); return; }
   if(document.getElementById('pt-discard')) return;
   var box=document.createElement('div'); box.className='conf-box'; box.id='pt-discard';
   box.innerHTML='<div class="conf-inner" style="text-align:center;">'+
@@ -8649,12 +8657,12 @@ function ptDiscardChoice(a){
   if(a==='save') savePT(); else if(a==='discard'){ var ov=document.getElementById('pt-editor'); if(ov) ov.remove(); }
 }
 function ptDelete(){
-  var pt=PT; if(!pt||!pt.tid) return;
+  var pt=PTE; if(!pt||!pt.tid) return;
   var ov=document.getElementById('pt-editor'); if(ov) ov.remove();
   deleteProjectTask(pt.pid,pt.sid,pt.tid);
 }
 function savePT(){
-  var pt=PT; if(!pt) return;
+  var pt=PTE; if(!pt) return;
   var g=function(id){ var e=document.getElementById(id); return e?e.value:''; };
   var name=g('pet-name').trim();
   if(!name){ toast('Escribe un nombre'); return; }
@@ -10956,6 +10964,7 @@ function periodCloseCardHTML(sel){
         '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13.5px;color:var(--ink);">Cerró '+(PERIOD_PREV[sel]||'el período')+'</div>'+
         '<div style="font-size:12px;color:var(--ink-soft);margin-top:1px;">'+c.doneN+' de '+c.total+' logrados</div></div>'+
         '<button class="sbtn" style="padding:9px 14px;font-size:12.5px;" onclick="openPeriodClose(\''+c.id+'\')">Ver cierre</button>'+
+        (sel!=='semana'?'<button class="cbtn" style="padding:8px 12px;font-size:12px;" onclick="openShareSummary(\''+sel+'\',-1)">Compartir</button>':'')+
       '</div></div>';
   }
   if(all.length>(c?1:0)) html+='<div style="text-align:center;margin:-6px 0 12px;"><button onclick="openPeriodCloseList(\''+sel+'\')" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:Inter,sans-serif;">Cierres anteriores ('+all.length+')</button></div>';
@@ -12016,7 +12025,7 @@ function timerRecordTime(st){
   var sec = Math.round(timerActualSec(st)); if(!(sec>0)) return;
   var k = st.key+'#t', prev = ((S.timerBests||{})[k]||{}).n||0, pr = sec>prev;
   TR.results.push({name:st.name, n:sec, unit:'s', prev:prev, pr:pr, saved:null});
-  if(!TR.preview && pr){ if(!S.timerBests) S.timerBests={}; S.timerBests[k]={n:sec,d:todayStr()}; saveState(); }
+  if(!TR.preview && pr){ if(!S.timerBests) S.timerBests={}; S.timerBests[k]={n:sec,d:todayStr()}; try{ logRecord({name:st.name,n:sec,unit:'s',prev:prev}); }catch(e){} saveState(); }
 }
 // ── "Para la próxima vez": actualizar el ejercicio con lo que realmente hiciste ──
 function timerNextInfo(st){
@@ -12094,6 +12103,7 @@ function timerRecordBest(step){
   var res = {name:step.name, n:val, w:wt, prev:prev, pr:pr||prW, saved:null};
   var reg = step.regId ? regById(step.regId) : null;
   var m = reg && (reg.metrics||[]).find(function(x){return x.id===step.metricId;});
+  if(!TR.preview && res.pr){ try{ var _m2 = reg && (reg.metrics||[]).find(function(x){return x.id===step.metricId2;}); logRecord({name:step.name, n:val, unit:(m&&m.unit)||'reps', prev:prev, w:wt, wUnit:(_m2&&_m2.unit)||'kg', low:!!bb.low}); }catch(e){} }
   if(!TR.preview){
     if(reg && m){
       var vals = {}; vals[step.metricId] = val; if(wt && step.metricId2) vals[step.metricId2] = wt;
@@ -12153,6 +12163,17 @@ function timerFinish(){
   if(!TR.preview && TR.taskId && TR.itemId){ try{ timerMarkItem(); }catch(e){} }
   else if(!TR.preview && TR.taskId){ try{ timerMarkTask(); }catch(e){} timerClearSession(TR.taskId); }
   timerRenderFrame(true);
+  try{
+    var _prs = (TR.results||[]).filter(function(r){return r.pr;});
+    if(!TR.preview && _prs.length){
+      var _pn = _prs[0].name;
+      setTimeout(function(){
+        var items = recordsOfDay(todayStr()); if(!items.length) return;
+        items.sort(function(a,b){ return (a.name===_pn?0:1)-(b.name===_pn?0:1); });
+        shareAuto('record', {date:todayStr(), items:items});
+      }, 900);
+    }
+  }catch(e){}
 }
 
 function timerTogglePause(){
@@ -12453,6 +12474,7 @@ function timerRenderFrame(force){
       (res.length?'<div style="width:100%;max-width:320px;margin-bottom:24px;">'+res.map(function(r){
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(255,255,255,.1);border-radius:10px;margin-bottom:6px;font-size:13.5px;"><span>'+esc(r.name)+'</span><span style="font-weight:800;">'+r.n+(r.unit==='s'?' s':'')+(r.pr?' <span style="font-size:10px;background:#f5c25a;color:#111;border-radius:6px;padding:2px 6px;margin-left:4px;">RÉCORD</span>':(r.prev?' <span style="font-size:10.5px;opacity:.6;font-weight:500;">mejor '+r.prev+'</span>':''))+(r.saved?'<span style="display:block;font-size:10.5px;opacity:.65;font-weight:500;text-align:right;">anotado en '+esc(r.saved)+'</span>':'')+'</span></div>';
       }).join('')+'</div>':'')+
+      (!TR.preview && res.some(function(r){return r.pr;}) ? '<button onclick="openShareRecordFromRun()" style="background:rgba(255,255,255,.16);color:#fff;border:none;border-radius:12px;padding:12px 26px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:10px;">Compartir récord</button>' : '')+
       '<button onclick="closeTimerRun()" style="background:#fff;color:#111;border:none;border-radius:12px;padding:14px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
     '</div>';
     return;
@@ -13022,6 +13044,7 @@ function renderProgressLogros(){
   // Pedido: sacar la tarjeta de acceso al calendario y el bloque de
   // estadísticas de Progreso — el calendario ya vive en su propia
   // subpestaña (Plan → Calendarios), no hace falta un atajo duplicado acá.
+  html += shareHubCardHTML();
   html += renderLevelTracksSection();
   html += renderMedals();
   html += renderAchievements();
@@ -15124,6 +15147,7 @@ function finishUpdate(updated, justCompleted, delta){
     playSound('complete');
     vibrate(30);
     awardTaskXP(updated);
+    try{ shareNoteGoal(updated); }catch(e){}
     // Registro asociado: al completar, se ofrece anotar el monto/marca (se puede omitir).
     if(updated.registryId && regById(updated.registryId) && !updated.regPerItem){
       var _rtid = updated.id;
@@ -15320,6 +15344,7 @@ function advanceRecurringEvents(){
     var newDate = localDateStr(next);
     var clr = resetChecklistForCycle(t);
     changed = true;
+    try{ forgetTaskRewards(t.id); }catch(e){}
     return Object.assign({},t,{date:newDate, day:dayIdxFromDate(next), done:false, prog:0, checklist:clr.checklist, lastChecklist:clr.lastChecklist});
   });
   if(changed) saveState();
@@ -17514,7 +17539,92 @@ function mSetItemTimer(id, sec){
   removeOverlay('item-timer-sheet');
   mRerenderCL();
 }
-function itemTmPlayHTML(t,item,compact){
+
+// ── Abrir otra app desde un ítem del checklist ──────────────────────────────
+// Sistema mixto: catálogo de apps conocidas + enlace propio. Una página web no
+// puede ver qué apps tiene instalado el usuario, así que se usan enlaces
+// normales (https://…): si la app los reclama (Duolingo, Strava, Spotify…) el
+// teléfono la abre; si no está instalada, se abre la web. También acepta
+// esquemas propios (strava://, intent://, shortcuts://run-shortcut?name=…).
+var APP_CATALOG = [
+  {id:'duolingo', name:'Duolingo', url:'https://www.duolingo.com/learn'},
+  {id:'strava', name:'Strava', url:'https://www.strava.com/dashboard'},
+  {id:'spotify', name:'Spotify', url:'https://open.spotify.com/'},
+  {id:'youtube', name:'YouTube', url:'https://www.youtube.com/'},
+  {id:'kindle', name:'Kindle', url:'https://read.amazon.com/'},
+  {id:'notion', name:'Notion', url:'https://www.notion.so/'},
+  {id:'khan', name:'Khan Academy', url:'https://www.khanacademy.org/'},
+  {id:'anki', name:'AnkiWeb', url:'https://ankiweb.net/decks'},
+  {id:'headspace', name:'Headspace', url:'https://www.headspace.com/'},
+  {id:'calm', name:'Calm', url:'https://www.calm.com/'}
+];
+function appLinkNormalize(v){
+  v = String(v||'').trim(); if(!v) return '';
+  if(/^(javascript|data|file|blob|vbscript):/i.test(v)) return '';
+  if(/^[a-z][a-z0-9+.\-]*:/i.test(v)) return v;
+  if(/^[^\s\/]+\.[a-z]{2,}(\/\S*)?$/i.test(v)) return 'https://'+v;
+  return '';
+}
+function appLinkLabel(a){
+  if(!a) return '';
+  if(a.name) return a.name;
+  var m = /^https?:\/\/(?:www\.)?([^\/?#]+)/i.exec(a.url||''); if(m) return m[1];
+  var sc = /^([a-z][a-z0-9+.\-]*):/i.exec(a.url||''); return sc ? sc[1] : 'Enlace';
+}
+function itemAppBtnHTML(item){
+  var has = !!(item.app && item.app.url);
+  return '<button onclick="mOpenItemApp(\''+item.id+'\')" title="Abrir una app o enlace" aria-label="Abrir una app o enlace" style="background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted-soft)')+';border-radius:7px;height:22px;width:24px;padding:0;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;">'+ico('open',12,2)+'</button>';
+}
+function itemAppChipHTML(t,item){
+  if(!(item.app && item.app.url) || item.done) return '';
+  return '<button class="cl-tm" onclick="event.stopPropagation();openItemApp(\''+t.id+'\',\''+item.id+'\')" aria-label="Abrir '+esc(appLinkLabel(item.app))+'">'+ico('open',10,2.2)+' '+esc(appLinkLabel(item.app)).slice(0,16)+'</button>';
+}
+function openItemApp(taskId, itemId){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  var it = (t.checklist||[]).find(function(i){return i.id===itemId;}); if(!it || !it.app || !it.app.url) return;
+  var u = it.app.url;
+  try{
+    if(/^https?:/i.test(u)) window.open(u, '_blank', 'noopener');
+    else window.location.href = u;
+  }catch(e){ toast('No se pudo abrir el enlace'); }
+}
+function mOpenItemApp(id){
+  var item = M.checklist.find(function(i){return i.id===id;}); if(!item) return;
+  removeOverlay('item-app-sheet');
+  var cur = item.app || null;
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='item-app-sheet'; ov.style.zIndex = 620;
+  ov.addEventListener('click', function(e){ if(e.target===ov) removeOverlay('item-app-sheet'); });
+  var cat = APP_CATALOG.map(function(a){
+    var on = cur && cur.id===a.id;
+    return '<button class="sc-chip'+(on?' on':'')+'" onclick="mSetItemApp(\''+id+'\',\''+a.id+'\')">'+esc(a.name)+'</button>';
+  }).join('');
+  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:19px;">Abrir una app</span><button onclick="removeOverlay(\'item-app-sheet\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:4px;">Este ítem tendrá un botón que abre la app o el enlace que elijas.</div>'+
+    '<div class="sc-lbl">Apps frecuentes</div><div class="sc-row">'+cat+'</div>'+
+    '<div class="sc-lbl">O pega tu propio enlace</div>'+
+    '<input id="app-url-in" type="url" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="https://… o strava://…" value="'+esc(cur && !cur.id ? cur.url : '')+'" style="width:100%;border:1.5px solid var(--field-line,var(--line));border-radius:10px;padding:11px 12px;font-size:16px;font-family:Inter,sans-serif;background:var(--bg);color:var(--ink);outline:none;"/>'+
+    '<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-top:8px;">En la app que quieras, usa «Compartir → Copiar enlace» y pégalo aquí. Con enlaces normales (https) se abre la app si la tienes instalada; si no, se abre la página web. Gramifica no puede saber qué apps tienes instaladas.</div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="mSaveItemApp(\''+id+'\')">Guardar</button>'+(cur?'<button class="cbtn" onclick="mClearItemApp(\''+id+'\')">Quitar</button>':'')+'</div></div>';
+  document.body.appendChild(ov);
+}
+function mApplyItemApp(id, app){
+  M.checklist = M.checklist.map(function(i){ if(i.id!==id) return i; var n = Object.assign({}, i); if(app) n.app = app; else delete n.app; return n; });
+  removeOverlay('item-app-sheet'); mRerenderCL();
+}
+function mSetItemApp(id, appId){
+  var a = APP_CATALOG.find(function(x){return x.id===appId;}); if(!a) return;
+  mApplyItemApp(id, {id:a.id, name:a.name, url:a.url});
+}
+function mSaveItemApp(id){
+  var el = document.getElementById('app-url-in'), raw = el ? el.value : '';
+  if(!String(raw).trim()){ toast('Elige una app o pega un enlace'); return; }
+  var u = appLinkNormalize(raw);
+  if(!u){ toast('Ese enlace no parece válido'); return; }
+  mApplyItemApp(id, {url:u});
+}
+function mClearItemApp(id){ mApplyItemApp(id, null); }
+function itemTmPlayHTML(t,item,compact){ return itemTmPlayInner(t,item,compact)+itemAppChipHTML(t,item); }
+function itemTmPlayInner(t,item,compact){
   if(!(item.timer && item.timer.sec>0) || item.done) return '';
   return '<button class="cl-tm" onclick="event.stopPropagation();openItemTimerRun(\''+t.id+'\',\''+item.id+'\')" aria-label="Iniciar temporizador de '+esc(item.text)+'"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'+(item.timer.label?esc(item.timer.label).slice(0,14)+' · ':'')+fmtDur(item.timer.sec)+'</button>';
 }
@@ -17583,7 +17693,7 @@ function clItemsHTML(){
         // navegador, y en pantallas angostas eso empuja "META" y la "×"
         // fuera del borde derecho de la pantalla (como en el pantallazo).
         '<input value="'+esc(item.text)+'" placeholder="Ítem..." oninput="mUpdateCL(\''+item.id+'\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1px solid var(--line);outline:none;font-size:16px;background:transparent;padding:5px 0;font-family:Inter,sans-serif;color:'+(item.done&&!isQtyItem?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(item.done&&!isQtyItem?'line-through':'none')+';"/>'+
-        qtyBtn+itemTmBtnHTML(item)+
+        qtyBtn+itemAppBtnHTML(item)+itemTmBtnHTML(item)+
         '<button onclick="mRemoveCL(\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:20px;line-height:1;flex-shrink:0;padding:0;">×</button>'+
       '</div>'+
       qtyEditorHTML+barHTML+
@@ -18089,6 +18199,7 @@ function reconcileStreak(){
       if(nt%30===0)bonus+=7;
       if(nt%180===0)bonus+=30;
       checkAndUnlockAchievement(nd);
+      try{ shareNoteStreak(nd, cKey); if(isStreakMilestone(nd) && cKey!==today){ (function(n,k){ setTimeout(function(){ shareAuto('streak', shareStreakData(n,k)); },1400); })(nd,cKey); } }catch(e){}
       if(bonus>0)addXP(bonus);
       if(cKey===today){
         setTimeout(function(){showStreakAchieved(nd,bonus);},900);
@@ -18360,6 +18471,7 @@ function trackVisit(){
 }
 
 function showStreakAchieved(days,bonus){
+  if(isStreakMilestone(days)) _pendingStreakShare = function(){ shareAuto('streak', shareStreakData(days, todayStr())); };
   playSound('streak');
   vibrate([25,40,25]);
   var box=document.createElement('div');
@@ -18380,7 +18492,8 @@ function showStreakAchieved(days,bonus){
   '</div>';
   document.body.appendChild(box);
 }
-function closeStreakModal(){var b=document.getElementById('streak-modal');if(b)b.remove();}
+var _pendingStreakShare = null;
+function closeStreakModal(){var b=document.getElementById('streak-modal');if(b)b.remove(); if(_pendingStreakShare){ var f=_pendingStreakShare; _pendingStreakShare=null; setTimeout(f,250); }}
 
 // ── Logros: modal de desbloqueo ───────────────────────────────────────────
 function showAchievementUnlocked(ach){
@@ -18437,154 +18550,722 @@ function closeMedalModal(){
   showNextMedalModal();
 }
 
-// ── Imagen shareable (canvas) ─────────────────────────────────────────────
-function showAchievementShare(days){
-  var name = getAchievementName(days);
-  // Stats para incluir
-  var hist = S.dailyHistory || {};
-  var totalCompleted = 0, daysCount = 0;
-  for(var k in hist){
-    if(hist[k]){
-      totalCompleted += hist[k].completed || 0;
-      daysCount++;
+// ══ Tarjetas para compartir ═════════════════════════════════════════════════
+// Imágenes (canvas) para redes sociales: racha por hitos, récords, resumen de
+// período, meta cumplida y mapa de calor. Nunca incluyen montos de dinero (ni
+// leen registros): solo tareas, XP, rachas, récords y metas. Cada tarjeta deja
+// ocultar cualquier dato y los nombres (tareas, ejercicios, seguimientos).
+// Marca: logo + "Gramifica" arriba; "desarrollada por Espacio [G]rafema" abajo.
+(function(){
+  var st = document.createElement('style');
+  st.textContent =
+    '.sc-chip{border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);border-radius:18px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;}'+
+    '.sc-chip.on{background:var(--accent-fill,var(--accent));border-color:var(--accent-fill,var(--accent));color:var(--on-accent,#fff);}'+
+    '.sc-chip.off{text-decoration:line-through;opacity:.65;}'+
+    '.sc-lbl{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px;}'+
+    '.sc-row{display:flex;gap:6px;flex-wrap:wrap;}'+
+    '.sc-nudge{position:fixed;left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:900;max-width:416px;margin:0 auto;background:var(--ink);color:var(--paper);border-radius:14px;padding:10px 10px 10px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:13px;font-weight:600;animation:up .25s ease;}'+
+    'body.theme-terracota .sc-nudge{color:#3d1a0a;}'+
+    '.sc-nudge button.go{background:var(--paper);color:var(--ink);border:none;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;}'+
+    'body.theme-terracota .sc-nudge button.go{color:#3d1a0a;}'+
+    '.sc-nudge button.x{background:none;border:none;color:inherit;opacity:.7;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;}'+
+    '.sc-hub-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);}';
+  document.head.appendChild(st);
+})();
+
+var SC_FMT = {
+  story:{w:1080,h:1920,name:'Historia',sub:'9:16'},
+  post:{w:1080,h:1350,name:'Publicación',sub:'4:5'},
+  square:{w:1080,h:1080,name:'Cuadrada',sub:'1:1'}
+};
+var SC_SANS = 'Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+var SC_SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif';
+var SC = null;
+var _scTok = 0;
+var _scImgCache = {};
+
+// ── Ajustes ────────────────────────────────────────────────────────────────
+function shareCfg(){
+  var c = S.shareCfg || {};
+  var per = function(o){ return Object.assign({mes:true, semestre:true, 'año':true}, o||{}); };
+  return {
+    popupAll: c.popupAll!==false, streak: c.streak!==false, record: c.record!==false,
+    goal: per(c.goal), summary: per(c.summary),
+    hideNames: !!c.hideNames,
+    fmt: SC_FMT[c.fmt] ? c.fmt : 'story',
+    look: ['tema','claro','oscuro'].indexOf(c.look)>=0 ? c.look : 'tema'
+  };
+}
+function shareCfgSet(k, v, sub){
+  var c = shareCfg();
+  if(sub) c[k][sub] = v; else c[k] = v;
+  S.shareCfg = c; saveState(); render();
+}
+function shareCloudPayload(){ return {cfg:S.shareCfg||null, rec:(S.recordLog||[]).slice(-300), goals:(S.goalLog||[]).slice(-60)}; }
+function shareMergeCloud(cloud){
+  var d = cloud && cloud.shareData; if(!d) return;
+  if(d.cfg && !S.shareCfg) S.shareCfg = d.cfg;
+  var uni = function(a,b,n){ var m={}; (a||[]).concat(b||[]).forEach(function(x){ if(x&&x.id) m[x.id]=x; }); return Object.keys(m).map(function(k){return m[k];}).sort(function(p,q){return (p.ts||0)-(q.ts||0);}).slice(-n); };
+  S.recordLog = uni(S.recordLog, d.rec, 300);
+  S.goalLog = uni(S.goalLog, d.goals, 60);
+}
+
+// ── Hitos de racha ─────────────────────────────────────────────────────────
+function isStreakMilestone(d){ return d===7 || d===15 || (d>=30 && d%30===0) || (d>=365 && d%365===0); }
+function streakMilestoneList(max){
+  var out = [];
+  for(var d=7; d<=max; d++) if(isStreakMilestone(d)) out.push(d);
+  return out;
+}
+function streakTier(d){ return (d>=365 && d%365===0) ? 2 : (d>=30 ? 1 : 0); }
+function streakLabel(d){
+  if(d>=365 && d%365===0){ var y=d/365; return y===1 ? 'Un año completo' : y+' años seguidos'; }
+  if(d===7) return 'Una semana'; if(d===15) return 'Quince días';
+  if(d%30===0){ var m=d/30; return m===1 ? 'Un mes' : m+' meses'; }
+  return d+' días';
+}
+function streakPhrase(d){
+  if(d>=365 && d%365===0) return d===365 ? 'Un año entero, día tras día.' : 'Constancia que ya es parte de mi vida.';
+  if(d===7) return 'Una semana entera sin soltar.';
+  if(d===15) return 'Dos semanas de pura constancia.';
+  if(d===30) return 'Un mes de constancia.';
+  return 'Sigo avanzando, un día a la vez.';
+}
+// Registra el hito (llamado desde reconcileStreak al sumar un día).
+function shareNoteStreak(nd, dateKey){
+  S.bestStreak = Math.max(S.bestStreak||0, nd);
+  if(isStreakMilestone(nd)){ if(!S.streakMilestones) S.streakMilestones = {}; S.streakMilestones[nd] = dateKey; }
+}
+function shareStreakData(days, dateKey){
+  var tasks = null;
+  if(S.streak && days===S.streak.days && S.streak.lastDate){
+    var hist = S.dailyHistory||{}, c = parseLocalDate(S.streak.lastDate), n=0, sum=0, g=0;
+    while(n<days && g<days+60){ g++; var h = hist[localDateStr(c)]; if(h && h.streakReached){ n++; sum += (h.completed||0); } c = addDaysLocal(c,-1); }
+    if(sum>0) tasks = sum;
+  }
+  var dk = dateKey || (S.streakMilestones||{})[days] || null;
+  return {days:days, tasks:tasks, date:dk};
+}
+function openShareStreak(days, dateKey){ openShareCard('streak', shareStreakData(days, dateKey)); }
+function showAchievementShare(days){ openShareStreak(days); }
+
+// ── Récords ────────────────────────────────────────────────────────────────
+function logRecord(o){
+  if(!S.recordLog) S.recordLog = [];
+  S.recordLog.push({id:uid(), d:todayStr(), ts:Date.now(), name:o.name, n:o.n, unit:o.unit||'reps', prev:o.prev||0, w:o.w||null, wUnit:o.wUnit||null, low:!!o.low});
+  S.recordLog = S.recordLog.slice(-300);
+}
+function recordsOfDay(d){
+  var by = {}, order = [];
+  (S.recordLog||[]).filter(function(r){return r.d===d;}).forEach(function(r){
+    var k = (r.name||'').toLowerCase().trim()+'|'+r.unit;
+    if(!by[k]){ by[k] = Object.assign({}, r); order.push(k); }
+    else { var o = by[k]; var better = r.low ? r.n<o.n : r.n>o.n; if(better){ o.n=r.n; o.w=r.w; o.wUnit=r.wUnit; } }
+  });
+  return order.map(function(k){return by[k];});
+}
+function openShareRecords(d, primaryName){
+  var items = recordsOfDay(d); if(!items.length){ toast('No hay récords para compartir ese día'); return; }
+  if(primaryName){ items.sort(function(a,b){ return (a.name===primaryName?0:1)-(b.name===primaryName?0:1); }); }
+  openShareCard('record', {date:d, items:items});
+}
+function openShareRecordFromRun(){
+  var prs = (TR && TR.results || []).filter(function(r){return r.pr;});
+  openShareRecords(todayStr(), prs.length ? prs[0].name : null);
+}
+
+// ── Metas cumplidas ────────────────────────────────────────────────────────
+function shareNoteGoal(t){
+  if(!t || ['mes','semestre','año'].indexOf(t.period)<0) return;
+  if(!S.goalLog) S.goalLog = [];
+  var d = todayStr();
+  if(S.goalLog.some(function(g){ return g.tid===t.id && g.d===d; })) return;
+  S.goalLog.push({id:uid(), tid:t.id, ts:Date.now(), d:d, text:t.text||'', period:t.period});
+  S.goalLog = S.goalLog.slice(-60);
+  shareAuto('goal', {text:t.text||'', period:t.period, date:d}, t.period);
+}
+function openShareGoal(id){
+  var g = (S.goalLog||[]).find(function(x){return x.id===id;}); if(!g) return;
+  openShareCard('goal', {text:g.text, period:g.period, date:g.d});
+}
+var _scQueue = [];
+function shareAutoEnabled(kind, period){
+  var c = shareCfg(); if(!c.popupAll) return false;
+  if(kind==='streak') return c.streak;
+  if(kind==='record') return c.record;
+  if(kind==='goal') return !!c.goal[period];
+  if(kind==='summary') return !!c.summary[period];
+  return false;
+}
+function shareAuto(kind, data, period){
+  if(!shareAutoEnabled(kind, period)) return;
+  _scQueue.push({kind:kind, data:data, period:period||null});
+  shareAutoNext();
+}
+function shareAutoNext(){
+  if(!_scQueue.length || document.getElementById('share-card') || document.getElementById('streak-modal')) return;
+  var n = _scQueue.shift();
+  openShareCard(n.kind, n.data, {auto:true, period:n.period});
+}
+function shareCheckSummaries(){
+  try{
+    var cfg = shareCfg(); if(!cfg.popupAll) return;
+    if(!S.shareSeen) S.shareSeen = {};
+    var today = new Date(); today.setHours(0,0,0,0);
+    var ps = enabledGoalPeriods().filter(function(x){ return x==='mes'||x==='semestre'||x==='año'; });
+    ps.forEach(function(p){
+      if(!cfg.summary[p]) return;
+      var r = scRange(p, -1), key = p+':'+r.from;
+      if(S.shareSeen[key]) return;
+      S.shareSeen[key] = 1;
+      if(Math.round((today - parseLocalDate(r.to))/86400000) > 21) return; // solo si el período cerró hace poco
+      var d = scSummaryData(p, -1);
+      if(d.hero || d.tiles.length>=2) shareAuto('summary', d, p);
+    });
+    saveState();
+  }catch(e){}
+}
+function shareNudge(msg, fn){
+  var old = document.getElementById('sc-nudge'); if(old) old.remove();
+  var el = document.createElement('div'); el.className='sc-nudge'; el.id='sc-nudge';
+  el.innerHTML = '<span style="flex:1;">'+esc(msg)+'</span><button class="go">Compartir</button><button class="x" aria-label="Cerrar">×</button>';
+  el.querySelector('.go').onclick = function(){ el.remove(); fn(); };
+  el.querySelector('.x').onclick = function(){ el.remove(); };
+  document.body.appendChild(el);
+  setTimeout(function(){ if(el.parentNode) el.remove(); }, 9000);
+}
+
+// ── Resumen de período ─────────────────────────────────────────────────────
+var SC_MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function scRange(period, offset){
+  var n = new Date(), y = n.getFullYear(), m = n.getMonth(), from, to, label;
+  if(period==='mes'){
+    from = new Date(y, m+offset, 1); to = new Date(y, m+offset+1, 0);
+    label = SC_MONTHS[from.getMonth()].replace(/^./,function(c){return c.toUpperCase();})+' '+from.getFullYear();
+  } else if(period==='semestre'){
+    var tot = y*2 + (m<6?0:1) + offset, y2 = Math.floor(tot/2), h2 = tot%2;
+    from = new Date(y2, h2*6, 1); to = new Date(y2, h2*6+6, 0);
+    label = (h2===0?'1.er':'2.º')+' semestre '+y2;
+  } else {
+    from = new Date(y+offset,0,1); to = new Date(y+offset,11,31); label = String(y+offset);
+  }
+  var today = new Date(); today.setHours(0,0,0,0);
+  var partial = to > today; if(partial) to = today;
+  return {from:localDateStr(from), to:localDateStr(to), label:label, partial:partial, period:period};
+}
+function scFmtDay(k){ return parseLocalDate(k).toLocaleDateString('es-CL',{day:'numeric',month:'short'}); }
+function scFmtHM(sec){ var m=Math.round(sec/60); if(m<60) return m+' min'; var h=Math.floor(m/60), r=m%60; return h+' h'+(r?' '+r+' min':''); }
+function scXpAt(key){
+  var h = S.xpHistory||{}, best = null, bk = '';
+  Object.keys(h).forEach(function(k){ if(k<=key && k>bk){ bk=k; best=h[k]; } });
+  return best;
+}
+function scSummaryData(period, offset){
+  var r = scRange(period, offset), today = todayStr(), hist = S.dailyHistory||{};
+  var inR = function(k){ return k>=r.from && k<=r.to; };
+  var tiles = [], hero = null;
+  // XP / nivel
+  if(!S.simpleMode){
+    var endXp = r.to>=today ? S.xp : (scXpAt(r.to)!=null ? scXpAt(r.to) : null);
+    var before = new Date(parseLocalDate(r.from).getTime()-86400000);
+    var startXp = scXpAt(localDateStr(before)); if(startXp==null) startXp = 0;
+    if(endXp!=null){
+      var gain = Math.max(0, endXp-startXp), l0 = getLevel(startXp), l1 = getLevel(endXp);
+      if(gain>0) hero = {lvl:l1, from:l0, to:l1, xp:gain, name:getLevelName(l1)};
     }
   }
-  
-  // Crear canvas para imagen creativa (formato cuadrado para Instagram)
-  var box=document.createElement('div');
-  box.className='lvl-up';box.id='share-modal';
-  box.innerHTML='<div class="lvl-up-box" style="max-width:380px;">'+
-    '<div style="position:relative;">'+
-      '<canvas id="shareCanvas" width="1080" height="1080" style="width:100%;border-radius:14px;display:block;"></canvas>'+
-    '</div>'+
-    '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:10px;">Tu imagen para compartir en Instagram, WhatsApp, etc.</div>'+
-    '<button class="lvl-up-btn" style="margin-top:14px;" onclick="downloadShareImage('+days+')">📥 Descargar imagen</button>'+
-    '<button onclick="navigator.share?shareImage('+days+'):toast(\'Compartir no disponible — descarga y comparte manualmente\')" style="width:100%;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent-text);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;margin-top:8px;">📤 Compartir</button>'+
-    '<button onclick="document.getElementById(\'share-modal\').remove()" style="width:100%;background:none;border:none;color:var(--muted);font-size:12px;padding:8px;margin-top:6px;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button>'+
-  '</div>';
-  document.body.appendChild(box);
-  
-  // Dibujar la imagen en canvas
-  setTimeout(function(){drawShareImage(days, totalCompleted, daysCount);}, 100);
+  // tareas, mejor día, cumplimiento, racha más larga
+  var total=0, active=0, bestN=0, bestK=null, entries=0, reached=0, run=0, longest=0;
+  var keys = Object.keys(hist).filter(inR).sort();
+  var c = parseLocalDate(r.from), end = parseLocalDate(r.to), g=0;
+  while(c<=end && g<800){ g++; var k = localDateStr(c), h = hist[k];
+    if(h){ entries++; var cm = h.completed||0; total += cm; if(cm>0) active++; if(cm>bestN){bestN=cm;bestK=k;}
+      if(h.streakReached){ reached++; run++; if(run>longest) longest=run; } else run=0; }
+    c = addDaysLocal(c,1); }
+  if(longest>=2 && streakActive()) tiles.push({id:'streak', label:'Racha más larga', value:longest+' días', sub:''});
+  if(bestN>0) tiles.push({id:'bestday', label:'Día con más tareas', value:bestN+(bestN===1?' tarea':' tareas'), sub:scFmtDay(bestK)});
+  if(total>0) tiles.push({id:'tasks', label:'Tareas completadas', value:String(total), sub:active+' días activos'});
+  if(entries>=5) tiles.push({id:'consist', label:'Días con meta diaria', value:reached+' de '+entries, sub:Math.round(reached/entries*100)+'%'});
+  // metas del período menor
+  var sub = {mes:'semana', semestre:'mes', 'año':'mes'}[period], gd=0, gt=0;
+  (S.periodCloses||[]).forEach(function(pc){ if(pc.period===sub && pc.closedOn && inR(pc.closedOn)){ gd += pc.doneN||0; gt += pc.total||0; } });
+  if(gt>0) tiles.push({id:'goals', label:'Metas '+(sub==='semana'?'semanales':'mensuales'), value:gd+' de '+gt, sub:'logradas'});
+  // seguimientos
+  var tr = [];
+  (S.levelTracks||[]).forEach(function(t){
+    var after=0, gain=0;
+    (t.log||[]).forEach(function(e){ if(e.d>r.to) after += e.x||0; else if(inR(e.d)) gain += e.x||0; });
+    if(gain>0){ var xe = Math.max(0,(t.xp||0)-after); tr.push({name:t.name, a:getLevel(xe-gain), b:getLevel(xe), gain:gain}); }
+  });
+  tr.sort(function(a,b){ return (b.b-b.a)-(a.b-a.a) || b.gain-a.gain; });
+  tr.slice(0,3).forEach(function(t,i){ tiles.push({id:'track'+i, kind:'track', label:'Seguimiento', name:t.name, value:t.b>t.a ? 'Nivel '+t.a+' → '+t.b : 'Nivel '+t.b, sub:'+'+t.gain+' XP'}); });
+  // récords
+  var rec = {}; (S.recordLog||[]).forEach(function(x){ if(inR(x.d)) rec[x.d+'|'+(x.name||'')+'|'+x.unit]=1; });
+  var nrec = Object.keys(rec).length; if(nrec>0) tiles.push({id:'records', label:'Récords batidos', value:String(nrec), sub:''});
+  // enfoque
+  var fs = 0; (S.timerHistory||[]).forEach(function(x){ if(x.date && inR(x.date)) fs += x.sec||0; });
+  if(fs>=300) tiles.push({id:'focus', label:'Tiempo de enfoque', value:scFmtHM(fs), sub:''});
+  // medallas
+  var nm = (S.medals||[]).filter(function(m){ return m.dateUnlocked && inR(m.dateUnlocked.slice(0,10)); }).length;
+  if(nm>0) tiles.push({id:'medals', label:'Medallas ganadas', value:String(nm), sub:''});
+  return {period:period, range:r, hero:hero, tiles:tiles};
+}
+function openShareSummary(period, offset){
+  var d = scSummaryData(period, offset);
+  if(!d.hero && !d.tiles.length){ toast('Aún no hay datos en ese período'); return; }
+  openShareCard('summary', d);
 }
 
-function drawShareImage(days, totalCompleted, daysLogged){
-  var canvas = document.getElementById('shareCanvas');
-  if(!canvas)return;
-  var ctx = canvas.getContext('2d');
-  var W = canvas.width, H = canvas.height;
-  var name = getAchievementName(days);
-  
-  // Colores según tema (paleta cálida fija para legibilidad)
-  var bgColor = '#f5ede0';
-  var inkColor = '#1a1a1a';
-  var accentColor = '#c97842';
-  var inkSoftColor = '#3a3530';
-  
-  // Fondo con degradado
-  var grad = ctx.createLinearGradient(0,0,W,H);
-  grad.addColorStop(0, '#f5ede0');
-  grad.addColorStop(1, '#e8c5a8');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,W,H);
-  
-  // Patrón decorativo: círculos sutiles
-  ctx.globalAlpha = 0.08;
-  ctx.fillStyle = accentColor;
-  for(var i=0;i<8;i++){
-    ctx.beginPath();
-    ctx.arc(W*Math.random(), H*Math.random(), 100+Math.random()*200, 0, Math.PI*2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-  
-  // Marco interior
-  ctx.strokeStyle = accentColor;
-  ctx.lineWidth = 4;
-  ctx.strokeRect(80, 80, W-160, H-160);
-  
-  // Logo Gr. arriba
-  ctx.fillStyle = accentColor;
-  ctx.font = 'bold 60px Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('[', W/2 - 80, 200);
-  ctx.fillText(']', W/2 + 80, 200);
-  ctx.fillStyle = inkColor;
-  ctx.font = 'bold 70px Georgia, serif';
-  ctx.fillText('Gr.', W/2, 210);
-  
-  // Subtítulo Gramific[app]
-  ctx.fillStyle = inkSoftColor;
-  ctx.font = '600 22px Arial, sans-serif';
-  ctx.fillText('GRAMIFIC[APP]', W/2, 260);
-  
-  // Emoji grande del logro
-  ctx.font = '180px Arial';
-  ctx.fillText(name.emoji, W/2, 470);
-  
-  // Título del logro
-  ctx.fillStyle = inkColor;
-  ctx.font = 'bold 64px Georgia, serif';
-  ctx.fillText(name.title, W/2, 580);
-  
-  // Días destacados
-  ctx.fillStyle = accentColor;
-  ctx.font = 'bold 220px Georgia, serif';
-  ctx.fillText(days, W/2, 800);
-  
-  ctx.fillStyle = inkSoftColor;
-  ctx.font = '600 32px Arial, sans-serif';
-  ctx.fillText('DÍAS DE RACHA', W/2, 860);
-  
-  // Estadísticas en la parte de abajo
-  ctx.fillStyle = inkColor;
-  ctx.font = '600 26px Arial, sans-serif';
-  if(totalCompleted > 0){
-    ctx.fillText(totalCompleted + ' tareas completadas en ' + daysLogged + ' días activos', W/2, 940);
-  }
-  
-  // Frase motivadora
-  ctx.fillStyle = inkSoftColor;
-  ctx.font = 'italic 22px Georgia, serif';
-  var frase;
-  if(days === 30) frase = '"Un mes de constancia"';
-  else if(days === 120) frase = '"4 meses es ya un hábito"';
-  else if(days === 365) frase = '"Un año entero... A pura perseverancia"';
-  else frase = '"' + days + ' días de sudor y organización"';
-  ctx.fillText(frase, W/2, 1000);
-}
+// ── Mapa de calor ──────────────────────────────────────────────────────────
+function openShareHeat(){ openShareCard('heat', {}); }
 
-function downloadShareImage(days){
-  var canvas = document.getElementById('shareCanvas');
-  if(!canvas)return;
-  canvas.toBlob(function(blob){
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'gramifica-racha-'+days+'dias.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast('✓ Imagen descargada');
+// ══ Motor de la tarjeta ═════════════════════════════════════════════════════
+function openShareCard(kind, data, opts){
+  var cfg = shareCfg();
+  SC = {kind:kind, data:data, fmt:cfg.fmt, look:cfg.look, off:{}, opt:{}, auto:!!(opts&&opts.auto), period:(opts&&opts.period)||null};
+  if(cfg.hideNames) SC.off.names = true;
+  if(kind==='heat') SC.opt.range = '6m';
+  var _hub = document.getElementById('share-hub'); if(_hub) _hub.remove();
+  scOpen();
+}
+function scToggles(){
+  var d = SC.data, k = SC.kind;
+  if(k==='streak'){ var a=[]; if(d.tasks) a.push({id:'tasks',label:'Tareas completadas'}); if(d.date) a.push({id:'date',label:'Fecha'}); return a; }
+  if(k==='record'){ var a2=[{id:'names',label:'Nombres de ejercicios'},{id:'delta',label:'Marca anterior'}]; if(d.items.length>1) a2.push({id:'others',label:'Otros récords del día ('+(d.items.length-1)+')'}); return a2; }
+  if(k==='goal') return [{id:'names',label:'Texto de la meta'},{id:'date',label:'Fecha'}];
+  if(k==='heat') return [{id:'stats',label:'Cifras'}];
+  if(k==='summary'){
+    var a3 = []; if(d.hero) a3.push({id:'level',label:'Nivel y XP'});
+    d.tiles.forEach(function(t){ a3.push({id:t.id, label:t.kind==='track' ? 'Seguimiento: '+(SC.off.names?'(oculto)':t.name) : t.label}); });
+    if(d.tiles.some(function(t){return t.kind==='track';})) a3.push({id:'names',label:'Nombres de seguimientos'});
+    return a3;
+  }
+  return [];
+}
+function scOn(id){ return !SC.off[id]; }
+function scChip(on, label, fn){ return '<button class="sc-chip'+(on?' on':'')+'" onclick="'+fn+'">'+label+'</button>'; }
+function scAutoTitle(){
+  var d = SC.data;
+  if(SC.kind==='streak') return ['¡Hito de racha!', streakLabel(d.days)+' · '+streakPhrase(d.days)];
+  if(SC.kind==='record') return [d.items.length>1 ? '¡Nuevos récords!' : '¡Nuevo récord!', 'Compártelo o guárdalo como imagen'];
+  if(SC.kind==='goal') return ['¡Meta cumplida!', 'Una meta '+({mes:'del mes',semestre:'del semestre','año':'del año'}[d.period]||'')+' lograda'];
+  if(SC.kind==='summary') return ['Tu resumen: '+d.range.label, 'Lo que lograste en el período'];
+  return ['Tarjeta', ''];
+}
+function scCustomize(){ SC.auto = false; scRefreshSheet(); }
+function scNeverKind(){
+  var c = shareCfg(), k = SC.kind;
+  if(k==='goal'||k==='summary'){ c[k] = {mes:false, semestre:false, 'año':false}; } else c[k] = false;
+  S.shareCfg = c; saveState(); toast('Listo. Puedes reactivarlo en Yo → Tarjetas para compartir'); scClose();
+}
+function scNeverAll(){
+  var c = shareCfg(); c.popupAll = false; S.shareCfg = c; _scQueue = []; saveState(); toast('Listo. Puedes reactivarlas en Yo → Tarjetas para compartir'); scClose();
+}
+function scSheetInner(){
+  if(SC.auto){
+    var tt = scAutoTitle(), lk = 'background:none;border:none;color:var(--muted);font-size:11.5px;text-decoration:underline;cursor:pointer;font-family:Inter,sans-serif;padding:4px 2px;';
+    return '<div style="display:flex;justify-content:flex-end;margin:-6px 0 -10px;"><button onclick="scClose()" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+      '<div style="text-align:center;margin-bottom:10px;"><div class="serif" style="font-weight:700;font-size:23px;color:var(--ink);">'+esc(tt[0])+'</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">'+esc(tt[1])+'</div></div>'+
+      '<div style="background:var(--bg);border-radius:14px;padding:10px;display:flex;justify-content:center;"><canvas id="sc-canvas" width="1080" height="1920" style="width:auto;height:auto;max-width:100%;max-height:48vh;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);"></canvas></div>'+
+      '<div id="sc-warn" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:6px;text-align:center;"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px;"><button class="sbtn" onclick="scShare()">Compartir</button><button class="cbtn" onclick="scDownload()">Descargar</button></div>'+
+      '<div style="text-align:center;margin-top:8px;"><button onclick="scCustomize()" style="'+lk+'">Personalizar (formato, ocultar datos)</button></div>'+
+      '<div style="display:flex;justify-content:center;gap:16px;margin-top:2px;flex-wrap:wrap;"><button onclick="scNeverKind()" style="'+lk+'">No mostrar más de este tipo</button><button onclick="scNeverAll()" style="'+lk+'">No mostrar ninguna</button></div>';
+  }
+  var cfg = shareCfg(), h = '';
+  var titles = {streak:'Hito de racha', record:'Récord', summary:'Resumen', goal:'Meta cumplida', heat:'Mapa de constancia'};
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="serif" style="font-weight:700;font-size:19px;">'+titles[SC.kind]+'</span><button onclick="scClose()" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>';
+  h += '<div style="background:var(--bg);border-radius:14px;padding:10px;display:flex;justify-content:center;"><canvas id="sc-canvas" width="1080" height="1920" style="width:auto;height:auto;max-width:100%;max-height:44vh;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);"></canvas></div>';
+  h += '<div id="sc-warn" style="font-size:11px;color:var(--muted);margin-top:6px;min-height:14px;text-align:center;"></div>';
+  h += '<div class="sc-lbl">Formato</div><div class="sc-row">'+Object.keys(SC_FMT).map(function(k){ return scChip(SC.fmt===k, SC_FMT[k].name+' · '+SC_FMT[k].sub, "scSet('fmt','"+k+"')"); }).join('')+'</div>';
+  h += '<div class="sc-lbl">Aspecto</div><div class="sc-row">'+[['tema','Mi tema'],['claro','Claro'],['oscuro','Oscuro']].map(function(x){ return scChip(SC.look===x[0], x[1], "scSet('look','"+x[0]+"')"); }).join('')+'</div>';
+  if(SC.kind==='heat') h += '<div class="sc-lbl">Período</div><div class="sc-row">'+[['3m','3 meses'],['6m','6 meses'],['año','1 año']].map(function(x){ return scChip(SC.opt.range===x[0], x[1], "scSetOpt('range','"+x[0]+"')"); }).join('')+'</div>';
+  var tg = scToggles();
+  if(tg.length){
+    h += '<div class="sc-lbl">Qué incluir <span style="text-transform:none;letter-spacing:0;font-weight:500;">(toca para ocultar)</span></div><div class="sc-row">'+tg.map(function(t){ var on=scOn(t.id); return '<button class="sc-chip'+(on?' on':' off')+'" onclick="scToggle(\''+t.id+'\')">'+esc(t.label)+'</button>'; }).join('')+'</div>';
+  }
+  h += '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:12px;">Estas tarjetas nunca muestran montos de dinero. Revisa la imagen antes de publicarla.</div>';
+  h += '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="scShare()">Compartir</button><button class="cbtn" onclick="scDownload()">Descargar</button></div>';
+  return h;
+}
+function scOpen(){
+  var _old = document.getElementById('share-card'); if(_old) _old.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='share-card'; ov.style.zIndex = 5000;
+  ov.addEventListener('click', function(e){ if(e.target===ov) scClose(); });
+  ov.innerHTML = '<div class="sheet" id="sc-sheet">'+scSheetInner()+'</div>';
+  document.body.appendChild(ov);
+  scRender();
+}
+function scClose(){ removeOverlay('share-card'); SC = null; setTimeout(shareAutoNext, 400); }
+function scRefreshSheet(){ var s = document.getElementById('sc-sheet'); if(!s) return; var sc = s.scrollTop; s.innerHTML = scSheetInner(); s.scrollTop = sc; scRender(); }
+function scSet(k, v){ SC[k] = v; var c = shareCfg(); if(k==='fmt'||k==='look'){ S.shareCfg = Object.assign({}, S.shareCfg||{}, (function(o){o[k]=v;return o;})({})); saveState(); } scRefreshSheet(); }
+function scSetOpt(k, v){ SC.opt[k] = v; scRefreshSheet(); }
+function scToggle(id){ if(SC.off[id]) delete SC.off[id]; else SC.off[id] = true; scRefreshSheet(); }
+function scFileName(){ return 'gramifica-'+SC.kind+'-'+todayStr()+'.png'; }
+function scDownload(){
+  var cv = document.getElementById('sc-canvas'); if(!cv) return;
+  cv.toBlob(function(b){ var u = URL.createObjectURL(b), a = document.createElement('a'); a.href=u; a.download=scFileName(); document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Imagen descargada'); }, 'image/png');
+}
+function scShare(){
+  var cv = document.getElementById('sc-canvas'); if(!cv) return;
+  cv.toBlob(function(b){
+    var f = new File([b], scFileName(), {type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[f]})){ navigator.share({files:[f], title:'Gramifica'}).catch(function(){}); }
+    else { toast('Tu dispositivo no permite compartir directo: se descarga la imagen'); scDownload(); }
   }, 'image/png');
 }
 
-function shareImage(days){
-  var canvas = document.getElementById('shareCanvas');
-  if(!canvas)return;
-  canvas.toBlob(function(blob){
-    var file = new File([blob], 'gramifica-racha-'+days+'dias.png', {type:'image/png'});
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      navigator.share({
-        files:[file],
-        title:'Mi racha en Gramific[app]',
-        text:days+' días de racha en Gramific[app] 🔥'
-      }).catch(function(e){console.log('Share cancelled',e);});
-    } else {
-      toast('Tu dispositivo no soporta compartir directo. Descarga la imagen.');
+// ── Colores ────────────────────────────────────────────────────────────────
+var _scProbe = null;
+function scHex(v){
+  try{
+    if(!_scProbe){ _scProbe = document.createElement('canvas'); _scProbe.width=_scProbe.height=1; }
+    var c = _scProbe.getContext('2d'); c.clearRect(0,0,1,1); c.fillStyle = '#000'; c.fillStyle = v; c.fillRect(0,0,1,1);
+    var d = c.getImageData(0,0,1,1).data; return '#'+[d[0],d[1],d[2]].map(function(x){return ('0'+x.toString(16)).slice(-2);}).join('');
+  }catch(e){ return '#888888'; }
+}
+function scCss(n, fb){ var v = getComputedStyle(document.body).getPropertyValue(n).trim(); return scHex(v || fb); }
+function scLum(hex){ var n = parseInt(hex.slice(1),16), r=(n>>16&255)/255, g=(n>>8&255)/255, b=(n&255)/255; return .2126*r+.7152*g+.0722*b; }
+function scMix(a, b, t){ var A=parseInt(a.slice(1),16), B=parseInt(b.slice(1),16), o=0; for(var i=16;i>=0;i-=8){ var x=(A>>i)&255, y=(B>>i)&255; o = (o<<8) | Math.round(x+(y-x)*t); } return '#'+('000000'+o.toString(16)).slice(-6); }
+function scPal(look){
+  var p;
+  if(look==='claro') p = {bg:'#f7f0e5', bg2:'#efe2cf', paper:'#fffaf2', ink:'#231f1a', soft:'#5b5348', muted:'#7b6f5f', accent:'#a35d2f', fill:'#ae6332', on:'#ffffff', line:'#dccdb6', dark:false};
+  else if(look==='oscuro') p = {bg:'#12171b', bg2:'#1b2a2c', paper:'#1c2329', ink:'#f2ede5', soft:'#c9c3b8', muted:'#a29c90', accent:'#5fcdb0', fill:'#2f9e82', on:'#04201a', line:'#2c353d', dark:true};
+  else {
+    var bg = scCss('--bg','#f7f0e5'), paper = scCss('--paper','#fffaf2'), dk = scLum(bg) < .35;
+    p = {bg:bg, paper:paper, ink:scCss('--ink','#222222'), soft:scCss('--ink-soft','#555555'), muted:scCss('--muted','#888888'), accent:scCss('--accent-text', scCss('--accent','#a35d2f')), fill:scCss('--accent-fill', scCss('--accent','#a35d2f')), on:scCss('--on-accent','#ffffff'), line:scCss('--line','#dddddd'), dark:dk};
+    p.bg2 = scMix(bg, p.accent, dk ? .16 : .12);
+  }
+  p.gold = p.dark ? '#e6bd5c' : '#9a6b12';
+  return p;
+}
+
+// ── Imágenes (íconos vectoriales y logo) ────────────────────────────────────
+function scSvgImg(inner, col, sw){
+  var key = inner.length+'|'+inner.slice(0,60)+'|'+col+'|'+sw;
+  if(_scImgCache[key]) return _scImgCache[key];
+  return _scImgCache[key] = new Promise(function(res){
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round">'+inner+'</svg>';
+    var im = new Image(); im.onload = function(){ res(im); }; im.onerror = function(){ res(null); };
+    im.src = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  });
+}
+function scIconImg(name, col, sw){ return scSvgImg(ICO_PATHS[name]||'', col, sw||1.6); }
+function scLvlImg(lvl, col){ return scSvgImg(symSVG(lvl, col, 1.4), col, 1.4); }
+function scLogoImg(){
+  if(_scImgCache.__logo) return _scImgCache.__logo;
+  return _scImgCache.__logo = new Promise(function(res){ var im = new Image(); im.onload=function(){res(im);}; im.onerror=function(){res(null);}; im.src='icon-192.png'; });
+}
+
+// ── Primitivas de dibujo ───────────────────────────────────────────────────
+function scRR(c, x, y, w, h, r){ r = Math.min(r, w/2, h/2); c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+function scFont(c, px, weight, fam){ c.font = weight+' '+Math.round(px)+'px '+fam; }
+function scSp(c, v){ try{ c.letterSpacing = v+'px'; }catch(e){} }
+function scText(c, text, x, y, px, weight, fam, color, align, maxW, sp){
+  c.fillStyle = color; c.textAlign = align||'center'; c.textBaseline = 'alphabetic';
+  var p = px; scSp(c, sp||0); scFont(c, p, weight, fam);
+  if(maxW){ var w = c.measureText(text).width; if(w>maxW){ p = Math.max(10, Math.floor(p*maxW/w)); scFont(c, p, weight, fam); } }
+  c.fillText(text, x, y); scSp(c, 0); return p;
+}
+function scWrap(c, text, maxW){
+  var words = String(text).split(/\s+/), lines = [], cur = '';
+  words.forEach(function(w){ var t = cur ? cur+' '+w : w; if(c.measureText(t).width>maxW && cur){ lines.push(cur); cur = w; } else cur = t; });
+  if(cur) lines.push(cur); return lines;
+}
+function scWrapFit(c, text, maxW, maxLines, px, weight, fam, minPx){
+  var p = px, lines;
+  while(p > minPx){ scFont(c, p, weight, fam); lines = scWrap(c, text, maxW); if(lines.length<=maxLines) break; p -= 4; }
+  scFont(c, p, weight, fam); lines = scWrap(c, text, maxW);
+  if(lines.length>maxLines){ lines = lines.slice(0,maxLines); var l = lines[maxLines-1]; while(l.length>1 && c.measureText(l+'…').width>maxW) l = l.slice(0,-1); lines[maxLines-1] = l+'…'; }
+  return {lines:lines, px:p};
+}
+function scPill(c, text, cx, y, p, bgc, fg, px){
+  px = px||26; scSp(c,3); scFont(c, px, 700, SC_SANS); var w = c.measureText(text).width + 56; scSp(c,0);
+  scRR(c, cx-w/2, y, w, px+26, (px+26)/2); c.fillStyle = bgc; c.fill();
+  scText(c, text, cx+1.5, y+px+6, px, 700, SC_SANS, fg, 'center', null, 3);
+  return px+26;
+}
+function scImg(c, im, x, y, w, h){ if(im) c.drawImage(im, x, y, w, h); }
+
+function scBackdrop(c, W, H, p, tier){
+  var g = c.createLinearGradient(0,0,W*.35,H); g.addColorStop(0,p.bg); g.addColorStop(1,p.bg2); c.fillStyle = g; c.fillRect(0,0,W,H);
+  c.save(); c.strokeStyle = tier===2 ? p.gold : p.accent; c.lineWidth = 2; c.globalAlpha = p.dark ? .12 : .09;
+  for(var i=0;i<7;i++){ c.beginPath(); c.arc(W*1.02, H*.10, 170+i*100, 0, Math.PI*2); c.stroke(); }
+  for(var j=0;j<5;j++){ c.beginPath(); c.arc(-W*.02, H*.93, 150+j*95, 0, Math.PI*2); c.stroke(); }
+  c.restore();
+  c.save(); c.globalAlpha = p.dark ? .5 : .7; c.strokeStyle = p.line; c.lineWidth = 2; scRR(c, 40, 40, W-80, H-80, 40); c.stroke(); c.restore();
+}
+function scRegion(W, H, fmt){
+  var top = fmt==='story' ? 240 : 100, bottom = fmt==='story' ? 270 : 100;
+  var ct = top + 130, cb = H - bottom - 130;
+  return {x:90, y:ct, w:W-180, h:cb-ct, headY:top, footY:H-bottom-110};
+}
+function scHeader(c, W, R, p, logo){
+  var y = R.headY, s = 64, tw;
+  scFont(c, 40, 800, SC_SANS); tw = c.measureText('Gramifica').width;
+  var x0 = W/2 - (s+16+tw)/2;
+  if(logo){ c.save(); scRR(c, x0, y, s, s, 16); c.clip(); c.drawImage(logo, x0, y, s, s); c.restore(); }
+  else {
+    scRR(c, x0, y, s, s, 16); c.fillStyle = p.fill; c.fill();
+    scText(c, 'Gr.', x0+s/2, y+s*.66, 30, 800, SC_SERIF, p.on, 'center');
+  }
+  scText(c, 'Gramifica', x0+s+16, y+s*.7, 40, 800, SC_SANS, p.ink, 'left');
+}
+function scFooter(c, W, R, p){
+  var y = R.footY;
+  c.save(); c.strokeStyle = p.line; c.lineWidth = 2; c.beginPath(); c.moveTo(W/2-60, y); c.lineTo(W/2+60, y); c.stroke(); c.restore();
+  scText(c, 'DESARROLLADA POR', W/2, y+44, 20, 600, SC_SANS, p.muted, 'center', null, 4);
+  var parts = [['Espacio ',p.ink],['[',p.accent],['G',p.ink],[']',p.accent],['rafema',p.ink]], tot = 0;
+  scFont(c, 46, 700, SC_SERIF); parts.forEach(function(q){ tot += c.measureText(q[0]).width; });
+  var x = W/2 - tot/2; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  parts.forEach(function(q){ c.fillStyle = q[1]; c.fillText(q[0], x, y+94); x += c.measureText(q[0]).width; });
+}
+
+// ── Pipeline de dibujo ─────────────────────────────────────────────────────
+function scRender(){
+  if(!SC) return;
+  var tok = ++_scTok, cv = document.getElementById('sc-canvas'); if(!cv) return;
+  var f = SC_FMT[SC.fmt], p = scPal(SC.look), kind = SC.kind, d = SC.data, ic = {};
+  var jobs = [scLogoImg().then(function(im){ ic.logo = im; })];
+  var need = function(key, pr){ jobs.push(pr.then(function(im){ ic[key] = im; })); };
+  var tier = kind==='streak' ? streakTier(d.days) : (kind==='goal' && d.period==='año' ? 2 : 0);
+  var col = tier===2 ? p.gold : p.accent;
+  if(kind==='streak') need('flame', scIconImg('flame', col, 1.5));
+  if(kind==='record') need('trophy', scIconImg('trophy', col, 1.5));
+  if(kind==='goal') need('check', scIconImg('check2', col, 1.7));
+  if(kind==='summary' && d.hero) need('lvl', scLvlImg(d.hero.lvl, col));
+  var fonts = [];
+  try{ if(document.fonts && document.fonts.load){ fonts = [document.fonts.load('700 40px "Cormorant Garamond"'), document.fonts.load('800 40px Inter'), document.fonts.load('600 30px Inter')]; } }catch(e){}
+  Promise.race([Promise.all(fonts.map(function(x){ return x.catch(function(){}); })), new Promise(function(r){ setTimeout(r, 700); })]).then(function(){ return Promise.all(jobs); }).then(function(){
+    if(tok!==_scTok) return;
+    cv.width = f.w; cv.height = f.h;
+    var c = cv.getContext('2d'), R = scRegion(f.w, f.h, SC.fmt);
+    scBackdrop(c, f.w, f.h, p, tier);
+    scHeader(c, f.w, R, p, ic.logo);
+    SC.dropped = 0;
+    try{ SC_DRAW[kind](c, f.w, f.h, R, p, d, ic, tier); }catch(e){ console.error('share card', e); }
+    scFooter(c, f.w, R, p);
+    var w = document.getElementById('sc-warn'); if(w) w.textContent = SC.dropped>0 ? 'En este formato no caben '+SC.dropped+' dato'+(SC.dropped>1?'s':'')+'. Oculta alguno o usa otro formato.' : '';
+  });
+}
+
+// ── Tarjeta: racha ─────────────────────────────────────────────────────────
+function scRays(c, cx, cy, r0, r1, n, color, lw){
+  c.save(); c.strokeStyle = color; c.lineWidth = lw; c.lineCap = 'round';
+  for(var i=0;i<n;i++){ var a = i/n*Math.PI*2; c.beginPath(); c.moveTo(cx+Math.cos(a)*r0, cy+Math.sin(a)*r0); c.lineTo(cx+Math.cos(a)*r1, cy+Math.sin(a)*r1); c.stroke(); }
+  c.restore();
+}
+function scDrawStreak(c, W, H, R, p, d, ic, tier){
+  var col = tier===2 ? p.gold : p.accent, cx = W/2;
+  var ringH = R.h*.62, outer = tier===2 ? 1.26 : (tier===1 ? 1.1 : 1), r0 = Math.min(R.w*.40, ringH/2)/outer, cy = R.y + ringH/2;
+  if(tier===2){ scRays(c, cx, cy, r0*1.08, r0*1.22, 48, col, 5); }
+  c.save(); c.globalAlpha = p.dark ? .16 : .12; c.fillStyle = col; c.beginPath(); c.arc(cx, cy, r0, 0, Math.PI*2); c.fill(); c.restore();
+  c.strokeStyle = col; c.lineWidth = tier===0 ? 5 : 8; c.beginPath(); c.arc(cx, cy, r0, 0, Math.PI*2); c.stroke();
+  if(tier>=1){ c.save(); c.globalAlpha = .45; c.lineWidth = 3; c.beginPath(); c.arc(cx, cy, r0*1.1, 0, Math.PI*2); c.stroke(); c.restore(); }
+  var s = String(d.days), px = r0*(s.length<=2 ? 1.0 : s.length===3 ? .8 : .62);
+  scImg(c, ic.flame, cx-r0*.17, cy-r0*.62, r0*.34, r0*.34);
+  scText(c, s, cx, cy+r0*.34, px, 800, SC_SANS, p.ink, 'center', r0*1.55);
+  scText(c, d.days===1?'DÍA DE RACHA':'DÍAS DE RACHA', cx, cy+r0*.68, Math.max(22, r0*.1), 700, SC_SANS, p.soft, 'center', r0*1.5, 4);
+  var y = R.y + ringH + 24, tw = R.w;
+  var t = scText(c, streakLabel(d.days), cx, y+56, 78, 700, SC_SERIF, p.ink, 'center', tw);
+  scText(c, streakPhrase(d.days), cx, y+56+Math.max(46, t*.5), 34, 500, SC_SANS, p.soft, 'center', tw);
+  var yy = y+56+Math.max(46,t*.5)+52, bits = [];
+  if(d.tasks && scOn('tasks')) bits.push(d.tasks+' tareas completadas en el camino');
+  if(d.date && scOn('date')) bits.push('Alcanzado el '+scFmtDay(d.date));
+  bits.forEach(function(b){ if(yy < R.y+R.h+20){ scText(c, b, cx, yy, 28, 600, SC_SANS, col, 'center', tw); yy += 40; } });
+}
+
+// ── Tarjeta: récord ────────────────────────────────────────────────────────
+function scRecVal(it){ if(it.unit==='s') return fmtDur(it.n); return it.n+' '+(it.unit==='reps'?(it.n===1?'rep':'reps'):it.unit); }
+function scRecDelta(it){
+  if(!it.prev) return 'Primera marca';
+  var diff = it.n - it.prev;
+  return (diff>0?'+':'−')+(it.unit==='s'?fmtDur(Math.abs(diff)):Math.abs(diff)+(it.unit==='reps'?'':' '+it.unit))+' sobre '+(it.unit==='s'?fmtDur(it.prev):it.prev);
+}
+function scDrawRecord(c, W, H, R, p, d, ic){
+  var cx = W/2, items = d.items.slice(), hideN = !scOn('names'), showDelta = scOn('delta');
+  if(!scOn('others')) items = items.slice(0,1);
+  var multi = items.length>1, y = R.y;
+  y += scPill(c, 'NUEVO RÉCORD', cx, y, p, p.fill, p.on, 26) + 26;
+  var hero = items[0], ts = multi ? .55 : 1, isz = (multi?110:190)*1;
+  scImg(c, ic.trophy, cx-isz/2, y, isz, isz); y += isz + 14;
+  var nm = hideN ? 'Un ejercicio' : (hero.name||'Ejercicio');
+  c.fillStyle = p.ink; var wf = scWrapFit(c, nm, R.w, 2, multi?64:78, 700, SC_SERIF, 36);
+  wf.lines.forEach(function(l,i){ scText(c, l, cx, y+wf.px*.85+i*wf.px*1.05, wf.px, 700, SC_SERIF, p.ink, 'center'); }); y += wf.lines.length*wf.px*1.05 + 16;
+  var val = scRecVal(hero), vpx = multi ? 130 : 230;
+  var sp = scText(c, val, cx, y+vpx*.85, vpx, 800, SC_SANS, p.accent, 'center', R.w); y += vpx*.95 + 20;
+  if(hero.w){ scText(c, 'con '+hero.w+' '+(hero.wUnit||'kg'), cx, y+30, 34, 600, SC_SANS, p.soft, 'center', R.w); y += 54; }
+  if(showDelta){ var dt = scRecDelta(hero); scFont(c, 28, 700, SC_SANS); var dw = c.measureText(dt).width+48; scRR(c, cx-dw/2, y, dw, 54, 27); c.fillStyle = p.paper; c.fill(); c.strokeStyle = p.line; c.lineWidth = 2; c.stroke(); scText(c, dt, cx, y+37, 28, 700, SC_SANS, p.soft, 'center'); y += 54; }
+  if(multi){
+    y += 30; var rest = items.slice(1), rowH = 78, avail = R.y+R.h-y, maxRows = Math.max(0, Math.floor(avail/(rowH+10)));
+    var shown = rest.slice(0, Math.min(5, maxRows)); SC.dropped = rest.length - shown.length;
+    shown.forEach(function(it){
+      scRR(c, R.x, y, R.w, rowH, 18); c.fillStyle = p.paper; c.fill(); c.strokeStyle = p.line; c.lineWidth = 2; c.stroke();
+      scText(c, hideN ? 'Ejercicio' : it.name, R.x+26, y+rowH*.64, 30, 600, SC_SANS, p.ink, 'left', R.w*.5);
+      scText(c, scRecVal(it), R.x+R.w-26, y+rowH*.64, 32, 800, SC_SANS, p.accent, 'right', R.w*.4);
+      y += rowH+10;
+    });
+  }
+  scText(c, scFmtDay(d.date), cx, Math.min(R.y+R.h, y+50), 26, 600, SC_SANS, p.muted, 'center');
+}
+
+// ── Tarjeta: meta cumplida ─────────────────────────────────────────────────
+function scDrawGoal(c, W, H, R, p, d, ic, tier){
+  var col = tier===2 ? p.gold : p.accent, cx = W/2, y = R.y;
+  var plab = {mes:'META DEL MES', semestre:'META DEL SEMESTRE', 'año':'META DEL AÑO'}[d.period] || 'META';
+  y += scPill(c, plab, cx, y, p, col, p.dark ? '#10161a' : '#ffffff', 26) + 40;
+  var compact = SC.fmt==='square', r0 = Math.min(R.w*.22, R.h*(compact?.15:.2))/(tier===2?1.26:1), cy = y + r0*(tier===2?1.26:1);
+  if(tier===2) scRays(c, cx, cy, r0*1.1, r0*1.26, 40, col, 5);
+  c.save(); c.globalAlpha = p.dark ? .16 : .12; c.fillStyle = col; c.beginPath(); c.arc(cx, cy, r0, 0, Math.PI*2); c.fill(); c.restore();
+  c.strokeStyle = col; c.lineWidth = 7; c.beginPath(); c.arc(cx, cy, r0, 0, Math.PI*2); c.stroke();
+  scImg(c, ic.check, cx-r0*.55, cy-r0*.55, r0*1.1, r0*1.1); y = cy + r0*(tier===2?1.26:1) + (compact?26:44);
+  var txt = scOn('names') ? (d.text||'Una meta') : 'Una meta que me propuse';
+  var wf = scWrapFit(c, txt, R.w, compact?3:4, compact?72:84, 700, SC_SERIF, 36);
+  wf.lines.forEach(function(l,i){ scText(c, l, cx, y+wf.px*.9+i*wf.px*1.08, wf.px, 700, SC_SERIF, p.ink, 'center'); }); y += wf.lines.length*wf.px*1.08 + 30;
+  var ph = {mes:'Un mes de trabajo, una meta lograda.', semestre:'Seis meses de constancia dieron resultado.', 'año':'Un año entero para llegar hasta acá.'}[d.period];
+  if(ph && y+30 < R.y+R.h+20) scText(c, ph, cx, y+30, 32, 500, SC_SANS, p.soft, 'center', R.w); y += 56;
+  if(scOn('date') && d.date && y+30 < R.y+R.h+30) scText(c, scFmtDay(d.date)+' · '+parseLocalDate(d.date).getFullYear(), cx, y+30, 28, 600, SC_SANS, col, 'center');
+}
+
+// ── Tarjeta: resumen de período ────────────────────────────────────────────
+function scDrawSummary(c, W, H, R, p, d, ic){
+  var cx = W/2, y = R.y, col = p.accent;
+  y += scPill(c, {mes:'RESUMEN DEL MES', semestre:'RESUMEN DEL SEMESTRE', 'año':'RESUMEN DEL AÑO'}[d.period], cx, y, p, p.fill, p.on, 24) + 26;
+  var lp = scText(c, d.range.label, cx, y+70, 82, 700, SC_SERIF, p.ink, 'center', R.w); y += 96;
+  if(d.range.partial){ scText(c, 'hasta hoy', cx, y+14, 26, 600, SC_SANS, p.muted, 'center'); y += 30; }
+  y += 14;
+  var compact = SC.fmt==='square';
+  if(d.hero && scOn('level')){
+    var hh = compact ? 170 : 250, hr = d.hero;
+    scRR(c, R.x, y, R.w, hh, 28); c.fillStyle = p.paper; c.fill(); c.strokeStyle = p.line; c.lineWidth = 2; c.stroke();
+    var isz = hh*.56; scImg(c, ic.lvl, R.x+34, y+(hh-isz)/2, isz, isz);
+    var tx = R.x+34+isz+30, tw = R.w-(tx-R.x)-30;
+    scText(c, 'NIVEL', tx, y+hh*.30, 22, 700, SC_SANS, p.muted, 'left', null, 4);
+    scText(c, hr.to>hr.from ? hr.from+' → '+hr.to : String(hr.to), tx, y+hh*.64, compact?66:84, 800, SC_SANS, p.ink, 'left', tw);
+    scText(c, '+'+hr.xp+' XP · '+hr.name, tx, y+hh*.88, 24, 600, SC_SANS, col, 'left', tw);
+    y += hh + 18;
+  }
+  var tiles = d.tiles.filter(function(t){ return scOn(t.id); });
+  if(!tiles.length) return;
+  var gap = 18, tw2 = (R.w-gap)/2, avail = R.y+R.h-y, rows = Math.ceil(tiles.length/2), th = Math.min(compact?150:190, (avail-(rows-1)*gap)/rows);
+  if(th < 118){ rows = Math.max(1, Math.floor((avail+gap)/(118+gap))); th = Math.min(compact?150:190, (avail-(rows-1)*gap)/rows); var keep = rows*2; SC.dropped = Math.max(0, tiles.length-keep); tiles = tiles.slice(0, keep); }
+  tiles.forEach(function(t, i){
+    var x = R.x + (i%2)*(tw2+gap), ty = y + Math.floor(i/2)*(th+gap);
+    scRR(c, x, ty, tw2, th, 24); c.fillStyle = p.paper; c.fill(); c.strokeStyle = p.line; c.lineWidth = 2; c.stroke();
+    var lab = t.kind==='track' ? (scOn('names') ? t.name : 'Seguimiento') : t.label;
+    scText(c, lab.toUpperCase(), x+26, ty+th*.24, 20, 700, SC_SANS, p.muted, 'left', tw2-52, 2);
+    scText(c, t.value, x+26, ty+th*(t.sub?.60:.68), th>150?58:48, 800, SC_SANS, p.ink, 'left', tw2-52);
+    if(t.sub) scText(c, t.sub, x+26, ty+th*.86, 24, 600, SC_SANS, col, 'left', tw2-52);
+  });
+}
+
+// ── Tarjeta: mapa de calor ─────────────────────────────────────────────────
+function scDrawHeat(c, W, H, R, p, d){
+  var cx = W/2, y = R.y, hist = S.dailyHistory||{}, rng = SC.opt.range;
+  var weeks = rng==='3m' ? 13 : rng==='año' ? 53 : 26;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var monday = addDaysLocal(today, -((today.getDay()+6)%7)), start = addDaysLocal(monday, -(weeks-1)*7);
+  y += scPill(c, 'MI CONSTANCIA', cx, y, p, p.fill, p.on, 24) + 24;
+  scText(c, rng==='3m' ? 'Últimos 3 meses' : rng==='año' ? 'Último año' : 'Últimos 6 meses', cx, y+74, 76, 700, SC_SERIF, p.ink, 'center', R.w); y += 120;
+  var gap = weeks>30 ? 3 : 6, cs = Math.min(64, Math.floor((R.w-(weeks-1)*gap)/weeks)), gw = weeks*cs+(weeks-1)*gap, gx = cx-gw/2;
+  var labelH = 34, gy = y + labelH, ghh = 7*cs+6*gap;
+  var lv = [0,.22,.5,.8,1], reachedN = 0, taskN = 0, lastMonth = -1;
+  for(var w=0; w<weeks; w++){
+    for(var dd=0; dd<7; dd++){
+      var dt = addDaysLocal(start, w*7+dd); if(dt>today) continue;
+      var k = localDateStr(dt), h = hist[k], level = 0;
+      if(h){ var r = h.ratio||0; taskN += h.completed||0; if(h.streakReached){ reachedN++; level = r>=1 ? 4 : 3; } else level = r>=.5 ? 2 : (r>0 ? 1 : 0); }
+      var x = gx + w*(cs+gap), yy = gy + dd*(cs+gap);
+      scRR(c, x, yy, cs, cs, Math.max(3, cs*.22));
+      if(level===0){ c.save(); c.globalAlpha = p.dark ? .35 : .55; c.fillStyle = p.line; c.fill(); c.restore(); }
+      else { c.save(); c.globalAlpha = lv[level]; c.fillStyle = p.accent; c.fill(); c.restore(); }
     }
-  }, 'image/png');
+    var wm = addDaysLocal(start, w*7).getMonth();
+    if(wm!==lastMonth && cs>=13){ lastMonth = wm; if(w>0 || weeks<30) scText(c, SC_MONTHS[wm].slice(0,3), gx+w*(cs+gap), gy-12, 20, 600, SC_SANS, p.muted, 'left'); }
+  }
+  y = gy + ghh + 34;
+  // leyenda
+  var lx = cx - 150; scText(c, 'menos', lx-10, y+18, 20, 600, SC_SANS, p.muted, 'right');
+  for(var i=0;i<5;i++){ scRR(c, lx+i*34, y, 26, 26, 6); if(i===0){ c.save(); c.globalAlpha=.5; c.fillStyle=p.line; c.fill(); c.restore(); } else { c.save(); c.globalAlpha=lv[i]; c.fillStyle=p.accent; c.fill(); c.restore(); } }
+  scText(c, 'más', lx+5*34+4, y+18, 20, 600, SC_SANS, p.muted, 'left');
+  y += 70;
+  if(scOn('stats')){
+    var stats = [[String(reachedN), 'días con meta cumplida']];
+    if(streakActive() && S.streak && S.streak.days>0) stats.push([String(S.streak.days), S.streak.days===1?'día de racha':'días de racha']);
+    if(taskN>0) stats.push([String(taskN), 'tareas completadas']);
+    var sw = R.w/stats.length;
+    if(y+120 > R.y+R.h+10){ SC.dropped = 1; return; }
+    stats.forEach(function(s, i){ var sx = R.x + sw*i + sw/2; scText(c, s[0], sx, y+60, 70, 800, SC_SANS, p.ink, 'center', sw-20); scText(c, s[1], sx, y+98, 24, 600, SC_SANS, p.soft, 'center', sw-16); });
+  }
+}
+var SC_DRAW = {streak:scDrawStreak, record:scDrawRecord, goal:scDrawGoal, summary:scDrawSummary, heat:scDrawHeat};
+
+// ══ Centro de tarjetas (Progreso → Compartir) ═══════════════════════════════
+function shareHubCardHTML(){
+  return '<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:12px;">'+
+    '<span style="color:var(--accent-text);flex-shrink:0;">'+ico('share',24,1.6)+'</span>'+
+    '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Compartir tu progreso</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.45;">Tarjetas para redes: racha, récords, resúmenes y metas.</div></div>'+
+    '<button class="sbtn" style="flex:0 0 auto;padding:9px 14px;font-size:13px;" onclick="openShareHub()">Abrir</button></div>';
+}
+function openShareHub(){
+  removeOverlay('share-hub');
+  var h = '', best = Math.max(S.bestStreak||0, (S.streak&&S.streak.days)||0);
+  var sec = function(t){ return '<div class="sc-lbl" style="margin-top:16px;">'+t+'</div>'; };
+  var btn = function(label, sub, fn){ return '<button class="sc-hub-btn" onclick="'+fn+'"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13px;">'+label+'</span>'+(sub?'<span style="display:block;font-size:11px;color:var(--muted);margin-top:1px;">'+sub+'</span>':'')+'</span><span style="color:var(--muted-soft);">›</span></button>'; };
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;"><span class="serif" style="font-weight:700;font-size:19px;">Tarjetas para compartir</span><button onclick="removeOverlay(\'share-hub\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>';
+  if(!S.simpleMode && streakActive()){
+    var ms = streakMilestoneList(best).reverse().slice(0,6);
+    h += sec('Racha');
+    h += ms.length ? ms.map(function(m){ return btn(streakLabel(m)+' · '+m+' días', (S.streakMilestones||{})[m] ? 'Alcanzado el '+scFmtDay(S.streakMilestones[m]) : '', 'openShareStreak('+m+')'); }).join('') : '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Tu primer hito es a los 7 días de racha.</div>';
+  }
+  var days = {}; (S.recordLog||[]).forEach(function(r){ days[r.d]=1; });
+  var dk = Object.keys(days).sort().reverse().slice(0,4);
+  h += sec('Récords');
+  h += dk.length ? dk.map(function(d){ var n = recordsOfDay(d).length; return btn((d===todayStr()?'Hoy':scFmtDay(d))+' · '+n+(n===1?' récord':' récords'), '', "openShareRecords('"+d+"')"); }).join('') : '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Cuando batas un récord en un ejercicio aparece aquí.</div>';
+  var ps = (enabledGoalPeriods ? enabledGoalPeriods() : ['mes','semestre','año']).filter(function(x){ return x==='mes'||x==='semestre'||x==='año'; });
+  if(ps.length){
+    h += sec('Resúmenes');
+    ps.forEach(function(pp){
+      var cur = scRange(pp,0), prev = scRange(pp,-1);
+      h += btn('Resumen anterior · '+prev.label, '', "openShareSummary('"+pp+"',-1)");
+      h += btn('En curso · '+cur.label, 'hasta hoy', "openShareSummary('"+pp+"',0)");
+    });
+  }
+  var gl = (S.goalLog||[]).slice(-4).reverse();
+  h += sec('Metas cumplidas');
+  h += gl.length ? gl.map(function(g){ return btn(esc(g.text.length>42?g.text.slice(0,41)+'…':g.text), ({mes:'Meta del mes',semestre:'Meta del semestre','año':'Meta del año'})[g.period]+' · '+scFmtDay(g.d), "openShareGoal('"+g.id+"')"); }).join('') : '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Al completar una meta del mes, semestre o año podrás compartirla.</div>';
+  h += sec('Constancia');
+  h += btn('Mapa de calor', 'Tus días cumplidos de un vistazo', 'openShareHeat()');
+  h += '<div style="text-align:center;margin-top:12px;"><button onclick="removeOverlay(\'share-hub\');openYoScreen(\'compartir\');setTab(\'yo\');" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:Inter,sans-serif;">Ajustes de tarjetas</button></div>';
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='share-hub';
+  ov.addEventListener('click', function(e){ if(e.target===ov) removeOverlay('share-hub'); });
+  ov.innerHTML = '<div class="sheet">'+h+'</div>';
+  document.body.appendChild(ov);
+}
+
+// ══ Yo → Tarjetas para compartir (ajustes) ═════════════════════════════════
+function scTogHTML(on, fn){ return '<button class="tog" onclick="'+fn+'" style="background:'+(on?'var(--accent-fill,var(--accent))':'var(--muted-soft)')+';"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button>'; }
+function scSetRowHTML(label, sub, on, fn, last){
+  return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;'+(last?'':'border-bottom:1px solid var(--line-soft);')+'"><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:var(--ink);">'+label+'</div>'+(sub?'<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45;">'+sub+'</div>':'')+'</div>'+scTogHTML(on, fn)+'</div>';
+}
+function renderYoCompartirScreen(){
+  var cfg = shareCfg(), PLn = {mes:'Mes', semestre:'Semestre', 'año':'Año'};
+  var ps = (enabledGoalPeriods ? enabledGoalPeriods() : ['mes','semestre','año']).filter(function(x){ return PLn[x]; });
+  var html = '<div class="card" style="margin-bottom:10px;"><div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;">Imágenes con el logo de Gramifica y el crédito de Espacio [G]rafema para publicar en redes. <b>Nunca incluyen montos de dinero.</b></div>'+
+    '<button class="sbtn" style="width:100%;" onclick="openShareHub()">Abrir tarjetas</button></div>';
+  html += '<div class="card" style="margin-bottom:10px;">'+
+    '<div style="font-weight:700;font-size:14px;color:var(--ink);">Mostrar al lograrlo</div>'+
+    '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin:2px 0 4px;">Aparece una ventana con la tarjeta, lista para compartir o descargar.</div>'+
+    scSetRowHTML('Ventanas emergentes', 'Interruptor general: apagado, no aparece ninguna.', cfg.popupAll, "shareCfgSet('popupAll',"+(!cfg.popupAll)+")")+
+    scSetRowHTML('Hitos de racha', 'A los 7, 15, 30, 60 días y cada 30; especial al año.', cfg.streak, "shareCfgSet('streak',"+(!cfg.streak)+")")+
+    scSetRowHTML('Récords', 'Al terminar un ejercicio en que batiste tu marca.', cfg.record, "shareCfgSet('record',"+(!cfg.record)+")", ps.length===0);
+  ps.forEach(function(pp, i){ html += scSetRowHTML('Meta cumplida · '+PLn[pp], '', cfg.goal[pp], "shareCfgSet('goal',"+(!cfg.goal[pp])+",'"+pp+"')", false); });
+  ps.forEach(function(pp, i){ html += scSetRowHTML('Resumen · '+PLn[pp], i===0?'Cuando cierra el período (mes, semestre, año).':'', cfg.summary[pp], "shareCfgSet('summary',"+(!cfg.summary[pp])+",'"+pp+"')", i===ps.length-1); });
+  html += '</div>';
+  html += '<div class="card"><div style="font-weight:700;font-size:14px;color:var(--ink);">Privacidad y estilo</div>'+
+    scSetRowHTML('Ocultar nombres por defecto', 'Tareas, metas, ejercicios y seguimientos salen genéricos. Puedes cambiarlo en cada tarjeta.', cfg.hideNames, "shareCfgSet('hideNames',"+(!cfg.hideNames)+")", true)+'</div>';
+  return html;
 }
 
 // On load: if last activity was 2+ days ago, reset streak — salvo que se
@@ -19952,7 +20633,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.18';
+var APP_VERSION = '2026.10.01.19';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
@@ -20001,6 +20682,7 @@ var _bootAutoReset = checkAutoReset();      // Reinicio automático por período
 advanceRecurringEvents(); // Adelantar eventos "cada N días" cuya fecha ya pasó
 render();
 announceAutoReset(_bootAutoReset);
+setTimeout(shareCheckSummaries, 3500);
 setTimeout(function(){
   var sp=document.getElementById('splash');
   if(sp){sp.classList.add('hide');setTimeout(function(){sp.remove();},600);}
