@@ -304,7 +304,8 @@ body.dens-cozy .task-row{padding:17px 0;gap:12px;}
 .chk{width:23px;height:23px;border:2px solid var(--muted-soft);background:var(--paper);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;cursor:pointer;border-radius:7px;}
 .chk.circle{border-radius:12px;}
 .chk.done{background:var(--accent);border-color:var(--accent);}
-.task-item.is-linked{box-shadow:inset 3px 0 0 var(--accent-fill,var(--accent));border-radius:4px;}
+/* Texto descriptivo de las ventanillas justificado (lo centrado a propósito se mantiene) */
+.sheet [style*="line-height"]:not(button):not(input):not(select):not(label),.conf-inner [style*="line-height"]:not(button):not(input){text-align:justify;hyphens:auto;-webkit-hyphens:auto;}
 .chk.partial{background:linear-gradient(to top,var(--accent-fill,var(--accent)) var(--p,0%),var(--paper) var(--p,0%));border-color:var(--accent-fill,var(--accent));}
 .segbar{display:flex;gap:3px;height:4px;margin-top:6px;}
 .segbar i{flex:1;border-radius:2px;background:var(--line);overflow:hidden;display:block;}
@@ -6201,6 +6202,7 @@ function reGoalsHTML(){
       '<select class="finp" onchange="RE.gd.what=this.value;reGoalPreview();" style="flex:1;margin:0;font-size:13px;">'+whatOpts.map(function(o){return '<option value="'+o[0]+'"'+(gd.what===o[0]?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>'+
       ((!isFin&&r.kind!=='habit')?'<select class="finp" onchange="RE.gd.agg=this.value;reGoalPreview();" style="width:118px;margin:0;font-size:13px;"><option value="sum"'+(gd.agg==='sum'?' selected':'')+'>Acumulado</option><option value="max"'+(gd.agg==='max'?' selected':'')+'>Mejor marca</option></select>':'')+
     '</div>'+
+    (r.kind==='finance'?'':lbl('Solo cuando el concepto sea… (opcional)')+'<input id="re-g-label" class="finp" list="re-g-labels" placeholder="Ej: Ruta roja" oninput="reGoalPreview()" style="margin:0;font-size:13px;"/><datalist id="re-g-labels">'+(function(){ var m={}; (r.entries||[]).forEach(function(e){ if(e.label) m[e.label]=1; }); return Object.keys(m).map(function(l){return '<option value="'+esc(l)+'">';}).join(''); })()+'</datalist>')+
     lbl('Objetivo')+
     '<div style="display:flex;gap:6px;"><input id="re-g-target" class="finp" type="text" inputmode="decimal" placeholder="Número" oninput="reGoalPreview()" style="flex:1;margin:0;"/><button type="button" onclick="reAddGoal()" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:0 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Meta</button></div>'+
     '<div id="re-g-prev" style="margin-top:8px;font-size:12px;color:var(--ink-soft);line-height:1.5;"></div>'+
@@ -6256,7 +6258,7 @@ function reGoalPeriod(k){ RE.gd.period = k; mRefreshSeg('re-gp-seg',k); reGoalPr
 function reGoalPreview(){
   var el = document.getElementById('re-g-prev'); if(!el||!RE||!RE.gd) return;
   var t = parseNumInput((document.getElementById('re-g-target')||{value:''}).value);
-  var g = {period:RE.gd.period, what:RE.gd.what, agg:(RE.reg.kind==='finance'||RE.gd.what==='__count'||RE.gd.what==='__yes')?'sum':RE.gd.agg, target:t};
+  var g = {period:RE.gd.period, what:RE.gd.what, agg:(RE.reg.kind==='finance'||RE.gd.what==='__count'||RE.gd.what==='__yes')?'sum':RE.gd.agg, target:t, label:((document.getElementById('re-g-label')||{value:''}).value||'').trim()};
   if(!(t>0)){ el.innerHTML = '<span style="color:var(--muted);">Escribe el objetivo para ver cómo quedará la meta.</span>'; return; }
   el.innerHTML = 'Quedará así: <b>'+esc(regGoalTitle(RE.reg,g))+' · '+regGoalFmt(RE.reg,g,t)+'</b>';
 }
@@ -6265,7 +6267,7 @@ function reAddGoal(){
   var t = parseNumInput(el?el.value:'');
   if(!(t>0)){ toast('Escribe un objetivo mayor que 0'); return; }
   var gd = RE.gd;
-  RE.reg.goals = (RE.reg.goals||[]).concat([{id:uid(), period:gd.period, what:gd.what, agg:(RE.reg.kind==='finance'||gd.what==='__count'||gd.what==='__yes')?'sum':gd.agg, target:t, _new:true}]);
+  RE.reg.goals = (RE.reg.goals||[]).concat([{id:uid(), period:gd.period, what:gd.what, agg:(RE.reg.kind==='finance'||gd.what==='__count'||gd.what==='__yes')?'sum':gd.agg, target:t, label:((document.getElementById('re-g-label')||{value:''}).value||'').trim(), _new:true}]);
   reRerender();
 }
 function reRemoveGoal(id){ RE.reg.goals = (RE.reg.goals||[]).filter(function(g){return g.id!==id;}); reRerender(); }
@@ -6376,6 +6378,14 @@ function maybeOpenRegEntryForTask(taskId, extra){
   if(reg.kind==='habit'){ habitSet(reg.id, taskEntryDate(t), true, {taskId:t.id}); toast('Hábito marcado: sí'); return; }
   var ex = findTaskEntry(reg, t, extra && extra.itemId);
   if(ex && ex.status!=='expected') return;
+  // Finanzas: si ya hay un ingreso/gasto ESPERADO que corresponde a esta tarea (aunque se haya anotado
+  // desde el registro, sin enlazarlo a la tarea), se pregunta solo por ese: obtenido o postergar.
+  if(!ex && reg.kind==='finance'){
+    var tx = ((extra&&extra.label)||t.text||'').trim().toLowerCase();
+    var pend = regEntries(reg).filter(function(e){ return e.status==='expected' && (!e.taskId || e.taskId===t.id) && !(e.itemId&&!(extra&&extra.itemId)) && (e.taskId===t.id || (e.label||'').trim().toLowerCase()===tx); })
+      .sort(function(a,b){ return (a.date||'')<(b.date||'')?-1:1; });
+    if(pend.length) ex = pend[0];
+  }
   if(ex){ openExpectedQuick(reg.id, ex.id, t.id); return; }
   openRegEntryForTask(taskId, true, extra);
 }
@@ -6484,13 +6494,13 @@ function openExpectedQuick(regId, entryId, taskId){
   var concept = e.label || e.taskName || (isIn?'Ingreso':'Gasto');
   ov.innerHTML = '<div class="sheet" id="eq-sheet">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(isIn?'Ingreso esperado':'Gasto esperado')+'</span><button onclick="removeOverlay(\'exp-quick\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;"><b>'+esc(concept)+'</b> · esperabas <b>'+fmtMoney(e.amount,cur)+'</b> para el '+fmtShortDate(e.date)+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;"><b>'+esc(concept)+'</b> · se esperaban <b>'+fmtMoney(e.amount,cur)+'</b> ('+fmtShortDate(e.date)+')</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:5px;">'+(isIn?'¿Cuánto recibiste?':'¿Cuánto pagaste?')+'</div>'+
     '<input id="eq-amount" class="finp" type="text" inputmode="decimal" value="'+fmtNum(e.amount).replace(/\./g,'')+'" style="font-size:22px;font-weight:700;margin-bottom:10px;"/>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Fecha</div>'+dateFieldHTML('eq-date', todayStr(), false, false)+
-    '<button onclick="expQuickConfirm(\''+regId+'\',\''+entryId+'\')" style="width:100%;margin-top:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(isIn?'Sí, ya lo recibí':'Sí, ya lo pagué')+'</button>'+
+    '<button onclick="expQuickConfirm(\''+regId+'\',\''+entryId+'\')" style="width:100%;margin-top:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(isIn?'Marcar como ingreso obtenido':'Marcar como gasto pagado')+'</button>'+
     '<div style="border-top:1px solid var(--line-soft);margin:16px 0 12px;"></div>'+
-    '<div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:8px;">Todavía no</div>'+
+    '<div style="font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:8px;">Postergar</div>'+
     '<div style="display:flex;gap:8px;align-items:center;"><select id="eq-days" class="finp" style="margin:0;flex:0 0 auto;font-size:13px;">'+[1,3,7,14,30].map(function(d){ return '<option value="'+d+'"'+(d===3?' selected':'')+'>Preguntar en '+d+' día'+(d===1?'':'s')+'</option>'; }).join('')+'</select>'+
       '<button onclick="expQuickSnooze(\''+regId+'\',\''+entryId+'\')" style="flex:1;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">Mantener pendiente</button></div>'+
     '<button onclick="removeOverlay(\'exp-quick\');openRegEntry(\''+regId+'\',{entryId:\''+entryId+'\',confirm:true,date:todayStr()})" style="width:100%;margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;text-decoration:underline;">Editar más detalles</button>'+
@@ -6592,9 +6602,14 @@ function regEntryBodyHTML(){
     (EN.due&&!ex?'<div style="font-size:11.5px;color:#9a6a1f;background:#fbf1de;border-radius:9px;padding:7px 10px;margin:-6px 0 12px;line-height:1.4;">Cobro/pago programado para el '+humanDateParts(EN.due).main+'. Queda como esperado; si ya ocurrió, cámbialo a “Ya ocurrió”.</div>':'');
   if(isFin){
     var cur = reg.currency||'$';
-    html += mSegHTML('en-dir-seg',[['out','Gasto'],['in','Ingreso']], EN.dir, 'enSetDir')+
-      '<div style="height:12px;"></div>'+
-      (EN.confirming?'':mSegHTML('en-st-seg',[['done','Ya ocurrió'],['expected','Esperado']], EN.status, 'enSetStatus')+'<div style="height:14px;"></div>')+
+    // Al completar una tarea: la dirección (ingreso/gasto) se da por sabida si ya se anotó antes en esa tarea,
+    // y "esperado/ya ocurrió" no se pregunta (completarla = ya ocurrió; el cobro diferido lo define la tarea).
+    var _dirKnown = !!(EN.fromTask && !ex && (task && task.regDir || pf || (last && last.dir && last.taskId===EN.taskId))) && !EN.dirOpen;
+    if(_dirKnown && task && task.regDir) EN.dir = task.regDir;
+    var _hideSt = EN.confirming || (EN.fromTask && !ex && !EN.due);
+    html += (_dirKnown ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><span style="font-size:13px;font-weight:700;color:'+(EN.dir==='in'?'var(--good,#3a8f5c)':'var(--ink)')+';">'+(EN.dir==='in'?'Ingreso':'Gasto')+'</span><button onclick="EN.dirOpen=true;enRedraw()" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:Inter,sans-serif;">cambiar</button></div>' :
+        mSegHTML('en-dir-seg',[['out','Gasto'],['in','Ingreso']], EN.dir, 'enSetDir')+'<div style="height:12px;"></div>')+
+      (_hideSt?'':mSegHTML('en-st-seg',[['done','Ya ocurrió'],['expected','Esperado']], EN.status, 'enSetStatus')+'<div style="height:14px;"></div>')+
       '<div id="en-amt-lbl">'+mSecLabel(enAmtLabel())+'</div>'+
       (EN.confirming?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperabas <b>'+fmtMoney(ex.amount,cur)+'</b>. Escribe lo que realmente '+(EN.dir==='in'?'recibiste':'pagaste')+'.</div>':'')+
       (!EN.confirming && ex && ex.status!=='expected' && ex.expectedAmount!=null?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperado: <b>'+fmtMoney(ex.expectedAmount,cur)+'</b> · diferencia: <b>'+fmtMoney(ex.amount-ex.expectedAmount,cur)+'</b></div>':'')+
@@ -6626,6 +6641,7 @@ function regEntryBodyHTML(){
     '</div>';
   return html;
 }
+function enRedraw(){ var sh=document.getElementById('en-sheet'); if(sh) sh.innerHTML=regEntryBodyHTML(); }
 function enSetStatus(k){
   EN.status = k; mRefreshSeg('en-st-seg', k);
   var a = document.getElementById('en-amt-lbl'); if(a) a.innerHTML = mSecLabel(enAmtLabel());
@@ -6770,6 +6786,7 @@ function goalRange(period){
 function regGoalValue(reg, g){
   var R = goalRange(g.period);
   var es = regEntries(reg).filter(function(e){return e.status!=='expected' && e.date>=R.from && e.date<=R.to;});
+  if(g.label){ var _gl = g.label.trim().toLowerCase(); es = es.filter(function(e){ return (e.label||'').trim().toLowerCase()===_gl; }); }
   if(reg.kind==='finance'){
     var inc=0,out=0; es.forEach(function(e){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; });
     return g.what==='in'?inc:(g.what==='out'?out:inc-out);
@@ -6780,7 +6797,8 @@ function regGoalValue(reg, g){
   if(!vs.length) return 0;
   return g.agg==='max' ? Math.max.apply(null,vs) : vs.reduce(function(a,b){return a+b;},0);
 }
-function regGoalTitle(reg, g){
+function regGoalTitle(reg, g){ return regGoalTitleBase(reg,g) + (g.label ? ' · '+g.label : ''); }
+function regGoalTitleBase(reg, g){
   var per = GOAL_PER[g.period]||g.period;
   if(reg.kind==='finance') return (g.what==='in'?'Ingresos':(g.what==='out'?'Límite de gastos':'Ahorro neto'))+' '+per;
   if(reg.kind==='habit') return 'Días cumplidos '+per+'es';
@@ -6837,7 +6855,12 @@ function syncRegGoalsToPlan(reg){
     if(!t){ return; }
     var v = regGoalValue(reg,g);
     var ok = (reg.kind==='finance' && g.what==='out') ? false : v>=g.target;
-    if(ok && !t.done){ S.tasks = S.tasks.map(function(x){return x.id===t.id?Object.assign({},x,{done:true,prog:1}):x;}); changed = true; try{ planEvt({id:t.id, name:t.text, item:'', cur:1, total:1, completed:true}); }catch(e){} }
+    // Metas de conteo (ej. 35 rutas rojas): la tarea de Plan muestra el avance real (x/35) y se va llenando sola.
+    if(reg.kind!=='finance' && g.agg!=='max' && g.target>=2 && g.target<=999 && !t.done){
+      var nq = Math.round(g.target), np = Math.max(0, Math.min(nq, Math.floor(v)));
+      if(t.qty!==nq || (t.prog||0)!==np){ S.tasks = S.tasks.map(function(x){return x.id===t.id?Object.assign({},x,{qty:nq,prog:np}):x;}); changed = true; t = S.tasks.find(function(x){return x.id===g.planTaskId;}); }
+    }
+    if(ok && !t.done){ S.tasks = S.tasks.map(function(x){return x.id===t.id?Object.assign({},x,{done:true,prog:(x.qty>1?x.qty:1)}):x;}); changed = true; try{ planEvt({id:t.id, name:t.text, item:'', cur:1, total:1, completed:true}); }catch(e){} }
   });
   return changed;
 }
@@ -6848,7 +6871,7 @@ function offerPlanGoals(regId, ids){
   var g = (reg.goals||[]).find(function(x){return x.id===gid;});
   var next = function(){ if(rest.length) offerPlanGoals(regId, rest); };
   if(!g){ next(); return; }
-  var existing = S.tasks.find(function(t){return t.registryId===regId && t.period===g.period;});
+  var existing = g.label ? null : S.tasks.find(function(t){return t.registryId===regId && t.period===g.period && !t.regGoalId;});
   if(existing){ g.planTaskId = existing.id; saveState(); next(); return; }
   var perName = (PL[g.period]||g.period);
   window._ogNext = next;
@@ -9834,11 +9857,13 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       var linkedMark = hasLinks(item.linkUp) ? '<span title="Vinculado" style="margin-right:4px;color:var(--accent-text);opacity:.8;vertical-align:-1px;">'+ico('link',10,2)+'</span>' : '';
       if(isQtyItem){
         clHTML+='<div class="cl-row" style="cursor:default;">'+
+          '<span style="display:inline-flex;width:20px;height:20px;flex-shrink:0;"><span style="transform:scale(.77);transform-origin:0 0;display:flex;">'+clRingHTML(clItemRatio(item), item.done)+'</span></span>'+
+          '<span style="flex:1;min-width:0;font-size:13px;color:'+(item.done?'var(--muted-soft)':'var(--ink-soft)')+';">'+linkedMark+esc(item.text)+'</span>'+itemTmPlayHTML(t,item)+
+          '<span style="display:inline-flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto;">'+
           '<button class="cl-step-btn" onclick="event.stopPropagation();stepCL(\''+t.id+'\',\''+item.id+'\',-1)" style="width:20px;height:20px;font-size:13px;">−</button>'+
           '<input type="number" inputmode="numeric" min="0" max="'+q+'" value="'+(item.prog||0)+'" onclick="event.stopPropagation()" onchange="event.stopPropagation();setCLProg(\''+t.id+'\',\''+item.id+'\',this.value)" style="width:30px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:12px;font-weight:700;color:'+(item.done?'var(--accent-text)':'var(--ink-soft)')+';font-family:Inter,sans-serif;padding:1px 0;"/>'+
-          '<span style="font-size:12px;font-weight:700;color:var(--muted);margin:0 2px;">/'+q+'</span>'+
-          '<button class="cl-step-btn" onclick="event.stopPropagation();stepCL(\''+t.id+'\',\''+item.id+'\',1)" style="width:20px;height:20px;font-size:13px;">+</button>'+
-          '<span style="font-size:13px;color:'+(item.done?'var(--muted-soft)':'var(--ink-soft)')+';text-decoration:'+(item.done?'line-through':'none')+';margin-left:2px;">'+linkedMark+esc(item.text)+'</span>'+itemTmPlayHTML(t,item)+
+          '<span style="font-size:12px;font-weight:700;color:var(--muted);margin:0 1px;">/'+q+'</span>'+
+          '<button class="cl-step-btn" onclick="event.stopPropagation();stepCL(\''+t.id+'\',\''+item.id+'\',1)" style="width:20px;height:20px;font-size:13px;">+</button></span>'+
           '</div>';
       } else {
         clHTML+='<div class="cl-row" onclick="tapCL(\''+t.id+'\',\''+item.id+'\')">'+
@@ -9942,18 +9967,20 @@ function taskMenuDraw(menu, list, isSub){
     if(it.divider){ h += '<div style="height:1px;background:var(--line);margin:3px 0;"></div>'; return; }
     var danger = it.danger || (!isSub && !menu._noAuto && i===list.length-1);
     if(!isSub && !menu._noAuto && i===list.length-1 && list.length>1) h += '<div style="height:1px;background:var(--line);margin:3px 0;"></div>';
-    var go = it.sub ? 'taskMenuOpen('+i+')' : 'closeTaskMenu();'+it.action;
+    var go = 'if(taskMenuTooSoon())return;'+(it.sub ? 'taskMenuOpen('+i+')' : 'closeTaskMenu();'+it.action);
     h += '<button onclick="'+go+'" style="display:flex;align-items:center;gap:10px;width:100%;padding:12px 16px;min-height:44px;background:none;border:none;font-size:13px;color:'+(danger?'var(--bad)':'var(--ink)')+';font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       '<span style="width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:'+(danger?'var(--bad)':'var(--muted)')+';">'+(it.icon||'')+'</span>'+
       '<span>'+it.label+'</span>'+(it.check?'<span style="margin-left:auto;color:var(--accent-text);display:inline-flex;">'+ico('check2',16,2.4)+'</span>':'')+(it.sub?'<span style="margin-left:auto;color:var(--muted);font-size:16px;">›</span>':'')+'</button>';
   });
   menu.innerHTML = h;
 }
+// Un doble toque en ⋯ no debe activar una opción del menú que aparece justo debajo del dedo.
+function taskMenuTooSoon(){ var m=document.getElementById('task-menu-popup'); return !!(m && m._t && Date.now()-m._t<450); }
 function taskMenuOpen(i){ setTimeout(function(){ var m=document.getElementById('task-menu-popup'); if(m && m._main && m._main[i] && m._main[i].sub) taskMenuDraw(m, m._main[i].sub, true); },0); }
 function taskMenuBack(){ setTimeout(function(){ var m=document.getElementById('task-menu-popup'); if(m && m._main) taskMenuDraw(m, m._main, false); },0); }
 function openTaskMenu(id, event){
-  // Cerrar menú anterior si existe
   var prev = document.getElementById('task-menu-popup');
+  if(prev && prev._t && Date.now()-prev._t<450 && prev._id===id) return; // doble toque: ignorar el segundo
   if(prev){prev.remove();}
   
   var t = S.tasks.find(function(x){return x.id===id;});
@@ -9969,7 +9996,7 @@ function openTaskMenu(id, event){
   var top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 440));
   menu.style.top = top + 'px';
   menu.style.maxHeight = (window.innerHeight - top - 12) + 'px'; menu.style.overflowY = 'auto';
-  menu._t = Date.now();
+  menu._t = Date.now(); menu._id = id;
   
   var items = [];
   
@@ -12768,25 +12795,36 @@ function openTimerHistDetail(id){
   removeOverlay('hist-detail');
   var ov=document.createElement('div'); ov.className='overlay'; ov.id='hist-detail';
   ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('hist-detail'); });
-  var d=new Date(h.startedAt||h.ts), end=new Date((h.startedAt||h.ts)+(h.sec||0)*1000);
+  var st=h.startedAt||h.ts, d=new Date(st), end=new Date(st+(h.sec||0)*1000);
+  var isBreath = h.group==='Respiración';
   var kindTxt = h.kind==='task' ? 'Tarea con temporizador' : h.kind==='item' ? 'Ítem de checklist' : 'Temporizador libre';
-  var row=function(k,v){ return '<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:13px;"><span style="color:var(--muted);">'+k+'</span><span style="color:var(--ink);font-weight:600;text-align:right;min-width:0;word-break:break-word;">'+v+'</span></div>'; };
-  var res=(h.results||[]).map(function(r){ return esc(r.name)+': <b>'+r.n+(r.unit==='s'?' s':'')+'</b>'+(r.w?' × '+r.w:'')+(r.pr?' · récord':'')+(r.reg?' · en '+esc(r.reg):''); }).join('<br>');
-  ov.innerHTML='<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:18px;flex:1;min-width:0;word-break:break-word;">'+esc(h.name)+'</span>'+
-    '<button onclick="removeOverlay(\'hist-detail\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    row('Fecha',timerHistDayLabel(h.date)+' · '+timerHistTime(d.getTime())+' a '+timerHistTime(end.getTime()))+
-    row('Duración',fmtDur(h.sec||0))+row('Tipo',kindTxt)+row('Grupo',esc(h.group))+
-    (h.itemText?row('Ítem',esc(h.itemText)):'')+
-    (h.rounds>1?row('Vueltas',h.rounds):'')+
-    (h.exercises&&h.exercises.length?row('Ejercicios',esc(h.exercises.join(', '))):'')+
-    (res?row('Resultados',res):'')+
-    (h.loggedReg?row('Anotado en',esc(h.loggedReg)):'')+
-    (regList().length?'<button class="sbtn" style="width:100%;margin-top:14px;" onclick="openTimerHistToReg(\''+id+'\')">'+(h.loggedReg?'Anotar de nuevo en un registro':'Anotar en un registro')+'</button>':'')+
+  var tile=function(v,l){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:12px;padding:11px 8px;text-align:center;"><div style="font-size:17px;font-weight:800;color:var(--ink);white-space:nowrap;">'+v+'</div><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px;">'+l+'</div></div>'; };
+  var sec=function(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">'+t+'</div>'; };
+  var kv=function(k,v){ return '<div style="display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px;"><span style="color:var(--muted);flex-shrink:0;">'+k+'</span><span style="color:var(--ink);font-weight:600;text-align:right;min-width:0;word-break:break-word;">'+v+'</span></div>'; };
+  var results=(h.results||[]), resNames={}; results.forEach(function(r){ resNames[r.name]=1; });
+  var exRows='';
+  results.forEach(function(r){
+    exRows+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:11px;margin-bottom:6px;">'+
+      '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;color:var(--ink);">'+esc(r.name)+'</div>'+(r.reg?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">Anotado en '+esc(r.reg)+'</div>':'')+'</div>'+
+      (r.pr?'<span style="font-size:9.5px;font-weight:800;background:var(--accent);color:#fff;border-radius:7px;padding:2px 6px;letter-spacing:.04em;">RÉCORD</span>':'')+
+      '<span style="font-size:14px;font-weight:800;color:var(--ink);white-space:nowrap;">'+r.n+(r.unit==='s'?' s':(r.unit?' '+esc(r.unit):''))+(r.w?' <span style="font-weight:600;color:var(--muted);">× '+r.w+'</span>':'')+'</span></div>';
+  });
+  (h.exercises||[]).filter(function(n){return !resNames[n];}).forEach(function(n){
+    exRows+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:11px;margin-bottom:6px;"><span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);">'+esc(n)+'</span><span style="font-size:11px;color:var(--muted);">sin marca</span></div>';
+  });
+  ov.innerHTML='<div class="sheet">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'+
+      '<div style="min-width:0;"><div class="serif" style="font-weight:700;font-size:20px;line-height:1.25;">'+esc(h.name)+'</div>'+
+      '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--accent-bg);color:var(--accent-text);font-weight:700;">'+esc(h.group)+'</span><span style="font-size:12px;color:var(--muted);">'+timerHistDayLabel(h.date)+' · '+timerHistTime(d.getTime())+' – '+timerHistTime(end.getTime())+'</span></div></div>'+
+      '<button onclick="removeOverlay(\'hist-detail\')" aria-label="Cerrar" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;flex-shrink:0;">×</button></div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+tile(fmtDur(h.sec||0),'Duración')+(isBreath?tile(esc((h.exercises&&h.exercises[0])||'—'),'Técnica'):tile(h.rounds||1,(h.rounds||1)===1?'Vuelta':'Vueltas'))+tile(results.length||((h.exercises||[]).length)||'—',isBreath?'Resultados':'Ejercicios')+'</div>'+
+    (exRows && !isBreath ? sec('Ejercicios y resultados')+exRows : '')+
+    sec('Detalle')+kv('Tipo',kindTxt)+(h.itemText?kv('Ítem',esc(h.itemText)):'')+(h.loggedReg?kv('Anotado en',esc(h.loggedReg)):'')+
+    (regList().length && !isBreath ? '<button class="sbtn" style="width:100%;margin-top:18px;" onclick="openTimerHistToReg(\''+id+'\')">'+(h.loggedReg?'Anotar de nuevo en un registro':'Anotar en un registro')+'</button>' : '')+
     '<div style="display:flex;gap:8px;margin-top:10px;"><button class="cbtn" style="flex:1;" onclick="openTimerHistGroup(\''+id+'\')">Cambiar grupo</button>'+
     '<button class="cbtn" style="flex:1;color:var(--bad);" onclick="deleteTimerHist(\''+id+'\')">Eliminar</button></div></div>';
   document.body.appendChild(ov);
 }
-// Llevar una sesión del historial a un registro (Marcas o Hábitos), aunque no haya partido desde una tarea
 function openTimerHistToReg(id){
   var h=timerHistLive().find(function(x){return x.id===id;}); if(!h) return;
   var regs=regList().filter(function(r){return r.kind!=='finance';});
@@ -12886,23 +12924,38 @@ function renderTimerHome(){
   html += timerHistSectionHTML();
   return html+'</div>';
 }
+var QC_MIN = 25;
 function openQuickCountdown(){
   removeOverlay('quick-cd');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='quick-cd';
   ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('quick-cd'); });
+  var chip = function(m){ return '<button class="qc-chip" data-m="'+m+'" onclick="qcSet('+m+')" style="flex:1 1 30%;padding:11px 0;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);">'+m+' min</button>'; };
+  var sb = 'width:44px;height:44px;border-radius:14px;border:1.5px solid var(--line);background:var(--paper);font-size:22px;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;flex-shrink:0;';
   ov.innerHTML = '<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">Cuenta regresiva</span>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">Temporizador rápido</span>'+
     '<button onclick="removeOverlay(\'quick-cd\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">'+
-      [5,10,15,25,45,60].map(function(m){ return '<button class="cat-tab-btn" onclick="startFreeCountdown('+m+')" style="padding:10px 18px;font-size:14px;">'+m+' min</button>'; }).join('')+
-    '</div>'+
-    '<div style="display:flex;align-items:center;gap:8px;">'+
-      '<input id="tm-free-min" class="finp" type="number" inputmode="decimal" min="1" placeholder="Otro tiempo" style="flex:1;margin:0;"/>'+
-      '<span style="font-size:13px;color:var(--muted);">min</span>'+
-      '<button class="sbtn" onclick="startFreeCountdown()" style="padding:10px 18px;font-size:13px;">Iniciar</button>'+
-    '</div></div>';
-  document.body.appendChild(ov);
+    '<div style="font-size:12.5px;color:var(--muted);">Una cuenta regresiva simple, sin ejercicios ni vueltas.</div>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:16px;margin:22px 0 6px;">'+
+      '<button style="'+sb+'" onclick="qcAdj(-1)" aria-label="Restar un minuto">−</button>'+
+      '<div style="text-align:center;min-width:130px;"><div id="qc-big" style="font-size:48px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--ink);line-height:1.05;"></div><div id="qc-sub" style="font-size:12px;color:var(--muted);margin-top:4px;"></div></div>'+
+      '<button style="'+sb+'" onclick="qcAdj(1)" aria-label="Sumar un minuto">+</button></div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Tiempos habituales</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+[5,10,15,25,45,60].map(chip).join('')+'</div>'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-top:16px;"><span style="font-size:13px;color:var(--ink-soft);flex:1;">Otro tiempo</span>'+
+      '<input id="tm-free-min" class="finp" type="number" inputmode="decimal" min="1" max="600" placeholder="min" oninput="qcType(this.value)" style="width:90px;margin:0;text-align:center;"/><span style="font-size:13px;color:var(--muted);">min</span></div>'+
+    '<button class="sbtn" onclick="startFreeCountdown(QC_MIN)" style="width:100%;margin-top:20px;padding:14px;font-size:15px;">Iniciar</button></div>';
+  document.body.appendChild(ov); qcDraw();
 }
+function qcDraw(){
+  var b=document.getElementById('qc-big'); if(!b) return;
+  var m=QC_MIN, h=Math.floor(m/60), mm=Math.round((m-h*60)*10)/10;
+  b.textContent = h>0 ? (h+':'+('0'+Math.floor(mm)).slice(-2)+':00') : (('0'+Math.floor(mm)).slice(-2)+':'+('0'+Math.round((mm-Math.floor(mm))*60)).slice(-2));
+  var sub=document.getElementById('qc-sub'); if(sub) sub.textContent = (m>=60?(Math.floor(m/60)+' h '+(m%60?Math.round(m%60)+' min':'')):(m+' min')).trim();
+  document.querySelectorAll('#quick-cd .qc-chip').forEach(function(c){ var on=Number(c.getAttribute('data-m'))===m; c.style.borderColor=on?'var(--accent)':'var(--line)'; c.style.background=on?'var(--accent-bg)':'var(--paper)'; c.style.color=on?'var(--accent-text)':'var(--ink-soft)'; c.style.fontWeight=on?'800':'600'; });
+}
+function qcSet(m){ QC_MIN=m; var i=document.getElementById('tm-free-min'); if(i) i.value=''; qcDraw(); }
+function qcAdj(d){ QC_MIN=Math.max(1,Math.min(600,Math.round(QC_MIN)+d)); var i=document.getElementById('tm-free-min'); if(i) i.value=''; qcDraw(); }
+function qcType(v){ var n=parseFloat(v); if(n>0){ QC_MIN=Math.min(600,n); qcDraw(); } }
 function openTimerTplMenu(id){
   var tp = timerTplAll().find(function(x){return x.id===id;}); if(!tp) return;
   var box = document.createElement('div'); box.className='conf-box';
@@ -15023,6 +15076,7 @@ function stepCL(taskId,itemId,stepDelta){
   // Vínculo de tarea completa (clLinkUp), aunque esta tarea tenga checklist.
   if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, taskLevelDelta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, taskLevelDelta);
+  if(itemJustCompleted && t.regPerItem && t.registryId && regById(t.registryId)){ (function(tid,iid,txt){ setTimeout(function(){ maybeOpenRegEntryForTask(tid, {itemId:iid, label:txt}); }, 450); })(t.id, targetItem.id, targetItem.text||''); }
 }
 // Pedido: poder escribir el número de avance directo en la lista del día a
 // día (no solo con −/+) — útil cuando la meta es un número grande.
@@ -15052,6 +15106,7 @@ function setCLProg(taskId,itemId,val){
   propagateCLLink(targetItem, delta, itemJustCompleted?1:(itemJustUncompleted?-1:0));
   if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, taskLevelDelta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, taskLevelDelta);
+  if(itemJustCompleted && t.regPerItem && t.registryId && regById(t.registryId)){ (function(tid,iid,txt){ setTimeout(function(){ maybeOpenRegEntryForTask(tid, {itemId:iid, label:txt}); }, 450); })(t.id, targetItem.id, targetItem.text||''); }
 }
 function expCL(id){
   var cl=document.getElementById('cl-'+id),exp=document.getElementById('exp-'+id);if(!cl)return;
@@ -17236,16 +17291,22 @@ function openStudyEditor(id){
   ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('study-ed'); });
   document.body.appendChild(ov); seDraw();
 }
+function brPutSheet(ov, html){
+  var sh = ov.querySelector('.sheet');
+  if(!sh){ ov.innerHTML = html; return; }
+  var y = sh.scrollTop, t = document.createElement('div'); t.innerHTML = html;
+  sh.innerHTML = t.firstChild.innerHTML; sh.scrollTop = y; // la hoja no se vuelve a crear ni a animar
+}
 function seDraw(){
   var ov = document.getElementById('study-ed'); if(!ov) return;
   var tot = (SE.focus*SE.rounds + SE.rest*(SE.rounds-1))*60;
   var bar = ''; for(var i=0;i<SE.rounds;i++){ bar += '<div style="flex:'+SE.focus+';background:#3f7fbf;border-radius:5px;height:22px;"></div>'+(i<SE.rounds-1&&SE.rest>0?'<div style="flex:'+SE.rest+';background:#9bc4e8;border-radius:5px;height:12px;align-self:center;"></div>':''); }
-  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(SE.id?'Editar':'Nuevo')+' temporizador de estudio</span><button onclick="removeOverlay(\'study-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+  brPutSheet(ov, '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(SE.id?'Editar':'Nuevo')+' temporizador de estudio</span><button onclick="removeOverlay(\'study-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     '<input class="finp" placeholder="Nombre (ej. Estudio mañana)" maxlength="30" value="'+esc(SE.name)+'" oninput="SE.name=this.value" style="margin-bottom:12px;"/>'+
     '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'+Object.keys(STUDY_PRESETS).map(function(k){ var p=STUDY_PRESETS[k], on = p.f===SE.focus&&p.r===SE.rest&&p.n===SE.rounds; return '<button class="cat-tab-btn'+(on?' on':'')+'" onclick="seSet(\''+k+'\')" style="padding:8px 14px;font-size:13px;'+(on?'background:var(--accent);color:#fff;border-color:var(--accent);':'')+'">'+p.l+' <span style="opacity:.7;font-size:11px;">'+p.f+'/'+p.r+'</span></button>'; }).join('')+'</div>'+
     brStep('Foco', SE.focus,'min','seAdj(\'focus\',-5)','seAdj(\'focus\',5)')+brStep('Descanso', SE.rest,'min','seAdj(\'rest\',-1)','seAdj(\'rest\',1)')+brStep('Bloques', SE.rounds,'','seAdj(\'rounds\',-1)','seAdj(\'rounds\',1)')+
     '<div style="display:flex;gap:3px;align-items:center;margin:12px 0 4px;">'+bar+'</div><div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:12px;">'+fmtDur(tot)+' en total · foco <span style="color:#3f7fbf;font-weight:700;">■</span> descanso <span style="color:#9bc4e8;font-weight:700;">■</span></div>'+
-    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="seStart()">Iniciar ahora</button><button class="sbtn" style="flex:1.4;" onclick="seSave()">Guardar</button></div></div>';
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="seStart()">Iniciar ahora</button><button class="sbtn" style="flex:1.4;" onclick="seSave()">Guardar</button></div></div>');
 }
 function seSet(k){ var p=STUDY_PRESETS[k]; SE.focus=p.f; SE.rest=p.r; SE.rounds=p.n; brRerender('study-ed',seDraw); }
 function seAdj(k,d){ var lim={focus:[5,180],rest:[0,60],rounds:[1,12]}[k]; SE[k]=Math.max(lim[0],Math.min(lim[1],SE[k]+d)); brRerender('study-ed',seDraw); }
@@ -17287,7 +17348,7 @@ function beDraw(){
       '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);"><span style="width:44px;">Volumen</span><input type="range" min="0" max="100" value="'+Math.round(sc.v*100)+'" oninput="BE.b.snd[\''+k+'\'].v=this.value/100" style="flex:1;accent-color:var(--accent);"/></div>'+
       '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);"><span style="width:44px;">Tono</span>'+[['Grave',.75],['Medio',1],['Agudo',1.33]].map(function(q){ var on=Math.abs(sc.p-q[1])<.01; return '<button onclick="beSnd(\''+k+'\',\'p\','+q[1]+')" style="flex:1;padding:5px 0;border-radius:9px;font-size:12px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+q[0]+'</button>'; }).join('')+'</div></div>';
   }).join('');
-  ov.innerHTML = '<div class="sheet" style="max-height:92vh;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(BE.id?'Editar':'Nueva')+' respiración</span><button onclick="removeOverlay(\'breath-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+  brPutSheet(ov, '<div class="sheet" style="max-height:92vh;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(BE.id?'Editar':'Nueva')+' respiración</span><button onclick="removeOverlay(\'breath-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     '<input class="finp" placeholder="Nombre (ej. Calma de la tarde)" maxlength="30" value="'+esc(BE.name)+'" oninput="BE.name=this.value" style="margin-bottom:4px;"/>'+
     lbl('Técnica')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+Object.keys(BR_PRESETS).map(function(k){ var on=b.preset===k; return '<button onclick="bePreset(\''+k+'\')" style="padding:8px 13px;border-radius:18px;font-size:13px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--ink-soft)')+';font-weight:600;">'+BR_PRESETS[k].label+'</button>'; }).join('')+'</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;">'+BR_PRESETS[b.preset].sub+'</div>'+
@@ -17300,7 +17361,7 @@ function beDraw(){
     lbl('Sonido por fase')+snd+
     lbl('Extras')+tog('bell','Campana al empezar y terminar')+tog('haptic','Vibración en cada cambio de fase')+
     brStep('Cuenta previa', b.lead, 's', 'beLead(-1)', 'beLead(1)')+
-    '<div style="display:flex;gap:8px;margin-top:16px;"><button class="cbtn" style="flex:1;" onclick="beStart()">Probar ahora</button><button class="sbtn" style="flex:1.4;" onclick="beSave()">Guardar</button></div></div>';
+    '<div style="display:flex;gap:8px;margin-top:16px;"><button class="cbtn" style="flex:1;" onclick="beStart()">Probar ahora</button><button class="sbtn" style="flex:1.4;" onclick="beSave()">Guardar</button></div></div>');
 }
 function bePreset(k){ var d = brDefault(k); BE.b.preset=k; BE.b.pat=d.pat; BE.b.sigh=d.sigh; BE.b.min=d.min; beRe(); }
 function beAdj(i,dir){ var b=BE.b, lim=[[1,15],[0,20],[1,20],[0,15]][i]; b.pat[i] = Math.max(lim[0], Math.min(lim[1], Math.round((b.pat[i]+dir*.5)*10)/10)); b.preset = (b.preset==='custom'||BR_PRESETS[b.preset].pat.join()===b.pat.join()) ? b.preset : 'custom'; beRe(); }
@@ -17389,23 +17450,30 @@ function brBuildStage(){
       '<text id="br-lab" x="170" y="150" text-anchor="middle" font-size="22" font-weight="700" letter-spacing="5" fill="#fff"></text>'+
       '<text id="br-cnt" x="170" y="205" text-anchor="middle" font-size="58" font-weight="700" fill="#fff"></text></svg>';
   } else {
-    var X0=24, X1=316, Y0=176, Y1=44, paths='', labs2='', sx=function(s){ return X0+(X1-X0)*s/P.cycle; }, sy=function(l){ return Y0-(Y0-Y1)*l; };
-    P.list.forEach(function(ph,i){
-      var pts=[], n=(ph.l0===ph.l1)?2:28;
-      for(var k=0;k<=n;k++){ var q=k/n, l=ph.l0+(ph.l1-ph.l0)*brEase(q); pts.push((k?'L':'M')+sx(ph.off+ph.d*q).toFixed(1)+' '+sy(l).toFixed(1)); }
-      var d = pts.join(' ');
-      paths += '<path d="'+d+'" fill="none" stroke="'+BR_COL[ph.t]+'" stroke-opacity=".3" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>'+
-               '<path data-p="'+i+'" pathLength="1" stroke-dasharray="0 1" d="'+d+'" fill="none" stroke="'+BR_COL[ph.t]+'" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>';
-      labs2 += '<line x1="'+sx(ph.off).toFixed(1)+'" y1="'+Y1+'" x2="'+sx(ph.off).toFixed(1)+'" y2="'+(Y0+6)+'" stroke="#fff" stroke-opacity=".12"/>'+
-               '<text x="'+((sx(ph.off)+sx(ph.off+ph.d))/2).toFixed(1)+'" y="'+(Y0+24)+'" text-anchor="middle" font-size="10.5" font-weight="700" fill="'+BR_COL[ph.t]+'">'+BR_NAME[ph.t].toUpperCase()+'</text>'+
-               '<text x="'+((sx(ph.off)+sx(ph.off+ph.d))/2).toFixed(1)+'" y="'+(Y0+38)+'" text-anchor="middle" font-size="10" fill="#fff" opacity=".6">'+String(ph.d).replace('.',',')+' s</text>';
-    });
+    // Onda sin fin: el punto queda fijo y la curva se desplaza hacia la izquierda, de modo que el
+    // avance se ve siempre hacia la derecha y el ciclo se repite sin volver a empezar de golpe.
+    var X0=14, X1=326, Y0=170, Y1=44, W=X1-X0, pps = W/(P.cycle*1.3), dotX = X0+W*.3;
+    var sy=function(l){ return Y0-(Y0-Y1)*l; }, paths='', labs2='';
+    for(var cy=-1; cy<=2; cy++){
+      P.list.forEach(function(ph){
+        var pts=[], n=(ph.l0===ph.l1)?2:28, ox=(cy*P.cycle+ph.off)*pps;
+        for(var k=0;k<=n;k++){ var q=k/n, l=ph.l0+(ph.l1-ph.l0)*brEase(q); pts.push((k?'L':'M')+(ox+ph.d*q*pps).toFixed(1)+' '+sy(l).toFixed(1)); }
+        paths += '<path d="'+pts.join(' ')+'" fill="none" stroke="'+BR_COL[ph.t]+'" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>';
+        var mx = ox+ph.d*pps/2;
+        labs2 += '<line x1="'+ox.toFixed(1)+'" y1="'+Y1+'" x2="'+ox.toFixed(1)+'" y2="'+(Y0+6)+'" stroke="#fff" stroke-opacity=".14"/>'+
+          '<text x="'+mx.toFixed(1)+'" y="'+(Y0+24)+'" text-anchor="middle" font-size="10.5" font-weight="700" fill="'+BR_COL[ph.t]+'">'+BR_NAME[ph.t].toUpperCase()+'</text>'+
+          '<text x="'+mx.toFixed(1)+'" y="'+(Y0+38)+'" text-anchor="middle" font-size="10" fill="#fff" opacity=".6">'+String(ph.d).replace('.',',')+' s</text>';
+      });
+    }
+    var body = paths+labs2;
     h = '<div style="position:absolute;top:6%;width:100%;text-align:center;"><div id="br-lab" style="font-size:22px;letter-spacing:.32em;text-transform:uppercase;font-weight:600;"></div><div id="br-cnt" style="font-size:52px;font-weight:700;margin-top:4px;"></div></div>'+
-      '<svg viewBox="0 0 340 230" style="width:min(94vw,420px);height:auto;margin-top:24%;overflow:visible;">'+
-      '<text x="'+X0+'" y="'+(Y1-12)+'" font-size="9.5" fill="#fff" opacity=".5">PULMONES LLENOS</text><text x="'+X0+'" y="'+(Y0+14)+'" font-size="0"></text>'+
-      '<line x1="'+X0+'" y1="'+Y1+'" x2="'+X1+'" y2="'+Y1+'" stroke="#fff" stroke-opacity=".12" stroke-dasharray="3 5"/><line x1="'+X0+'" y1="'+Y0+'" x2="'+X1+'" y2="'+Y0+'" stroke="#fff" stroke-opacity=".12" stroke-dasharray="3 5"/>'+
-      labs2+paths+'<line id="br-cur" y1="'+Y1+'" y2="'+Y0+'" stroke="#fff" stroke-opacity=".35" stroke-dasharray="2 4"/><circle id="br-dot" r="9" fill="#fff" style="filter:drop-shadow(0 0 8px #fff);"/></svg>';
-    BR.g = {sx:sx, sy:sy};
+      '<svg viewBox="0 0 340 230" style="width:min(94vw,420px);height:auto;margin-top:24%;overflow:hidden;">'+
+      '<defs><clipPath id="br-past"><rect x="0" y="0" width="'+dotX+'" height="230"/></clipPath><linearGradient id="br-fade" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset=".08" stop-color="#fff"/><stop offset=".92" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient><mask id="br-mk"><rect x="0" y="0" width="340" height="230" fill="url(#br-fade)"/></mask></defs>'+
+      '<g mask="url(#br-mk)"><g opacity=".28"><g class="br-tr">'+body+'</g></g><g clip-path="url(#br-past)"><g class="br-tr">'+paths+'</g></g>'+
+      '<line x1="'+dotX+'" y1="'+Y1+'" x2="'+dotX+'" y2="'+Y0+'" stroke="#fff" stroke-opacity=".35" stroke-dasharray="2 4"/></g>'+
+      '<text x="'+X0+'" y="'+(Y1-14)+'" font-size="9.5" fill="#fff" opacity=".5">PULMONES LLENOS</text>'+
+      '<circle id="br-dot" r="9" cx="'+dotX+'" fill="#fff" style="filter:drop-shadow(0 0 8px #fff);"/></svg>';
+    BR.g = {dotX:dotX, pps:pps, sy:sy};
   }
   st.innerHTML = h;
 }
@@ -17452,7 +17520,10 @@ function brFrame(){
     if(dot){
       var rr = pos?pos.r:0;
       if(BR.view==='ring'){ var a = (360*rr/BR.P.cycle-90)*Math.PI/180; dot.setAttribute('cx',(170+118*Math.cos(a)).toFixed(1)); dot.setAttribute('cy',(170+118*Math.sin(a)).toFixed(1)); dot.setAttribute('fill', col); }
-      else { var x = BR.g.sx(rr), y = BR.g.sy(pos?pos.lvl:0); dot.setAttribute('cx',x.toFixed(1)); dot.setAttribute('cy',y.toFixed(1)); set('br-cur', function(e){ e.setAttribute('x1',x.toFixed(1)); e.setAttribute('x2',x.toFixed(1)); }); }
+      else {
+        var tx = (-rr*BR.g.pps).toFixed(2); document.querySelectorAll('#br-stage .br-tr').forEach(function(g){ g.setAttribute('transform','translate('+(BR.g.dotX+Number(tx)).toFixed(2)+' 0)'); });
+        dot.setAttribute('cy', BR.g.sy(pos?pos.lvl:0).toFixed(1)); dot.setAttribute('fill', col);
+      }
     }
   }
   set('br-prog', function(e){ e.style.width = (Math.max(0,t)/BR.total*100).toFixed(2)+'%'; });
@@ -17793,7 +17864,9 @@ function timerAreaHTML(){
 }
 function mRerenderTimerArea(){
   var area = document.getElementById('m-timer-area');
+  var sh = area && area.closest('.sheet'), y = sh ? sh.scrollTop : 0;
   if(area) area.innerHTML = (M && M._exEdit) ? exEditorAreaHTML() : timerAreaHTML();
+  if(sh) sh.scrollTop = y; // sin saltos: la hoja queda donde estaba
 }
 function mUpdateTimerSet(setId, field, val){
   M.timer.sets = M.timer.sets.map(function(s){
@@ -20164,8 +20237,8 @@ function showFirstLevelUpTip(){
 }
 
 function maybeShowTutorial(){
-  if(S.tutorialSeen) return;
-  setTimeout(startTutorial, 900);
+  // Pedido: el tutorial ya no aparece solo al abrir la app (sigue disponible en Yo → Tutorial).
+  if(!S.tutorialSeen){ S.tutorialSeen = true; try{ saveState(); }catch(e){} }
 }
 
 function maybeAskNotifPermission(){
@@ -21039,7 +21112,8 @@ syncNotifPermission();
 (function(){
   var trackedModals = []; // pila de nodos <div> de modales/overlays abiertos
   var handlingPop = false;   // true mientras cerramos algo en respuesta a "atrás"
-  var syntheticBack = false; // true cuando somos NOSOTROS quienes llamamos history.back()
+  var syntheticBack = 0; // cuántos history.back() lanzamos nosotros y aún no se procesaron
+  var navDepth = 0;      // entradas de historial de modales que empujamos y siguen pendientes (nunca retroceder de más: salirse de la app se ve como un 'reinicio')
 
   function isTrackable(node){
     // Cualquier elemento agregado directamente a <body> de aquí en adelante
@@ -21065,7 +21139,7 @@ syncNotifPermission();
     mutations.forEach(function(m){
       if(m.addedNodes) m.addedNodes.forEach(function(node){
         if(!isTrackable(node) || handlingPop) return;
-        try{ history.pushState({navModal:true}, ''); }catch(e){}
+        try{ history.pushState({navModal:true}, ''); navDepth++; }catch(e){}
         trackedModals.push(node);
       });
       if(m.removedNodes) m.removedNodes.forEach(function(node){
@@ -21079,9 +21153,9 @@ syncNotifPermission();
         // era el de arriba (p.ej. una animación que se autodestruye mientras
         // hay otro modal abierto encima), no tocamos el historial para no
         // cerrar el modal equivocado.
-        if(!handlingPop && wasTop){
-          syntheticBack = true;
-          try{ history.back(); }catch(e){ syntheticBack = false; }
+        if(!handlingPop && wasTop && navDepth>0){
+          navDepth--; syntheticBack++;
+          try{ history.back(); }catch(e){ syntheticBack = Math.max(0,syntheticBack-1); }
         }
       });
     });
@@ -21092,7 +21166,7 @@ syncNotifPermission();
     var node = trackedModals[trackedModals.length-1];
     if(!node) return;
     if(node.id==='task-modal' && typeof mIsDirty==='function' && mIsDirty()){
-      try{ history.pushState({navModal:true}, ''); }catch(e){}
+      try{ history.pushState({navModal:true}, ''); navDepth++; }catch(e){}
       confirmDiscardTask();
       return;
     }
@@ -21128,7 +21202,8 @@ syncNotifPermission();
 
   window.addEventListener('popstate', function(e){
     var _leaving = S._yoLeaving; S._yoLeaving = false;
-    if(syntheticBack){ syntheticBack = false; return; }
+    if(syntheticBack>0){ syntheticBack--; return; }
+    if(navDepth>0) navDepth--; // un "atrás" real consumió una de nuestras entradas
     // BUGFIX (doble "atrás" la primera vez): cualquier nodo agregado al <body>
     // reserva una entrada de historial. Si quedó alguno que ya no es un modal
     // real (fuera del DOM, oculto o sin tamaño), esa entrada "fantasma" se
@@ -21141,7 +21216,8 @@ syncNotifPermission();
       _ghosts++; return false;
     });
     if(!trackedModals.length && _ghosts){
-      try{ history.go(-_ghosts); }catch(err){}
+      var _g = Math.min(_ghosts, navDepth); // nunca más de lo que empujamos
+      if(_g>0){ navDepth -= _g; syntheticBack++; try{ history.go(-_g); }catch(err){ syntheticBack=Math.max(0,syntheticBack-1); } }
       return;
     }
     if(trackedModals.length){
@@ -21181,7 +21257,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.111';
+var APP_VERSION = '2026.10.01.112';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
