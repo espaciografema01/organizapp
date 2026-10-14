@@ -425,6 +425,7 @@ details:not([open]) .rsec-chev{transform:rotate(-90deg);}
 .le-banner{border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;}
 
 /* Logo */
+.flame-on svg{fill:currentColor;}
 .logo-bracket{color:var(--accent-text);font-family:'Cormorant Garamond',serif;font-weight:300;font-style:italic;}
 .logo-letters{font-family:'Cormorant Garamond',serif;font-weight:700;color:var(--ink);}
 
@@ -834,6 +835,7 @@ try {
           var modal = document.getElementById('authModal');
           if(modal) modal.style.display='none';
           if(typeof syncWithCloud === 'function') syncWithCloud();
+          try{ if(typeof schedulePushSync==='function') schedulePushSync(true); }catch(e){}
         } else {
           currentUser = null;
         }
@@ -1039,28 +1041,51 @@ function showGoogleSignInFallbackModal(){
 
 // Registrar el token FCM del dispositivo en Firestore para poder
 // recibir notificaciones push incluso con la app cerrada.
-function _registerFCMToken(){
-  if(!firebaseAvailable || !currentUser) return;
+// IMPORTANTE: en GitHub Pages la app vive en /organizapp/, así que hay que
+// registrar el service worker con su ruta relativa y pasárselo a getToken();
+// si no, Firebase intenta /firebase-messaging-sw.js en la raíz del dominio
+// (que no existe) y el token nunca se obtiene.
+var _fcmMessagingBound = false;
+var FCM_VAPID_KEY = 'BEe1Pp0ir_6WBmgqmNCV0-mGxoL9R5NJzYXWLbldCaDo_Hjf-glsawgPTmF5_cHHYA0IUA2udUydlIWLD-I2W8E';
+async function _registerFCMToken(){
+  if(!firebaseAvailable || !currentUser) return false;
   try {
-    if(typeof firebase.messaging !== 'function') return;
+    if(typeof firebase.messaging !== 'function') return false;
+    if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
+    if(!('serviceWorker' in navigator)) return false;
+    var reg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+    await navigator.serviceWorker.ready;
     var messaging = firebase.messaging();
-    messaging.getToken({vapidKey: 'BEe1Pp0ir_6WBmgqmNCV0-mGxoL9R5NJzYXWLbldCaDo_Hjf-glsawgPTmF5_cHHYA0IUA2udUydlIWLD-I2W8E'}).then(function(token){
-      if(token){
-        // set con merge en vez de update: evita el error "No document to
-        // update" si esto corre antes de que syncWithCloud cree el documento
-        // del usuario (típico justo después de un primer login).
-        db.collection('users').doc(currentUser.uid).set({fcmToken: token}, {merge:true})
-          .catch(function(e){ console.log('FCM token save:', e.message); });
-      }
-    }).catch(function(e){ console.log('FCM token:', e.message); });
-  } catch(e){ /* messaging no disponible en este contexto */ }
+    var token = await messaging.getToken({vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg});
+    if(!token) return false;
+    // set con merge en vez de update: evita el error "No document to
+    // update" si esto corre antes de que syncWithCloud cree el documento
+    // del usuario (típico justo después de un primer login).
+    var ref = db.collection('users').doc(currentUser.uid);
+    try{
+      await ref.set({fcmToken: token, fcmTokens: firebase.firestore.FieldValue.arrayUnion(token)}, {merge:true});
+    }catch(e1){
+      await ref.set({fcmToken: token}, {merge:true}); // reglas antiguas sin el campo nuevo
+    }
+    try{ localStorage.setItem('og6-fcm-token-uid', currentUser.uid); localStorage.setItem('og6-fcm-token', token); }catch(e){}
+    // Con la app abierta y visible, FCM NO pasa por el service worker: hay
+    // que mostrar el aviso desde aquí.
+    if(!_fcmMessagingBound){
+      _fcmMessagingBound = true;
+      messaging.onMessage(function(p){
+        var d = (p && p.data) || {};
+        if(d.title) showLocalNotification(d.title, d.body||'', d.tag);
+      });
+    }
+    return true;
+  } catch(e){ console.log('FCM token:', e && e.message); return false; }
 }
 
 function toggleAuthMode(){ setAuthMode(_authMode==='login'?'signup':'login'); }
 
 function handleLogout(){
   if(!auth){ toast('No hay sesión activa'); return; }
-  auth.signOut().then(function(){
+  _pushCleanupForLogout().then(function(){ return auth.signOut(); }).then(function(){
     toast('Sesión cerrada');
     // BUGFIX: estos campos solo existen si el usuario entró con el
     // formulario de email/contraseña. Si entró con Google, no existen en el
@@ -1245,7 +1270,7 @@ async function syncWithCloud(){
         shareData: shareCloudPayload(),
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
-        registries: S.registries||[],
+        registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
         timerTemplates: S.timerTemplates||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
@@ -1490,7 +1515,7 @@ function pushToCloud(){
       shareData: shareCloudPayload(),
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
-      registries: S.registries||[],
+      registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
         timerTemplates: S.timerTemplates||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
@@ -2475,6 +2500,7 @@ function _lsSet(k, v){
 }
 function saveState(){
   _savePending = true;
+  try{ if(typeof schedulePushSync==='function') schedulePushSync(); }catch(e){}
   if(_saveTimer) return;
   _saveTimer = setTimeout(function(){ _saveTimer = null; flushSaveState(); }, 250);
 }
@@ -2899,8 +2925,23 @@ function flushXP(){
 // Guardado solo local (og6-leveltracks), igual que las medallas (S.medals
 // tampoco viaja hoy a la nube — ver sync), así que no se sincroniza entre
 // dispositivos por ahora.
+
+// ── Modo "Próximamente": funciones listas pero ocultas al público ───────────
+// Para abrir una función al público, quítala de SOON_FEATURES.
+// El modo pruebas (solo en este dispositivo) se activa tocando 7 veces la marca
+// "desarrollado por" al final de Yo, y deja usar todo lo marcado.
+var SOON_FEATURES = {hexagon:'Habilidades en gráfico', cycle:'Registro de ciclo'};
+function labOn(){ try{ return localStorage.getItem('og6-lab')==='1'; }catch(e){ return false; } }
+function featureLocked(id){ return !!SOON_FEATURES[id] && !labOn(); }
+function soonBadge(){ return '<span style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:2px 6px;margin-left:6px;vertical-align:middle;">Próximamente</span>'; }
+var _labTaps = 0, _labT = 0;
+function labTap(){
+  var n = Date.now(); if(n-_labT>2500) _labTaps = 0; _labT = n; _labTaps++;
+  if(_labTaps>=7){ _labTaps = 0; var on = !labOn(); try{ localStorage.setItem('og6-lab', on?'1':'0'); }catch(e){} toast(on?'Modo pruebas activado':'Modo pruebas desactivado'); render(); }
+}
 function maxLevelTrackSlots(){
-  var base = isPremium() ? 3 : 1;
+  if(isPremium()) return 999; // plan completo: sin límite
+  var base = 2;
   var lvlBonus = getLevel(S.xp||0) >= 8 ? 1 : 0;
   var medalBonus = S.bonusTrackSlots || 0;
   return base + lvlBonus + medalBonus;
@@ -3898,10 +3939,12 @@ function renderV2Header(){
             '<circle cx="17" cy="17" r="'+R+'" fill="none" stroke="'+col+'" stroke-width="3" stroke-dasharray="'+C.toFixed(2)+'" stroke-dashoffset="'+offset.toFixed(2)+'" stroke-linecap="butt" transform="rotate(-90 17 17)"/>'+
             '<text x="17" y="21" text-anchor="middle" font-size="9" font-weight="700" fill="'+col+'">'+info.lvl+'</text>'+
           '</svg>')+
-        ((!S.simpleMode && streakActive()) ? '<span style="font-size:12px;font-weight:700;color:var(--accent-text);display:inline-flex;align-items:center;gap:3px;">'+ico('flame',13,2)+S.streak.days+'</span>' : '')+
+        ((!S.simpleMode && streakActive()) ? (function(){ var ds = dayStreakStatus(), on = ds.n>0 && ds.reached;
+          return '<span class="'+(on?'flame-on':'')+'" title="'+(on?'Racha del día lograda':(ds.n?'Racha del día: faltan '+Math.max(1,Math.ceil((ds.thr-ds.ratio)*100))+'%':'Racha'))+'" style="font-size:12px;font-weight:700;color:'+(on?'var(--accent-text)':'var(--muted)')+';opacity:'+(on?1:.7)+';display:inline-flex;align-items:center;gap:3px;'+(on?'background:var(--accent-bg);box-shadow:inset 0 0 0 1.5px var(--accent);border-radius:11px;padding:2px 7px;':'')+'">'+ico('flame',13,2)+S.streak.days+(on?ico('check2',10,2.8):'')+'</span>'; })() : '')+
         (totalToday>0 ? '<span style="font-size:12px;font-weight:700;color:var(--ink);">'+dayPct+'%</span>' : '')+
       '</div>' : '')+
   '</div>';
+  try{ checkDayStreakNotice(); }catch(e){}
 }
 
 function sortHoyList(list){
@@ -3923,6 +3966,21 @@ function togglePlanNotify(){ S.planNotify = S.planNotify===false; saveState(); p
 function toggleHideDone(){ S.hideDone=!S.hideDone; saveState(); playSound('toggle'); render(); }
 function toggleHoyProgress(){ S.hoyProgressBar = S.hoyProgressBar===false; saveState(); playSound('toggle'); render(); }
 function toggleHoyNext(){ S.hoyNextHint = S.hoyNextHint===false; saveState(); playSound('toggle'); render(); }
+function dayStreakStatus(){
+  var list = S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===todayIdx() && !isSkipped(t);}), n = list.length;
+  if(!n) return {n:0, ratio:0, thr:0, reached:false};
+  var ratio = list.reduce(function(a,t){return a+tRatio(t);},0)/n, thr = modeThreshold((S.streakCfg&&S.streakCfg.threshold)||0.8);
+  return {n:n, ratio:ratio, thr:thr, reached: ratio>=thr-1e-9};
+}
+var _dsPrev = null;
+function checkDayStreakNotice(){
+  if(!streakActive()) return;
+  var st = dayStreakStatus(), was = _dsPrev; _dsPrev = st.reached;
+  if(!st.n || was===null || was===true || !st.reached) return; // solo al cruzar la meta, no al abrir la app
+  if(S.dayStreakNoticeDate===todayStr()) return;
+  S.dayStreakNoticeDate = todayStr(); saveState();
+  setTimeout(function(){ try{ playSound('achievement'); showRewardToast('¡Racha del día lograda!', 'Llegaste a tu meta de '+Math.round(st.thr*100)+'% de hoy'); }catch(e){} }, 400);
+}
 function hoyProgressHTML(){
   if(S.hoyProgressBar===false) return '';
   var list=S.tasks.filter(function(t){return taskWeekdayThisWeek(t)===S.day && !isSkipped(t);});
@@ -4126,7 +4184,7 @@ function renderHoy(){
   // Selector de día — simple, sin puntitos
   var today = todayIdx();
   var day = S.day;
-  html += '<div style="position:sticky;top:0;background:var(--paper);z-index:10;padding:8px 16px 10px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;">'+
+  html += '<div id="hoy-sticky" style="position:sticky;top:0;z-index:10;background:var(--paper);">'+'<div style="background:var(--paper);padding:8px 16px 10px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between;">'+
     '<button onclick="goPrevDay();" '+
       'style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;min-width:40px;min-height:40px;padding:0 8px;line-height:1;">‹</button>'+
     '<div style="text-align:center;display:flex;align-items:center;gap:8px;">'+
@@ -4142,7 +4200,7 @@ function renderHoy(){
   // es un valor especial de filtro ('__pending'), no un id en S.categories.
   // Por eso la barra se muestra siempre (antes solo aparecía si había
   // categorías creadas), para que "Pendientes" esté disponible igual.
-  html += hoyProgressHTML()+hoyPendStripHTML();
+  html += hoyProgressHTML();
   var cats = S.categories || [];
   if(!S.activeCatFilter) S.activeCatFilter = 'all';
   html += '<div style="display:flex;align-items:flex-start;">'+
@@ -4156,6 +4214,7 @@ function renderHoy(){
   '</div>'+
   '<button onclick="openHoyMenu(event)" aria-label="Opciones de la lista" title="Opciones de la lista" style="flex-shrink:0;margin:6px 12px 0 4px;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>'+
   '</div>';
+  html += '</div>'+hoyPendStripHTML(); // cierra #hoy-sticky (día + progreso + categorías)
 
   // Pedido: al tocar una categoría de la barra (sobre todo una que quedó
   // más a la derecha, medio escondida al hacer scroll horizontal), que NO
@@ -4998,7 +5057,7 @@ function renderYoMain(){
       '<span style="font-family:Cormorant Garamond,serif;font-weight:700;font-size:14px;letter-spacing:-.02em;color:var(--ink-soft);">EG</span>'+
       '<span style="color:var(--accent-text);font-family:Cormorant Garamond,serif;font-weight:300;font-style:italic;font-size:18px;line-height:1;">]</span>'+
     '</div>'+
-    '<div style="font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;margin-bottom:3px;">desarrollado por</div>'+
+    '<div onclick="labTap()" style="font-size:9px;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;margin-bottom:3px;user-select:none;">desarrollado por</div>'+(labOn()?'<div style="font-size:10px;color:var(--accent-text);margin-bottom:4px;">Modo pruebas activo</div>':'')+
     '<a href="https://psi.setmore.com/" target="_blank" style="font-size:11px;color:var(--accent-text);font-weight:600;text-decoration:none;letter-spacing:.05em;">Espacio [G]rafema</a>'+
   '</div>';
 
@@ -6014,7 +6073,8 @@ function fmtMoney(n, cur){ return (n<0?'−':'')+(cur||'$')+fmtNum(Math.abs(n));
 //    suscripción = 5; nivel 10 = +1 ──
 function registryBonusSlots(){ return getLevel(S.xp||0)>=10 ? 1 : 0; }
 function registryCap(){ return (isPremium()?5:3)+registryBonusSlots(); }
-function canCreateRegistry(kind){ return regList().length < registryCap(); }
+function regCountedList(){ return regList().filter(function(r){return r.kind!=='cycle';}); }
+function canCreateRegistry(kind){ return regCountedList().length < registryCap(); }
 function canCreateAnyRegistry(){ return canCreateRegistry(); }
 
 // ── Sección "Registros" dentro de la pestaña ────────────────────────────────
@@ -6057,6 +6117,7 @@ function miniSpark(vals,color,bars){
   return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="flex-shrink:0;"><path d="'+vals.map(function(v,i){return (i?'L':'M')+X(i).toFixed(1)+','+Y(v).toFixed(1);}).join('')+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="'+X(vals.length-1).toFixed(1)+'" cy="'+Y(vals[vals.length-1]).toFixed(1)+'" r="2.2" fill="'+color+'"/></svg>';
 }
 function regSpark(r){
+  if(r.kind==='cycle') return '';
   var es=regEntries(r); if(es.length<2 && r.kind!=='habit') return '';
   if(r.kind==='habit'){
     var m=habitMap(r), v=[], d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-13);
@@ -6074,6 +6135,7 @@ function regSpark(r){
   return ser.length>=2 ? miniSpark(ser,r.color,false) : '';
 }
 function regQuickBtn(r){
+  if(r.kind==='cycle') return '<button onclick="event.stopPropagation();cyDay(\''+r.id+'\',\''+todayStr()+'\')" aria-label="Anotar hoy" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);font-size:20px;">+</button>';
   var base='flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;';
   if(r.kind==='habit'){
     var on=habitMap(r)[todayStr()]===true;
@@ -6092,6 +6154,7 @@ function regOverviewHTML(list){
   return '<div style="display:flex;gap:8px;margin-bottom:12px;">'+chips.slice(0,3).map(function(c){ return '<div style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--line-soft);border-radius:12px;padding:9px 11px;"><div style="font-size:10.5px;color:var(--muted);">'+c[0]+'</div><div style="font-size:15px;font-weight:800;color:'+(c[2]?'var(--ink)':'var(--bad)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+c[1]+'</div></div>'; }).join('')+'</div>';
 }
 function regSummaryLine(r){
+  if(r.kind==='cycle') return cySummary(r);
   var es = regEntries(r);
   if(!es.length) return 'Sin registros todavía';
   if(r.kind==='finance'){
@@ -6109,7 +6172,7 @@ function renderRegistriesSection(){
   var html = '<div style="padding:10px 16px 90px;">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'+
       '<span style="font-size:12.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Mis registros'+infoBtn('reglimit')+'</span>'+
-      '<span style="font-size:12px;color:var(--muted);">'+list.length+' / '+registryCap()+'</span>'+
+      '<span style="font-size:12px;color:var(--muted);">'+regCountedList().length+' / '+registryCap()+'</span>'+
     '</div>';
   html += regOverviewHTML(list);
   html += pendStripHTML();
@@ -6133,6 +6196,10 @@ function renderRegistriesSection(){
     '</div>';
   });
   html += '</div>';
+  if(!cyReg()){
+    var _lk = featureLocked('cycle');
+    html += '<div '+(_lk?'':'onclick="cyCreate()" ')+'style="display:flex;align-items:center;gap:12px;padding:11px 12px;border:1.5px dashed var(--line);border-radius:12px;margin-bottom:8px;'+(_lk?'opacity:.55;':'cursor:pointer;')+'"><div style="width:38px;height:38px;border-radius:11px;background:#c2577a22;display:flex;align-items:center;justify-content:center;color:#c2577a;font-size:20px;flex-shrink:0;">●</div><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Registro de ciclo'+(_lk?soonBadge():'')+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;">Gratis, no cuenta en tu límite y se queda en tu dispositivo.</div></div></div>';
+  }
   if(canCreateAnyRegistry()){
     html += '<button onclick="openRegEditor(null)" style="width:100%;background:var(--accent);color:white;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;margin-top:8px;">+ Nuevo registro</button>';
   } else {
@@ -6799,6 +6866,7 @@ function saveRegEntry(){
   var wasRecord = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
   reg.entries = (reg.entries||[]).filter(function(e){return e.id!==entry.id;}).concat([entry]);
   reg.updatedAt = new Date().toISOString();
+  try{ skEnsureForEntry(reg, entry); }catch(e){}
   syncRegXP(reg, entry);
   syncRegGoalsToPlan(reg);
   saveState();
@@ -7617,6 +7685,7 @@ function regTabsHTML(reg, tabs, cur){
   }).join('')+'</div>';
 }
 function regViewBodyHTML(reg){
+  if(reg.kind==='cycle') return cycleViewHTML(reg);
   var _feeds = (S.levelTracks||[]).filter(function(tr){ return (tr.regSources||[]).some(function(x){return x.regId===reg.id;}); });
   if(_feeds.length) INFO_TIPS.regxp = 'Suma XP a: '+_feeds.map(function(tr){ var rs=tr.regSources.find(function(x){return x.regId===reg.id;}); var m=rs.mode==='metric'?(reg.metrics||[]).find(function(q){return q.id===rs.metricId;}):null; return tr.name+' ('+(m?rs.xp+' XP por '+(m.unit||m.name):rs.xp+' XP por anotación')+')'; }).join(', ')+'.';
   var top = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
@@ -7669,7 +7738,7 @@ function refreshRegViews(){
 }
 // ── Tarjeta de registros en Yo → Estadísticas ───────────────────────────────
 function renderRegistriesStatsCard(){
-  var list = regList();
+  var list = regList().filter(function(r){return r.kind!=='cycle';});
   if(!list.length) return '';
   return '<div class="card" style="margin-bottom:10px;">'+
     '<div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:6px;">Registros</div>'+
@@ -7700,7 +7769,7 @@ function renderRegistriesStatsCard(){
 }
 // ── Asociar una tarea a un registro (editor de tarea) ───────────────────────
 function mRegistrySectionHTML(){
-  var list = regList();
+  var list = regList().filter(function(r){return r.kind!=='cycle';});
   if(!list.length) return '';
   return mSecLabel('Registro','regtask')+
     '<div id="m-reg-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+mRegChipsInnerHTML()+'</div>'+
@@ -7709,7 +7778,7 @@ function mRegistrySectionHTML(){
 function mRegChipsInnerHTML(){
   var none = !M.registryId;
   var html = '<button type="button" onclick="mSetRegistry(null)" style="padding:5px 11px;border:1.5px solid '+(none?'var(--accent)':'var(--line)')+';background:'+(none?'var(--accent-bg)':'transparent')+';color:'+(none?'var(--accent-text)':'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Ninguno</button>';
-  regList().forEach(function(r){
+  regList().filter(function(r){return r.kind!=='cycle';}).forEach(function(r){
     var on = M.registryId===r.id;
     html += '<button type="button" onclick="mSetRegistry(\''+r.id+'\')" style="padding:5px 11px;border:1.5px solid '+(on?r.color:'var(--line)')+';background:'+(on?r.color+'22':'transparent')+';color:'+(on?r.color:'var(--muted)')+';border-radius:12px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+regIcon(r)+' '+esc(r.name)+'</button>';
   });
@@ -7798,7 +7867,7 @@ function skNorm(s){ return String(s||'').trim().toLowerCase(); }
 function skRegs(tr, ax){
   var ids = (tr.regSources||[]).map(function(r){return r.regId;});
   if(ax && ax.regId && ids.indexOf(ax.regId)<0) ids.push(ax.regId);
-  return ids.map(function(i){return regById(i);}).filter(function(r){return r && r.kind!=='finance';});
+  return ids.map(function(i){return regById(i);}).filter(function(r){return r && r.kind!=='finance' && r.kind!=='cycle';});
 }
 function skMatch(ax, reg, e){
   if((e.axes||[]).indexOf(ax.id)>=0) return 'tag';
@@ -7806,6 +7875,22 @@ function skMatch(ax, reg, e){
   if(ax.scope==='all') return 'rule';
   if(ax.scope==='label'){ var L=(ax.labels||[]).map(skNorm); if(L.length && L.indexOf(skNorm(e.label))>=0) return 'rule'; }
   return '';
+}
+
+// El XP de una habilidad es siempre el XP real del seguimiento: si una entrada se marca
+// o un registro se asigna a una habilidad, el registro pasa a dar XP al seguimiento (1 por anotación).
+function skEnsureSource(tr, regId){
+  if(!tr || !regId) return;
+  if(!tr.regSources) tr.regSources = [];
+  if(tr.regSources.some(function(x){return x.regId===regId;})) return;
+  tr.regSources.push({regId:regId, mode:'fixed', xp:1, log:false});
+}
+function skEnsureForEntry(reg, entry){
+  if(!reg || reg.kind==='finance') return;
+  (S.levelTracks||[]).forEach(function(tr){
+    var hit = skAxes(tr).some(function(a){ return skMatch(a, reg, entry); });
+    if(hit) skEnsureSource(tr, reg.id);
+  });
 }
 function skEvents(tr, ax){
   var ev = {};
@@ -7816,7 +7901,7 @@ function skEvents(tr, ax){
       if(reg.kind==='habit' && !e.yes) return;
       if(!skMatch(ax, reg, e)) return;
       var key = e.taskId ? 'd'+e.date+'|t'+e.taskId : 'e'+(e.id||e.date);
-      var aw = tr.regAwarded || {}, xp = aw[e.id]!=null ? aw[e.id] : (aw['h:'+e.date]!=null ? aw['h:'+e.date] : (e.xp || (inSrc?0:1)));
+      var aw = tr.regAwarded || {}, xp = aw[e.id]!=null ? aw[e.id] : (aw['h:'+e.date]!=null ? aw['h:'+e.date] : (e.xp || 0));
       ev[key] = {date:e.date, xp:xp, reg:reg.id, e:e};
     });
   });
@@ -7889,6 +7974,49 @@ function skCompute(tr, ax){
   } else score = (parts[ax.mode] || parts.consist).pct;
   return {score:Math.round(score), parts:parts, used:used, list:list};
 }
+function skNewGoal(){
+  var a = SK.a, reg = a.regId ? regById(a.regId) : null, ng = SK.o.ng||{}; if(!reg){ toast('Elige un registro'); return; }
+  var n = Math.round(+ng.n||0); if(n<1){ toast('Escribe cuántas veces'); return; }
+  var g = {id:uid(), period:ng.per||'semana', what:reg.kind==='habit'?'__yes':'__count', agg:'sum', target:n};
+  if(a.scope==='label' && (a.labels||[]).length===1) g.label = a.labels[0];
+  reg.goals = (reg.goals||[]).concat([g]); reg.updatedAt = new Date().toISOString();
+  try{ addRegGoalToPlan(reg.id, g.id); }catch(e){}
+  SK.a.goalId = g.id; SK.o.ng = {n:'',per:ng.per||'semana'}; saveState(); skRe(); toast('Meta creada y añadida al Plan');
+}
+// ── Sesión hecha fuera de la app, con un toque ──
+function skSession(tid){
+  var tr = skTrack(tid); if(!tr) return; var axes = skAxes(tr);
+  SK = {tid:tid, o:{}, ss:{sel:axes.length===1?[axes[0].id]:[], day:0}};
+  var _o = document.getElementById('skill-sess'); if(_o) _o.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='skill-sess';
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('skill-sess'); });
+  document.body.appendChild(ov); skSessDraw();
+}
+function skSessDraw(){
+  var ov = document.getElementById('skill-sess'), tr = skTrack(SK.tid); if(!ov||!tr) return;
+  var axes = skAxes(tr), ss = SK.ss;
+  brPutSheet(ov, '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">Anotar una sesión</span><button onclick="removeOverlay(\'skill-sess\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Para lo que hiciste fuera de la app. Suma XP a «'+esc(tr.name)+'» y cuenta para las habilidades que elijas.</div>'+
+    (axes.length?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'+axes.map(function(a){ return skChip(ss.sel.indexOf(a.id)>=0, esc(a.name), 'skSessTog(\''+a.id+'\')'); }).join('')+'</div>':'')+
+    '<div style="display:flex;gap:8px;margin-bottom:16px;">'+skChip(ss.day===0,'Hoy','SK.ss.day=0;skSessDraw()')+skChip(ss.day===1,'Ayer','SK.ss.day=1;skSessDraw()')+skChip(ss.day===2,'Antes de ayer','SK.ss.day=2;skSessDraw()')+'</div>'+
+    '<button class="sbtn" style="width:100%;" onclick="skSessSave()">Anotar sesión</button></div>');
+}
+function skSessTog(id){ var i=SK.ss.sel.indexOf(id); if(i>=0) SK.ss.sel.splice(i,1); else SK.ss.sel.push(id); skSessDraw(); }
+function skSessSave(){
+  var tr = skTrack(SK.tid); if(!tr) return; var ss = SK.ss, sel = ss.sel.slice(), regId = null;
+  sel.forEach(function(id){ var a=skAxes(tr).find(function(x){return x.id===id;}); if(!regId && a && a.regId) regId = a.regId; });
+  if(!regId){ var rs = (tr.regSources||[]).find(function(x){ var r=regById(x.regId); return r && r.kind==='metrics'; }); if(rs) regId = rs.regId; }
+  var reg = regId ? regById(regId) : null;
+  if(!reg){ toast('Vincula antes un registro de Marcas a este seguimiento'); return; }
+  var d = new Date(); d.setDate(d.getDate()-ss.day); var date = localDateStr(d);
+  var entry = {id:uid(), date:date, label:'Sesión', values:{}, note:'', auto:true, manual:true, ts:Date.now()}; if(sel.length) entry.axes = sel;
+  skEnsureSource(tr, reg.id);
+  var rsrc = tr.regSources.find(function(x){return x.regId===reg.id;}), pts = rsrc && rsrc.mode!=='metric' && rsrc.xp>0 ? rsrc.xp : 1;
+  reg.entries = (reg.entries||[]).concat([entry]); reg.updatedAt = new Date().toISOString();
+  if(!tr.regAwarded) tr.regAwarded = {}; tr.regAwarded[entry.id] = pts; trackAddXP(tr, pts, 'Sesión · '+reg.name);
+  try{ syncRegGoalsToPlan(reg); }catch(e){}
+  saveState(); removeOverlay('skill-sess'); skRefreshDetail(tr.id); try{ refreshRegViews(); }catch(e){} toast('✓ Sesión anotada · +'+pts+' XP');
+}
 function skSnapshot(tr){
   var mk = todayStr().slice(0,7), ch = false;
   skAxes(tr).forEach(function(a){ var c = skCompute(tr,a).score; if(!a.hist) a.hist = {}; if(a.hist[mk]!==c){ a.hist[mk]=c; ch=true; } });
@@ -7917,20 +8045,25 @@ function skShowPrev(){ return S._skPrev!==false; }
 function skRefreshDetail(tid){ var tr = skTrack(tid), ov = document.getElementById('track-detail'); if(!tr||!ov) return; var sh = ov.querySelector('.sheet'); if(sh){ var y=sh.scrollTop; sh.innerHTML = trackDetailBodyHTML(tr); sh.scrollTop=y; } }
 function skTogglePrev(tid){ S._skPrev = !skShowPrev(); skRefreshDetail(tid); }
 // Sección dentro del detalle del seguimiento
+function skHexUsed(){ return (S.levelTracks||[]).filter(function(t){return skAxes(t).length>0;}).length; }
+function skHexMax(){ return isPremium() ? 999 : 2; }
 function skSectionHTML(tr){
+  if(featureLocked('hexagon')) return '<div style="margin:18px 0 6px;padding:12px;border:1.5px dashed var(--line);border-radius:12px;opacity:.6;"><div style="font-size:13px;font-weight:700;color:var(--ink);">Habilidades en gráfico'+soonBadge()+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.5;">Mide partes de este seguimiento (fuerza, técnica…) en un radar.</div></div>';
   var axes = skAxes(tr); skSnapshot(tr);
   var h = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;justify-content:space-between;"><span>Habilidades</span><span style="font-weight:600;">'+axes.length+' / 7</span></div>';
   if(axes.length>=3){
     var pk = skPrevMonthKey(), rd = skRadarSVG(tr, axes, pk, skShowPrev());
     h += '<div style="background:var(--bg);border-radius:14px;padding:8px 4px 6px;margin-bottom:10px;">'+rd.svg+(rd.hasPrev?'<div style="display:flex;justify-content:center;"><button onclick="skTogglePrev(\''+tr.id+'\')" style="background:none;border:none;font-size:11px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">'+(skShowPrev()?'Ocultar':'Mostrar')+' comparación con el mes pasado</button></div>':'')+'</div>';
   } else {
+    if(!axes.length && skHexUsed()>=skHexMax()) h += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;">Tu plan gratuito permite el gráfico de habilidades en '+skHexMax()+' seguimientos. Con la suscripción no hay límite.</div>'; else
     h += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;text-align:left;">Opcional: define de 3 a 7 indicadores (por ejemplo Fuerza, Técnica, Equilibrio) para ver este seguimiento como un gráfico de radar'+(axes.length?'. Te faltan '+(3-axes.length)+' para dibujarlo.':'.')+'</div>';
   }
   axes.forEach(function(a){
     var c = skCompute(tr,a);
     h += '<div onclick="skOpen(\''+tr.id+'\',\''+a.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+a.color+';border-radius:10px;margin-bottom:6px;cursor:pointer;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name)+'</div><div style="height:5px;background:var(--line-soft);border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+a.color+';"></div></div></div><b style="font-size:16px;color:var(--ink);min-width:28px;text-align:right;">'+c.score+'</b></div>';
   });
-  if(axes.length<7) h += '<button onclick="skEdit(\''+tr.id+'\',null)" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">+ Nueva habilidad</button>';
+  if(axes.length<7 && (axes.length>0 || skHexUsed()<skHexMax())) h += '<button onclick="skEdit(\''+tr.id+'\',null)" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">+ Nueva habilidad</button>';
+  h += '<button onclick="skSession(\''+tr.id+'\')" style="width:100%;background:var(--bg);border:none;border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;margin-top:8px;">Anotar una sesión fuera de la app</button>';
   return h;
 }
 // ── Detalle de una habilidad ──
@@ -7999,7 +8132,7 @@ function skFirstMark(){
 }
 function skDraw(){
   var ov = document.getElementById('skill-ed'), tr = skTrack(SK&&SK.tid); if(!ov||!tr) return;
-  var a = SK.a, regs = regList().filter(function(r){return r.kind!=='finance';}), reg = a.regId ? regById(a.regId) : null;
+  var a = SK.a, regs = regList().filter(function(r){return r.kind!=='finance' && r.kind!=='cycle';}), reg = a.regId ? regById(a.regId) : null;
   var needReal = a.mode==='real' || a.mode==='mixed', needConsist = a.mode==='consist' || a.mode==='mixed';
   var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(a.id?'Editar':'Nueva')+' habilidad</span><button onclick="removeOverlay(\'skill-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">en «'+esc(tr.name)+'»</div>'+
@@ -8026,9 +8159,12 @@ function skDraw(){
         (a.metricId&&a.metricId!=='__count'?'<button class="cat-tab-btn" onclick="skFirstMark()" style="padding:5px 10px;font-size:12px;">Usar mi primera marca como partida</button>':'');
     }
   }
-  if(needConsist && reg && (reg.goals||[]).some(function(g){return (g.period==='semana'||g.period==='mes') && g.target>0;})){
-    h += skLbl('Constancia')+skNote('Elige una meta de este registro: la constancia será el porcentaje de semanas o meses en que la cumpliste. Sin meta, cuenta las semanas con práctica.')+
-      '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+skChip(!a.goalId,'Semanas con práctica','SK.a.goalId=\'\';skRe()')+(reg.goals||[]).filter(function(g){return (g.period==='semana'||g.period==='mes') && g.target>0;}).map(function(g){ return skChip(a.goalId===g.id, esc(regGoalTitle(reg,g)), 'SK.a.goalId=\''+g.id+'\';skRe()'); }).join('')+'</div>';
+  if(needConsist && reg){
+    var gl = (reg.goals||[]).filter(function(g){return (g.period==='semana'||g.period==='mes') && g.target>0;}), ng = SK.o.ng || (SK.o.ng={n:'',per:'semana'});
+    h += skLbl('Constancia')+skNote('La constancia es el porcentaje de semanas o meses en que cumpliste una meta de este registro. Sin meta, cuenta las semanas con práctica.')+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+skChip(!a.goalId,'Semanas con práctica','SK.a.goalId=\'\';skRe()')+gl.map(function(g){ var inPlan=(S.tasks||[]).some(function(t){return t.regGoalId===g.id;}); return skChip(a.goalId===g.id, esc(regGoalTitle(reg,g))+(inPlan?' · en Plan':''), 'SK.a.goalId=\''+g.id+'\';skRe()'); }).join('')+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px;color:var(--ink-soft);"><span>Nueva meta:</span><input type="number" inputmode="numeric" min="1" placeholder="N" value="'+esc(ng.n)+'" oninput="SK.o.ng.n=this.value" style="width:56px;border:1.5px solid var(--line);border-radius:9px;padding:6px;text-align:center;background:var(--paper);color:var(--ink);font-family:Inter,sans-serif;"/><span>veces por</span>'+skChip(ng.per==='semana','semana','SK.o.ng.per=\'semana\';skRe()')+skChip(ng.per==='mes','mes','SK.o.ng.per=\'mes\';skRe()')+'</div>'+
+      '<button class="cat-tab-btn" onclick="skNewGoal()" style="padding:6px 12px;font-size:12.5px;margin-top:8px;">Crear meta y añadirla al Plan</button>';
   }
   if(a.mode==='effort' || a.mode==='mixed') h += skLbl('Esfuerzo')+skNote('Suma el XP de todo lo que cuente para esta habilidad. ¿En qué nivel tiene 100 puntos?')+'<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="flex:1;">Nivel para 100 puntos</span>'+[5,8,10,15].map(function(n){ return skChip(+a.lvTarget===n, String(n), 'SK.a.lvTarget='+n+';skRe()'); }).join('')+'</div>';
   if(a.mode!=='manual'){
@@ -8057,6 +8193,8 @@ function skSave(){
   if(!tr.axes) tr.axes = [];
   if(o.id) tr.axes = tr.axes.map(function(x){ return x.id===o.id ? Object.assign({}, x, o) : x; });
   else { if(skAxes(tr).length>=7){ toast('Máximo 7 habilidades'); return; } o.id = uid(); tr.axes.push(o); }
+  if(o.regId) skEnsureSource(tr, o.regId);
+  if((o.taskKeys||[]).length && tr.source && tr.source.type==='manual'){ (S.tasks||[]).forEach(function(t){ if(o.taskKeys.indexOf(skNorm(t.text))>=0 && (tr.source.taskIds||[]).indexOf(t.id)<0){ tr.source.taskIds = (tr.source.taskIds||[]).concat([t.id]); } }); }
   saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); render(); toast('✓ Habilidad guardada');
 }
 function skDelete(){
@@ -8074,21 +8212,202 @@ function skEntryAxes(reg){
   });
   return out;
 }
-function enAxesHTML(){
-  var reg = regById(EN.regId); if(!reg || reg.kind==='finance') return '';
+function axesPickHTML(reg, sel, lab, fn, cid){
+  if(!reg || reg.kind==='finance') return '';
   var list = skEntryAxes(reg); if(!list.length) return '';
+  var multi = {}; list.forEach(function(x){ multi[x.tr.id]=1; });
+  return '<div id="'+cid+'" style="margin-bottom:14px;">'+mSecLabel('Cuenta para')+'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+list.map(function(x){
+    var auto = skMatch(x.a, reg, {label:lab, axes:[]})==='rule', on = auto || sel.indexOf(x.a.id)>=0;
+    return '<button type="button" onclick="'+(auto?'':fn+'(\''+x.a.id+'\')')+'" style="padding:6px 11px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?x.a.color:'var(--line)')+';background:'+(on?x.a.color+'22':'transparent')+';color:'+(on?'var(--ink)':'var(--muted)')+';">'+(on?'✓ ':'')+esc(x.a.name)+(Object.keys(multi).length>1?' <span style="opacity:.6;font-weight:500;">· '+esc(x.tr.name)+'</span>':'')+(auto?' <span style="opacity:.6;font-weight:500;">auto</span>':'')+'</button>';
+  }).join('')+'</div></div>';
+}
+function axesSwap(id, html){ var e = document.getElementById(id); if(!e) return; var t=document.createElement('div'); t.innerHTML = html; if(t.firstChild) e.replaceWith(t.firstChild); }
+function enAxesHTML(){
+  var reg = regById(EN.regId); if(!reg) return '';
   if(!EN.axes) EN.axes = ((EN.existing && EN.existing.axes) || []).slice();
   var lab = ((document.getElementById('en-label')||{}).value) || (EN.existing?EN.existing.label:'') || EN.presetLabel || '';
-  var multi = {}; list.forEach(function(x){ multi[x.tr.id]=1; });
-  return '<div id="en-axes" style="margin-bottom:14px;">'+mSecLabel('Cuenta para')+'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+list.map(function(x){
-    var auto = skMatch(x.a, reg, {label:lab, axes:[]})==='rule', on = auto || EN.axes.indexOf(x.a.id)>=0;
-    return '<button type="button" onclick="'+(auto?'':'enToggleAxis(\''+x.a.id+'\')')+'" style="padding:6px 11px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?x.a.color:'var(--line)')+';background:'+(on?x.a.color+'22':'transparent')+';color:'+(on?'var(--ink)':'var(--muted)')+';">'+(on?'✓ ':'')+esc(x.a.name)+(Object.keys(multi).length>1?' <span style="opacity:.6;font-weight:500;">· '+esc(x.tr.name)+'</span>':'')+(auto?' <span style="opacity:.6;font-weight:500;">auto</span>':'')+'</button>';
-  }).join('')+'</div></div>';
+  return axesPickHTML(reg, EN.axes, lab, 'enToggleAxis', 'en-axes');
 }
 function enToggleAxis(id){
   if(!EN.axes) EN.axes = [];
   var i = EN.axes.indexOf(id); if(i>=0) EN.axes.splice(i,1); else EN.axes.push(id);
-  var e = document.getElementById('en-axes'); if(e){ var t=document.createElement('div'); t.innerHTML = enAxesHTML(); if(t.firstChild) e.replaceWith(t.firstChild); }
+  axesSwap('en-axes', enAxesHTML());
+}
+function qaAxesHTML(){ var reg = regById(QA.regId); if(!reg||reg.kind!=='metrics') return ''; if(!QA.axes) QA.axes = []; return axesPickHTML(reg, QA.axes, QA.label||'', 'qaToggleAxis', 'qa-axes'); }
+function qaToggleAxis(id){ if(!QA.axes) QA.axes=[]; var i=QA.axes.indexOf(id); if(i>=0) QA.axes.splice(i,1); else QA.axes.push(id); axesSwap('qa-axes', qaAxesHTML()); }
+
+// ── Registro de ciclo menstrual ─────────────────────────────────────────────
+// Un solo registro por persona (kind:'cycle'), gratis y fuera del cupo de registros.
+// Privado por defecto: no viaja a la nube salvo que se active. Las fechas y fases
+// son ESTIMACIONES calculadas con tus propios datos (no sirven como anticonceptivo).
+var CY_FLOW = [[0,'Sin sangrado'],[1,'Manchado'],[2,'Leve'],[3,'Medio'],[4,'Abundante']];
+var CY_SYM = ['Cólicos','Dolor de cabeza','Hinchazón','Sensibilidad mamaria','Dolor lumbar','Fatiga','Náuseas','Acné','Antojos','Insomnio','Dolor de piernas','Mareos'];
+var CY_MOOD = ['Con energía','Feliz','Tranquila','Sensible','Irritable','Ansiosa','Triste','Sin ganas'];
+var CY_DISCH = ['Seco','Cremoso','Acuoso','Clara de huevo'];
+var CY = null, _cyMonth = 0;
+function cyReg(){ return (S.registries||[]).find(function(r){return r.kind==='cycle' && !r.del;})||null; }
+function cyPd(ds){ var a=ds.split('-'); return new Date(+a[0],+a[1]-1,+a[2],12); }
+function cyAdd(ds,n){ var d=cyPd(ds); d.setDate(d.getDate()+n); return localDateStr(d); }
+function cyDiff(a,b){ return Math.round((cyPd(b)-cyPd(a))/864e5); }
+function cyCfg(reg){ return Object.assign({cycle:28, period:5, luteal:14}, reg.cfg||{}); }
+function cyCreate(){
+  if(cyReg()){ openRegistryView(cyReg().id); return; }
+  if(featureLocked('cycle')){ toast('Próximamente'); return; }
+  var r = {id:uid(), kind:'cycle', name:'Ciclo', color:'#c2577a', entries:[], goals:[], metrics:[], private:true, cfg:{cycle:28,period:5,luteal:14}, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
+  S.registries = (S.registries||[]).concat([r]); saveState(); render(); openRegistryView(r.id);
+}
+function cyEntryOn(reg, ds){ return regEntries(reg).find(function(e){return e.date===ds;})||null; }
+function cyPeriods(reg){
+  var days = regEntries(reg).filter(function(e){return e.flow>=2;}).map(function(e){return e.date;}).sort(), out = [];
+  days.forEach(function(d){
+    var last = out[out.length-1];
+    if(last && cyDiff(last.end, d)<=2){ last.end = d; } else out.push({start:d, end:d});
+  });
+  out.forEach(function(p){ p.len = cyDiff(p.start,p.end)+1; });
+  return out;
+}
+function cyStats(reg){
+  var cfg = cyCfg(reg), per = cyPeriods(reg), cycles = [];
+  for(var i=1;i<per.length;i++){ var L = cyDiff(per[i-1].start, per[i].start); if(L>=15 && L<=60) cycles.push({start:per[i-1].start, len:L}); }
+  var rec = cycles.slice(-6), avg = cfg.cycle, sd = 0;
+  if(rec.length){ var w=0,s=0; rec.forEach(function(c,i){ var k=i+1; s+=c.len*k; w+=k; }); avg = s/w; if(rec.length>1){ var m = rec.reduce(function(a,c){return a+c.len;},0)/rec.length; sd = Math.sqrt(rec.reduce(function(a,c){return a+(c.len-m)*(c.len-m);},0)/(rec.length-1)); } }
+  var plRec = per.slice(-6), plen = plRec.length ? plRec.reduce(function(a,p){return a+p.len;},0)/plRec.length : cfg.period;
+  return {periods:per, cycles:cycles, avg:avg, sd:sd, n:rec.length, plen:Math.max(1,Math.round(plen)), cfg:cfg, margin: rec.length>=3 ? Math.min(5,Math.max(1,Math.round(sd))) : 3};
+}
+// Predicciones de los próximos ciclos: [{start, end, ov, fertFrom, fertTo, lo, hi}]
+function cyPredict(reg, st, count){
+  var last = st.periods[st.periods.length-1]; if(!last) return [];
+  var avg = Math.round(st.avg), out = [], base = last.start;
+  for(var k=1;k<=count;k++){
+    var s = cyAdd(base, avg*k), ov = cyAdd(s, -st.cfg.luteal);
+    out.push({start:s, end:cyAdd(s,st.plen-1), ov:ov, fertFrom:cyAdd(ov,-5), fertTo:cyAdd(ov,1), lo:cyAdd(s,-st.margin), hi:cyAdd(s,st.margin)});
+  }
+  // ventana fértil del ciclo en curso (si aún no llega la ovulación)
+  var ov0 = cyAdd(base, avg-st.cfg.luteal); out.unshift({cur:true, ov:ov0, fertFrom:cyAdd(ov0,-5), fertTo:cyAdd(ov0,1)});
+  return out;
+}
+function cyNow(reg, st){
+  var today = todayStr(), last = st.periods[st.periods.length-1];
+  if(!last) return {phase:null};
+  var day = cyDiff(last.start, today)+1, avg = Math.round(st.avg), ovDay = avg-st.cfg.luteal+1, nxt = cyAdd(last.start, avg), late = cyDiff(nxt, today);
+  var phase = day<=st.plen ? 'Menstruación' : (day>=ovDay-5 && day<ovDay-0 ? 'Ventana fértil' : (day===ovDay ? 'Ovulación estimada' : (day<ovDay ? 'Fase folicular' : 'Fase lútea')));
+  if(day>=ovDay-5 && day<=ovDay+1 && day>st.plen) phase = day===ovDay ? 'Ovulación estimada' : 'Ventana fértil';
+  return {phase:phase, day:day, next:nxt, late:late>0?late:0, within:late>0 && late<=st.margin, lo:cyAdd(nxt,-st.margin), hi:cyAdd(nxt,st.margin)};
+}
+function cySummary(reg){
+  var st = cyStats(reg), nw = cyNow(reg, st);
+  if(!nw.phase) return 'Anota el primer día de tu regla';
+  return 'Día '+nw.day+' · '+nw.phase+(nw.late?(nw.within?' · puede llegar hoy':' · '+nw.late+' día'+(nw.late===1?'':'s')+' de retraso'):' · próxima ~'+fmtShortDate(nw.next));
+}
+function cyFmtRange(a,b){ return a===b ? fmtShortDate(a) : fmtShortDate(a)+' – '+fmtShortDate(b); }
+// ── Calendario ──
+function cyCalHTML(reg, st){
+  var base = new Date(); base.setDate(1); base.setHours(12,0,0,0); base.setMonth(base.getMonth()+_cyMonth);
+  var y = base.getFullYear(), m = base.getMonth(), first = new Date(y,m,1,12), lead = (first.getDay()+6)%7, dim = new Date(y,m+1,0).getDate();
+  var pred = cyPredict(reg, st, 3), today = todayStr(), mon = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][m];
+  var logged = {}; regEntries(reg).forEach(function(e){ logged[e.date]=e; });
+  var cells = ''; for(var i=0;i<lead;i++) cells += '<div></div>';
+  for(var d=1; d<=dim; d++){
+    var ds = y+'-'+('0'+(m+1)).slice(-2)+'-'+('0'+d).slice(-2), e = logged[ds], isP = e && e.flow>=2, spot = e && e.flow===1, pp = false, fert = false, ov = false;
+    pred.forEach(function(p){ if(p.start && ds>=p.start && ds<=p.end) pp = true; if(ds>=p.fertFrom && ds<=p.fertTo) fert = true; if(ds===p.ov) ov = true; });
+    if(isP) pp = false;
+    var bg = isP ? reg.color : (fert ? 'rgba(80,150,210,.18)' : 'transparent'), col = isP ? '#fff' : 'var(--ink)';
+    var bd = pp ? '1.8px dashed '+reg.color : (ds===today ? '1.8px solid var(--ink)' : '1.8px solid transparent');
+    cells += '<button onclick="cyDay(\''+reg.id+'\',\''+ds+'\')" style="aspect-ratio:1;border-radius:50%;border:'+bd+';background:'+bg+';color:'+col+';font-size:13px;font-weight:'+(ds===today?800:500)+';cursor:pointer;position:relative;font-family:Inter,sans-serif;padding:0;">'+d+
+      (spot&&!isP?'<span style="position:absolute;left:50%;bottom:3px;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:'+reg.color+';"></span>':'')+
+      (ov?'<span style="position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%;background:#3f7fbf;"></span>':'')+
+      (e && !isP && !spot && ((e.symptoms||[]).length||(e.mood||[]).length)?'<span style="position:absolute;left:50%;bottom:2px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--muted);"></span>':'')+'</button>';
+  }
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px;"><button onclick="cyMonth(-1)" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:4px 10px;">‹</button><span class="serif" style="font-weight:700;font-size:16px;text-transform:capitalize;">'+mon+' '+y+'</span><button onclick="cyMonth(1)" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;padding:4px 10px;">›</button></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center;font-size:10.5px;color:var(--muted);margin-bottom:4px;">'+['L','M','M','J','V','S','D'].map(function(x){return '<span>'+x+'</span>';}).join('')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">'+cells+'</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--muted);margin-top:10px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+reg.color+';vertical-align:-1px;"></span> Regla</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px dashed '+reg.color+';vertical-align:-1px;"></span> Prevista</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:rgba(80,150,210,.3);vertical-align:-1px;"></span> Ventana fértil</span><span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#3f7fbf;vertical-align:1px;"></span> Ovulación estimada</span></div>';
+}
+function cyMonth(n){ _cyMonth += n; var r=cyReg(), sh=document.getElementById('reg-view-sheet'); if(r&&sh) sh.innerHTML = regViewBodyHTML(r); }
+// ── Pantalla principal ──
+function cycleViewHTML(reg){
+  var st = cyStats(reg), nw = cyNow(reg, st), today = todayStr(), te = cyEntryOn(reg, today), cfg = st.cfg;
+  var head = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="serif" style="font-weight:700;font-size:20px;">Ciclo</span><button onclick="removeOverlay(\'reg-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>';
+  var hero;
+  if(!nw.phase){
+    hero = '<div style="background:'+reg.color+'18;border-radius:16px;padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;">Empecemos</div><div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;">Marca el primer día de tu última regla. Con 3 ciclos las fechas previstas se ajustan a ti.</div><button class="sbtn" style="width:100%;" onclick="cyStartToday()">Empezó mi regla hoy</button><button class="cat-tab-btn" style="margin-top:8px;" onclick="cyDay(\''+reg.id+'\',\''+todayStr()+'\')">Anotar otra fecha</button></div>';
+  } else {
+    hero = '<div style="background:'+reg.color+'18;border-radius:16px;padding:16px;margin-bottom:14px;"><div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Hoy</div><div style="display:flex;align-items:baseline;gap:8px;margin:2px 0 6px;"><span style="font-size:34px;font-weight:800;color:'+reg.color+';">Día '+nw.day+'</span><span style="font-size:15px;font-weight:700;color:var(--ink);">'+nw.phase+'</span></div>'+
+      '<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;">'+(nw.within?'Estás dentro del margen previsto (<b>'+cyFmtRange(nw.lo,nw.hi)+'</b>): tu regla puede llegar en cualquier momento.':nw.late?'Tu regla lleva <b>'+nw.late+' día'+(nw.late===1?'':'s')+' de retraso</b> respecto a lo previsto. Los ciclos varían; si es frecuente, conviene comentarlo con tu profesional de salud.':'Próxima regla prevista: <b>'+cyFmtRange(nw.lo,nw.hi)+'</b>'+(st.n<3?' <span style="color:var(--muted);">(estimación inicial, mejora con tus datos)</span>':''))+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:12px;"><button class="sbtn" style="flex:1;" onclick="cyStartToday()">'+(te&&te.flow>=2?'Regla anotada hoy ✓':'Empezó mi regla hoy')+'</button><button class="cbtn" style="flex:1;" onclick="cyDay(\''+reg.id+'\',\''+todayStr()+'\')">Anotar hoy</button></div></div>';
+  }
+  // estadísticas
+  var reg_ = st.n<2 ? '' : (st.sd<=2 ? 'Regular' : (st.sd<=4 ? 'Algo variable' : 'Irregular'));
+  var stats = '<div style="display:flex;gap:8px;margin:14px 0;">'+[['Ciclo promedio', Math.round(st.avg)+' días'],['Duración regla', st.plen+' días'],['Regularidad', reg_||'—']].map(function(x){ return '<div style="flex:1;background:var(--bg);border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:14px;font-weight:800;color:var(--ink);">'+x[1]+'</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">'+x[0]+'</div></div>'; }).join('')+'</div>';
+  var cyc = st.cycles.slice(-6), mx = Math.max.apply(null, cyc.map(function(c){return c.len;}).concat([35]));
+  var bars = cyc.length ? '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 8px;">Últimos ciclos</div>'+cyc.slice().reverse().map(function(c){ return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11.5px;"><span style="width:52px;color:var(--muted);">'+fmtShortDate(c.start)+'</span><div style="flex:1;height:8px;background:var(--line-soft);border-radius:4px;overflow:hidden;"><div style="height:100%;width:'+Math.round(c.len/mx*100)+'%;background:'+reg.color+';"></div></div><b style="width:42px;text-align:right;color:var(--ink);">'+c.len+' d</b></div>'; }).join('') : '';
+  // síntomas por fase
+  var cnt = {};
+  regEntries(reg).forEach(function(e){
+    if(!(e.symptoms||[]).length) return;
+    var prev = null; st.periods.forEach(function(p){ if(p.start<=e.date) prev = p; }); if(!prev) return;
+    var day = cyDiff(prev.start, e.date)+1, ovD = Math.round(st.avg)-cfg.luteal+1, ph = day<=st.plen?'durante la regla':(day<ovD-5?'en fase folicular':(day<=ovD+1?'cerca de la ovulación':'en fase lútea'));
+    e.symptoms.forEach(function(sy){ var o = cnt[sy] || (cnt[sy]={n:0,ph:{}}); o.n++; o.ph[ph]=(o.ph[ph]||0)+1; });
+  });
+  var top = Object.keys(cnt).sort(function(a,b){return cnt[b].n-cnt[a].n;}).slice(0,4);
+  var sym = top.length ? '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px;">Lo que más anotas</div>'+top.map(function(k){ var o=cnt[k], bp = Object.keys(o.ph).sort(function(a,b){return o.ph[b]-o.ph[a];})[0]; return '<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line-soft);"><span style="color:var(--ink);font-weight:600;">'+esc(k)+'</span><span style="color:var(--muted);">'+o.n+' vez'+(o.n===1?'':'ces')+(o.n>=3?' · sobre todo '+bp:'')+'</span></div>'; }).join('') : '';
+  var cfgH = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;">Ajustes</div>'+
+    [['cycle','Ciclo inicial (días)',cfg.cycle,'Se usa hasta tener 2 ciclos tuyos'],['period','Duración de la regla (días)',cfg.period,''],['luteal','Fase lútea (días)',cfg.luteal,'Entre la ovulación y la regla; suele ser 12–16']].map(function(x){ return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;"><span style="flex:1;color:var(--ink);">'+x[1]+(x[3]?'<div style="font-size:10.5px;color:var(--muted);">'+x[3]+'</div>':'')+'</span><input type="number" inputmode="numeric" value="'+x[2]+'" onchange="cySetCfg(\''+x[0]+'\',this.value)" style="width:62px;text-align:center;border:1.5px solid var(--line);border-radius:9px;padding:7px;font-size:15px;font-weight:700;background:var(--paper);color:var(--ink);font-family:Inter,sans-serif;"/></div>'; }).join('')+
+    '<label style="display:flex;align-items:flex-start;gap:10px;margin-top:12px;font-size:12.5px;color:var(--ink);cursor:pointer;"><input type="checkbox" '+(reg.private===false?'checked':'')+' onchange="cySetPrivate(!this.checked)" style="margin-top:3px;"/><span><b>Sincronizar con mi cuenta</b><div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:2px;">Apagado: tus datos de ciclo se quedan solo en este dispositivo y no viajan a la nube ni a las tarjetas para compartir. Si borras los datos del navegador o cambias de teléfono, se pierden.</div></span></label>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="cbtn" style="flex:1;font-size:12.5px;" onclick="cyExport()">Exportar CSV</button><button class="cbtn" style="flex:1;font-size:12.5px;color:var(--bad);" onclick="cyDelete()">Borrar todo</button></div>'+
+    '<div style="font-size:10.5px;color:var(--muted);line-height:1.55;margin-top:14px;text-align:left;">Las fechas de regla, ventana fértil y ovulación son estimaciones calculadas con tus propios registros. No son un método anticonceptivo ni un diagnóstico.</div>';
+  return head+hero+cyCalHTML(reg, st)+stats+bars+sym+cfgH;
+}
+function cyStartToday(){
+  var reg = cyReg(); if(!reg) return; var te = cyEntryOn(reg, todayStr());
+  if(te && te.flow>=2){ cyDay(reg.id, todayStr()); return; }
+  cyPut(reg, todayStr(), {flow:3}); toast('Regla anotada · día 1');
+}
+function cyPut(reg, ds, patch){
+  var ex = cyEntryOn(reg, ds), e = Object.assign({id:ex?ex.id:uid(), date:ds, ts:Date.now()}, ex||{}, patch);
+  var empty = !(e.flow>0) && !(e.symptoms||[]).length && !(e.mood||[]).length && !e.disch && !e.temp && !(e.note||'').trim();
+  reg.entries = (reg.entries||[]).filter(function(x){return x.date!==ds;});
+  if(!empty) reg.entries.push(e);
+  reg.updatedAt = new Date().toISOString(); saveState(); try{ refreshRegViews(); }catch(err){}
+}
+function cySetCfg(k,v){ var reg=cyReg(); if(!reg) return; var n=Math.round(+v); var lim={cycle:[20,45],period:[1,10],luteal:[9,18]}[k]; if(!(n>=lim[0]&&n<=lim[1])){ toast('Valor entre '+lim[0]+' y '+lim[1]); refreshRegViews(); return; } reg.cfg = Object.assign({}, cyCfg(reg)); reg.cfg[k]=n; reg.updatedAt=new Date().toISOString(); saveState(); refreshRegViews(); }
+function cySetPrivate(p){ var reg=cyReg(); if(!reg) return; reg.private = p; reg.updatedAt=new Date().toISOString(); saveState(); toast(p?'Solo en este dispositivo':'Se sincronizará con tu cuenta'); }
+function cyExport(){
+  var reg=cyReg(); if(!reg) return; var q=function(v){ v=(v==null?'':String(v)); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  var rows=[['Fecha','Sangrado','Síntomas','Ánimo','Flujo','Temperatura','Nota']].concat(regEntries(reg).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(e){ return [e.date,(CY_FLOW.find(function(f){return f[0]===e.flow;})||[0,''])[1],(e.symptoms||[]).join(' | '),(e.mood||[]).join(' | '),e.disch||'',e.temp||'',e.note||'']; }));
+  var blob=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(';');}).join('\n')],{type:'text/csv'}), a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ciclo.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); },500);
+}
+function cyDelete(){ if(!confirm('¿Borrar todos los datos de tu ciclo? No se puede deshacer.')) return; var reg=cyReg(); if(!reg) return; reg.del=true; reg.entries=[]; reg.updatedAt=new Date().toISOString(); saveState(); removeOverlay('reg-view'); render(); toast('Registro de ciclo borrado'); }
+// ── Hoja de un día ──
+function cyDay(regId, ds){
+  var reg = regById(regId); if(!reg) return; var e = cyEntryOn(reg, ds) || {};
+  CY = {regId:regId, date:ds, flow:e.flow||0, sym:(e.symptoms||[]).slice(), mood:(e.mood||[]).slice(), disch:e.disch||'', temp:e.temp||'', note:e.note||''};
+  var _o = document.getElementById('cy-day'); if(_o) _o.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='cy-day'; ov.style.zIndex = 650;
+  ov.addEventListener('click',function(x){ if(x.target===ov) removeOverlay('cy-day'); });
+  document.body.appendChild(ov); cyDraw();
+}
+function cyChip(on, label, fn, col){ return '<button type="button" onclick="'+fn+'" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?col:'var(--line)')+';background:'+(on?col+'22':'transparent')+';color:'+(on?'var(--ink)':'var(--muted)')+';">'+(on?'✓ ':'')+label+'</button>'; }
+function cyDraw(){
+  var ov = document.getElementById('cy-day'), reg = CY && regById(CY.regId); if(!ov||!reg) return; var c = reg.color, d = cyPd(CY.date);
+  var title = d.toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+  var lbl = function(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;">'+t+'</div>'; };
+  var wrap = function(x){ return '<div style="display:flex;flex-wrap:wrap;gap:7px;">'+x+'</div>'; };
+  brPutSheet(ov, '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:18px;text-transform:capitalize;">'+title+'</span><button onclick="removeOverlay(\'cy-day\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    lbl('Sangrado')+wrap(CY_FLOW.map(function(f){ return cyChip(CY.flow===f[0], f[1], 'CY.flow='+f[0]+';cyDraw()', c); }).join(''))+
+    lbl('Síntomas')+wrap(CY_SYM.map(function(x){ return cyChip(CY.sym.indexOf(x)>=0, x, 'cyTog(\'sym\',\''+x+'\')', c); }).join(''))+
+    lbl('Ánimo')+wrap(CY_MOOD.map(function(x){ return cyChip(CY.mood.indexOf(x)>=0, x, 'cyTog(\'mood\',\''+x+'\')', c); }).join(''))+
+    lbl('Flujo')+wrap(CY_DISCH.map(function(x){ return cyChip(CY.disch===x, x, 'CY.disch=(CY.disch===\''+x+'\'?\'\':\''+x+'\');cyDraw()', c); }).join(''))+
+    lbl('Temperatura basal (opcional)')+'<div style="display:flex;align-items:center;gap:8px;"><input type="number" step="0.01" inputmode="decimal" placeholder="36.50" value="'+esc(CY.temp)+'" oninput="CY.temp=this.value" style="width:100px;border:1.5px solid var(--line);border-radius:9px;padding:8px;font-size:15px;background:var(--paper);color:var(--ink);font-family:Inter,sans-serif;"/><span style="color:var(--muted);">°C</span></div>'+
+    lbl('Nota')+'<input class="finp" type="text" placeholder="Opcional" value="'+esc(CY.note)+'" oninput="CY.note=this.value"/>'+
+    '<div style="display:flex;gap:8px;margin-top:6px;"><button class="sbtn" style="flex:1;" onclick="cySave()">Guardar</button></div></div>');
+}
+function cyTog(k, v){ var a = CY[k], i = a.indexOf(v); if(i>=0) a.splice(i,1); else a.push(v); brRerender('cy-day', cyDraw); }
+function cySave(){
+  var reg = regById(CY.regId); if(!reg) return;
+  var t = parseFloat(String(CY.temp).replace(',','.'));
+  cyPut(reg, CY.date, {flow:CY.flow, symptoms:CY.sym.slice(), mood:CY.mood.slice(), disch:CY.disch, temp:isNaN(t)?'':t, note:(CY.note||'').trim()});
+  removeOverlay('cy-day'); toast('✓ Guardado');
 }
 
 function renderProjectsSection(){
@@ -10339,9 +10658,9 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       // Botón de temporizador (pedido): abre la pantalla de ejecución con
       // sets/descansos. La casilla de la izquierda sigue funcionando normal
       // para marcarla a mano, sin usar el temporizador — no son excluyentes.
-      taskAppChipHTML(t)+
       (hasTimer?'<button onclick="event.stopPropagation();openTimerRun(\''+t.id+'\')" title="'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'Continuar temporizador':'Iniciar temporizador')+'" style="background:'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'var(--ink)':'var(--accent)')+';border:none;color:#fff;font-size:12px;padding:0;width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="13" height="13" style="margin-left:1px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.5-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z"/></svg></button>':'')+
       // Insignia de vínculo: solo si la tarea está vinculada (editar y vincular viven en el menú ⋯ y al tocar el nombre)
+      taskAppChipHTML(t)+
       (_linked?'<button onclick="event.stopPropagation();openLinkModal(\''+t.id+'\')" title="Vinculada — toca para ver o cambiar" aria-label="Vinculada" style="background:none;border:none;color:var(--accent-text);opacity:.85;padding:0;width:28px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('link',14,1.8)+'</button>':'')+
       // Botón ⋯ menú
       '<button onclick="openTaskMenu(\''+t.id+'\',event)" aria-label="Más opciones" style="background:none;border:none;color:var(--muted);padding:0;width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('dots',20)+'</button>'+
@@ -10411,6 +10730,7 @@ function taskMenuBack(){ setTimeout(function(){ var m=document.getElementById('t
 function openTaskMenu(id, event){
   var prev = document.getElementById('task-menu-popup');
   if(prev && prev._t && Date.now()-prev._t<450 && prev._id===id) return; // doble toque: ignorar el segundo
+  if(prev && prev._id===id){ prev.remove(); return; } // segundo toque en el mismo ⋯: cerrar
   if(prev){prev.remove();}
   
   var t = S.tasks.find(function(x){return x.id===id;});
@@ -11688,7 +12008,7 @@ function renderLevelTracksSection(){
   var html = '<div class="card" style="margin-bottom:14px;">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:'+(tracks.length?4:2)+'px;">'+
       '<div style="font-weight:700;font-size:14px;color:var(--ink);">🎯 Seguimientos</div>'+
-      '<div style="font-size:11px;color:var(--muted);">'+tracks.length+'/'+maxSlots+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);">'+tracks.length+(maxSlots>=999?'':'/'+maxSlots)+'</div>'+
     '</div>';
   if(tracks.length){
     html += tracks.map(function(t,i){return levelTrackCardHTML(t,i,true);}).join('<div style="height:1px;background:var(--line-soft);margin:0 2px;"></div>');
@@ -11703,7 +12023,7 @@ function renderLevelTracksSection(){
 function trackLimitMessage(){
   var max = maxLevelTrackSlots(), prem = isPremium();
   var parts = [(prem?'Tu suscripción permite ':'Tu plan gratuito permite ')+max+' seguimiento'+(max===1?'':'s')+'.'];
-  if(!prem) parts.push('Con la suscripción son hasta 3.');
+  if(!prem) parts.push('Con la suscripción no hay límite.');
   var lv8 = getLevel(S.xp||0)>=8, medal = (S.bonusTrackSlots||0)>0;
   if(!lv8 || !medal){
     parts.push('Puedes desbloquear 1 cupo extra '+(!lv8&&!medal?'llegando al nivel 8, y otro con la medalla 🏔️ "Cima constante"':(!lv8?'llegando al nivel 8':'con la medalla 🏔️ "Cima constante"'))+'.');
@@ -12076,7 +12396,7 @@ function teSummaryHTML(){
   return '<div style="background:var(--bg);border:1px solid var(--line-soft);border-radius:12px;padding:10px 12px;margin-top:18px;font-size:12px;color:var(--ink-soft);line-height:1.5;"><div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">De dónde viene la XP</div>'+parts.join('')+'</div>';
 }
 function teRegAreaHTML(){
-  var regs = regList(); var t = TE.track, cur = t.regSources||[];
+  var regs = regList().filter(function(r){return r.kind!=='cycle';}); var t = TE.track, cur = t.regSources||[];
   var html = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;align-items:center;">Registro asociado'+infoBtn('trkreg')+'</div>';
   if(!regs.length) return html+'<div style="font-size:12px;color:var(--muted);">Aún no tienes registros. Créalos en la pestaña Registros.</div>';
   var xpSel = function(val, fn){ var o=''; for(var x=1;x<=15;x++) o+='<option value="'+x+'"'+(val===x?' selected':'')+'>'+x+' XP</option>'; return '<select class="finp" onchange="'+fn+'" style="margin:0;width:92px;font-size:13px;">'+o+'</select>'; };
@@ -16147,7 +16467,8 @@ function qaRecents(reg){
   return out;
 }
 function openQuickAdd(regId){
-  var regs = regList();
+  var _cr = regById(regId); if(_cr && _cr.kind==='cycle'){ cyDay(_cr.id, todayStr()); return; }
+  var regs = regList().filter(function(r){return r.kind!=='cycle';});
   removeOverlay('quick-add');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='quick-add'; ov.style.zIndex = 640; ov._t = Date.now();
   ov.addEventListener('click',function(e){ if(e.target===ov && Date.now()-ov._t>500) closeQuickAdd(); });
@@ -16157,7 +16478,7 @@ function openQuickAdd(regId){
       '<button onclick="closeQuickAdd();S.tab=\'proyectos\';S._projView=\'reg\';render();openRegEditor(null)" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Crear un registro</button></div>';
   } else {
     var pick = regById(regId) || regById(S._qaReg) || regs.filter(function(r){return r.kind==='finance';})[0] || regs[0];
-    QA = {regId:pick.id, dir:'out', status:'done', date:todayStr(), label:'', amount:'', values:{}};
+    QA = {regId:pick.id, dir:'out', status:'done', date:todayStr(), label:'', amount:'', values:{}, axes:[]};
     ov.innerHTML = '<div class="sheet" id="qa-sheet">'+qaBodyHTML()+'</div>';
   }
   document.body.appendChild(ov);
@@ -16165,7 +16486,7 @@ function openQuickAdd(regId){
 }
 function closeQuickAdd(){ removeOverlay('quick-add'); }
 function qaBodyHTML(){
-  var reg = regById(QA.regId), regs = regList();
+  var reg = regById(QA.regId), regs = regList().filter(function(r){return r.kind!=='cycle';});
   var chips = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;">'+regs.map(function(r){
     var on = r.id===reg.id;
     return '<button onclick="qaSelectReg(\''+r.id+'\')" style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:16px;border:1.5px solid '+(on?r.color:'var(--line)')+';background:'+(on?r.color+'22':'var(--paper)')+';color:'+(on?'var(--ink)':'var(--muted)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+regIcon(r)+' '+esc(r.name)+'</button>';
@@ -16195,10 +16516,10 @@ function qaBodyHTML(){
   return head+chips+recHTML+
     '<input id="qa-label" class="finp" type="text" list="qa-labels" placeholder="'+esc(reg.labelHint||'Concepto (opcional)')+'" value="'+esc(QA.label)+'" oninput="QA.label=this.value" style="margin:6px 0 10px;"/>'+dl+
     mets.map(function(m){ return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="font-size:13px;font-weight:600;color:var(--ink);flex:1;min-width:0;">'+esc(m.name)+'</span><input id="qa-m-'+m.id+'" class="finp" type="text" inputmode="decimal" placeholder="0" value="'+(QA.values[m.id]!=null?esc(String(QA.values[m.id])):'')+'" oninput="QA.values[\''+m.id+'\']=this.value" style="width:110px;margin:0;text-align:right;font-size:16px;font-weight:700;"/><span style="font-size:12px;color:var(--muted);width:44px;">'+esc(m.unit||'')+'</span></div>'; }).join('')+
-    dateRow+save('Guardar');
+    qaAxesHTML()+dateRow+save('Guardar');
 }
 function qaRefresh(){ var sh=document.getElementById('qa-sheet'); if(sh){ var d=document.getElementById('qa-date'); if(d) QA.date=d.value||QA.date; sh.innerHTML=qaBodyHTML(); } }
-function qaSelectReg(id){ var d=document.getElementById('qa-date'); if(d) QA.date=d.value||QA.date; QA.regId=id; QA.label=''; QA.amount=''; QA.values={}; S._qaReg=id; qaRefresh(); setTimeout(function(){ var a=document.getElementById('qa-amount')||document.getElementById('qa-label'); if(a&&a.focus) a.focus(); },60); }
+function qaSelectReg(id){ var d=document.getElementById('qa-date'); if(d) QA.date=d.value||QA.date; QA.regId=id; QA.label=''; QA.amount=''; QA.values={}; QA.axes=[]; S._qaReg=id; qaRefresh(); setTimeout(function(){ var a=document.getElementById('qa-amount')||document.getElementById('qa-label'); if(a&&a.focus) a.focus(); },60); }
 function qaDir(k){ QA.dir=k; mRefreshSeg('qa-dir-seg',k); }
 function qaStatus(k){ QA.status=k; mRefreshSeg('qa-st-seg',k); }
 function qaRecent(i){
@@ -16228,9 +16549,11 @@ function qaSave(){
     (reg.metrics||[]).forEach(function(m){ var v = parseNumInput(QA.values[m.id]||''); if(!isNaN(v)){ vals[m.id]=v; any=true; } });
     if(!any){ toast('Escribe al menos un valor'); return; }
     entry.values = vals; entry.note = ''; msg = 'Anotado en '+reg.name;
+    if(QA.axes && QA.axes.length) entry.axes = QA.axes.slice();
   }
   var recs = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
   reg.entries = (reg.entries||[]).concat([entry]); reg.updatedAt = new Date().toISOString();
+  try{ skEnsureForEntry(reg, entry); }catch(e){}
   try{ syncRegXP(reg, entry); }catch(e){}
   syncRegGoalsToPlan(reg); S._qaReg = reg.id; saveState();
   closeQuickAdd(); refreshRegViews();
@@ -18691,76 +19014,112 @@ function appLinkLabel(a){
   var m = /^https?:\/\/(?:www\.)?([^\/?#]+)/i.exec(a.url||''); if(m) return m[1];
   var sc = /^([a-z][a-z0-9+.\-]*):/i.exec(a.url||''); return sc ? sc[1] : 'Enlace';
 }
+function appHand(sz){ return '<svg width="'+(sz||16)+'" height="'+(sz||16)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 14a8 8 0 0 1-8 8"/><path d="M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1"/><path d="M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>'; }
+// Una tarea o un ítem puede tener varias apps/enlaces (apps:[{id?,name?,url}]); `app` es el formato antiguo.
+function appsOf(o){ return (o && o.apps && o.apps.length) ? o.apps : ((o && o.app && o.app.url) ? [o.app] : []); }
 function itemAppBtnHTML(item){
-  var has = !!(item.app && item.app.url);
-  return '<button onclick="mOpenItemApp(\''+item.id+'\')" title="Abrir una app o enlace" aria-label="Abrir una app o enlace" style="background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted-soft)')+';border-radius:7px;height:22px;width:24px;padding:0;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;">'+ico('open',12,2)+'</button>';
+  var n = appsOf(item).length, has = n>0;
+  return '<button onclick="mOpenItemApp(\''+item.id+'\')" title="Abrir una app o enlace" aria-label="Abrir una app o enlace" style="background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted-soft)')+';border-radius:7px;height:22px;min-width:24px;padding:0 '+(n>1?'5':'0')+'px;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:800;font-family:Inter,sans-serif;">'+appHand(12)+(n>1?n:'')+'</button>';
 }
 function itemAppChipHTML(t,item){
-  if(!(item.app && item.app.url) || item.done) return '';
-  return '<button class="cl-tm" onclick="event.stopPropagation();openItemApp(\''+t.id+'\',\''+item.id+'\')" aria-label="Abrir '+esc(appLinkLabel(item.app))+'">'+ico('open',10,2.2)+' '+esc(appLinkLabel(item.app)).slice(0,16)+'</button>';
+  if(!appsOf(item).length || item.done) return '';
+  return '<button class="cl-tm" onclick="event.stopPropagation();openAppFor(\''+t.id+'\',\''+item.id+'\')" aria-label="Abrir app o enlace" title="Abrir app o enlace">'+appHand(11)+'</button>';
 }
-function openItemApp(taskId, itemId){
-  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
-  var it = (t.checklist||[]).find(function(i){return i.id===itemId;}); if(!it || !it.app || !it.app.url) return;
-  var u = it.app.url;
-  try{
-    if(/^https?:/i.test(u)) window.open(u, '_blank', 'noopener');
-    else window.location.href = u;
-  }catch(e){ toast('No se pudo abrir el enlace'); }
-}
-// ── App/enlace a nivel de TAREA (además de los ítems de checklist) ──
 function taskAppBtnHTML(){
-  var a = M.task && M.task.app, has = !!(a && a.url);
-  return '<button type="button" onclick="mOpenItemApp(\'__task\')" aria-label="Abrir una app o enlace" style="display:inline-flex;align-items:center;gap:6px;background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted)')+';border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+ico('open',13,2)+' '+(has?esc(appLinkLabel(a)).slice(0,18):'Elegir')+'</button>';
+  var as = appsOf(M.task), has = as.length>0;
+  return '<button type="button" onclick="mOpenItemApp(\'__task\')" aria-label="Abrir una app o enlace" style="display:inline-flex;align-items:center;gap:6px;background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted)')+';border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+appHand(14)+' '+(!has?'Elegir':(as.length===1?esc(appLinkLabel(as[0])).slice(0,18):as.length+' apps'))+'</button>';
 }
+// Botón discreto de la fila: mismo tamaño que el de vincular, a su izquierda.
 function taskAppChipHTML(t){
-  if(!(t.app && t.app.url) || isDone(t)) return '';
-  return '<button onclick="event.stopPropagation();openTaskApp(\''+t.id+'\')" aria-label="Abrir '+esc(appLinkLabel(t.app))+'" title="Abrir '+esc(appLinkLabel(t.app))+'" style="background:var(--accent-bg);border:none;color:var(--accent-text);font-size:10.5px;font-weight:700;padding:0 8px;height:26px;border-radius:13px;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;font-family:Inter,sans-serif;">'+ico('open',11,2.2)+' '+esc(appLinkLabel(t.app)).slice(0,12)+'</button>';
+  if(!appsOf(t).length || isDone(t)) return '';
+  return '<button onclick="event.stopPropagation();openAppFor(\''+t.id+'\',null)" aria-label="Abrir app o enlace" title="Abrir app o enlace" style="background:none;border:none;color:var(--accent-text);opacity:.85;padding:0;width:28px;height:30px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;">'+appHand(16)+'</button>';
 }
-function openTaskApp(taskId){
-  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.app || !t.app.url) return;
-  var u = t.app.url;
+function appLaunch(a){
+  var u = a && a.url; if(!u) return;
   try{ if(/^https?:/i.test(u)) window.open(u, '_blank', 'noopener'); else window.location.href = u; }catch(e){ toast('No se pudo abrir el enlace'); }
 }
-function mOpenItemApp(id){
-  var item = id==='__task' ? {id:'__task', app:(M.task&&M.task.app)||null} : M.checklist.find(function(i){return i.id===id;}); if(!item) return;
-  removeOverlay('item-app-sheet');
-  var cur = item.app || null;
-  var ov = document.createElement('div'); ov.className='overlay'; ov.id='item-app-sheet'; ov.style.zIndex = 620;
-  ov.addEventListener('click', function(e){ if(e.target===ov) removeOverlay('item-app-sheet'); });
-  var cat = APP_CATALOG.map(function(a){
-    var on = cur && cur.id===a.id;
-    return '<button class="sc-chip'+(on?' on':'')+'" onclick="mSetItemApp(\''+id+'\',\''+a.id+'\')">'+esc(a.name)+'</button>';
-  }).join('');
-  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:19px;">Abrir una app</span><button onclick="removeOverlay(\'item-app-sheet\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:4px;">Habrá un botón que abre la app o el enlace que elijas.</div>'+
-    '<div class="sc-lbl">Apps frecuentes</div><div class="sc-row">'+cat+'</div>'+
-    '<div class="sc-lbl">O pega tu propio enlace</div>'+
-    '<input id="app-url-in" type="url" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="https://… o strava://…" value="'+esc(cur && !cur.id ? cur.url : '')+'" style="width:100%;border:1.5px solid var(--field-line,var(--line));border-radius:10px;padding:11px 12px;font-size:16px;font-family:Inter,sans-serif;background:var(--bg);color:var(--ink);outline:none;"/>'+
-    '<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-top:8px;">En la app que quieras, usa «Compartir → Copiar enlace» y pégalo aquí. Con enlaces normales (https) se abre la app si la tienes instalada; si no, se abre la página web. Gramifica no puede saber qué apps tienes instaladas.</div>'+
-    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="sbtn" onclick="mSaveItemApp(\''+id+'\')">Guardar</button>'+(cur?'<button class="cbtn" onclick="mClearItemApp(\''+id+'\')">Quitar</button>':'')+'</div></div>';
-  document.body.appendChild(ov);
-}
-function mApplyItemApp(id, app){
-  if(id==='__task'){
-    if(app) M.task.app = app; else delete M.task.app;
-    removeOverlay('item-app-sheet'); var w=document.getElementById('m-app-wrap'); if(w) w.innerHTML = taskAppBtnHTML(); return;
+// Abrir un botón: lanza la app y, salvo que el usuario lo haya desactivado, marca el ítem o avanza la tarea.
+function appAdvance(taskId, itemId, nApps){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  if(itemId){
+    var it = (t.checklist||[]).find(function(i){return i.id===itemId;}); if(!it || it.appAuto===false || it.done) return;
+    stepCL(taskId, itemId, 1); return;
   }
-  M.checklist = M.checklist.map(function(i){ if(i.id!==id) return i; var n = Object.assign({}, i); if(app) n.app = app; else delete n.app; return n; });
-  removeOverlay('item-app-sheet'); mRerenderCL();
+  if(t.appAuto===false || (t.checklist && t.checklist.length)) return;
+  if((t.qty||1)>1){ if(nApps>1 && (t.prog||0)<t.qty) setTaskProg(taskId, (t.prog||0)+1); return; }
+  if(!isDone(t)) tapTask(taskId);
 }
-function mSetItemApp(id, appId){
-  var a = APP_CATALOG.find(function(x){return x.id===appId;}); if(!a) return;
-  mApplyItemApp(id, {id:a.id, name:a.name, url:a.url});
+var AO = null;
+function openAppFor(taskId, itemId){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  var owner = itemId ? (t.checklist||[]).find(function(i){return i.id===itemId;}) : t, apps = appsOf(owner);
+  if(!apps.length) return;
+  if(apps.length===1){ appLaunch(apps[0]); appAdvance(taskId, itemId, 1); return; }
+  AO = {taskId:taskId, itemId:itemId||null, done:{}};
+  var _o = document.getElementById('app-open'); if(_o) _o.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='app-open'; ov.style.zIndex = 620;
+  ov.addEventListener('click', function(e){ if(e.target===ov) removeOverlay('app-open'); });
+  document.body.appendChild(ov); appOpenDraw();
 }
-function mSaveItemApp(id){
-  var el = document.getElementById('app-url-in'), raw = el ? el.value : '';
-  if(!String(raw).trim()){ toast('Elige una app o pega un enlace'); return; }
-  var u = appLinkNormalize(raw);
-  if(!u){ toast('Ese enlace no parece válido'); return; }
-  mApplyItemApp(id, {url:u});
+function appOpenDraw(){
+  var ov = document.getElementById('app-open'); if(!ov || !AO) return;
+  var t = S.tasks.find(function(x){return x.id===AO.taskId;}); if(!t){ ov.remove(); return; }
+  var owner = AO.itemId ? (t.checklist||[]).find(function(i){return i.id===AO.itemId;}) : t, apps = appsOf(owner||{});
+  var auto = owner && owner.appAuto!==false, hint = !auto ? '' : (AO.itemId ? 'Al abrir una, el ítem se marca como hecho.' : ((t.qty||1)>1 ? 'Cada una que abras suma 1 al avance.' : 'Al abrir una, la tarea se marca como hecha.'));
+  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">Abrir</span><button onclick="removeOverlay(\'app-open\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">'+esc((owner&&owner.text)||t.text||'')+(hint?' · '+hint:'')+'</div>'+
+    apps.map(function(a,i){ var d = AO.done[i]; return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:12px;margin-bottom:8px;"><span style="flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(appLinkLabel(a))+'</span><button onclick="appOpenGo('+i+')" style="display:inline-flex;align-items:center;gap:6px;background:'+(d?'var(--bg)':'var(--accent)')+';color:'+(d?'var(--accent-text)':'#fff')+';border:'+(d?'1.5px solid var(--accent)':'none')+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(d?ico('check2',13,2.6):appHand(14))+' '+(d?'Abierta':'Abrir')+'</button></div>'; }).join('')+'</div>';
 }
-function mClearItemApp(id){ mApplyItemApp(id, null); }
+function appOpenGo(i){
+  if(!AO) return; var t = S.tasks.find(function(x){return x.id===AO.taskId;}); if(!t) return;
+  var owner = AO.itemId ? (t.checklist||[]).find(function(x){return x.id===AO.itemId;}) : t, apps = appsOf(owner||{}), a = apps[i]; if(!a) return;
+  var first = !AO.done[i]; AO.done[i] = true;
+  appLaunch(a);
+  if(first) appAdvance(AO.taskId, AO.itemId, apps.length);
+  appOpenDraw();
+}
+function openItemApp(taskId, itemId){ openAppFor(taskId, itemId); }
+function openTaskApp(taskId){ openAppFor(taskId, null); }
+// ── Editor: lista de apps de una tarea o ítem ──
+function mAppOwner(id){ return id==='__task' ? (M.task||null) : (M.checklist||[]).find(function(i){return i.id===id;}) || null; }
+function mAppWrite(id, apps){
+  var f = function(o){ var n = Object.assign({}, o); if(apps.length) n.apps = apps; else delete n.apps; delete n.app; return n; };
+  if(id==='__task'){ M.task = f(M.task); var w=document.getElementById('m-app-wrap'); if(w) w.innerHTML = taskAppBtnHTML(); }
+  else { M.checklist = M.checklist.map(function(i){ return i.id===id ? f(i) : i; }); mRerenderCL(); }
+}
+function mOpenItemApp(id){
+  if(!mAppOwner(id)) return;
+  var _o = document.getElementById('item-app-sheet'); if(_o) _o.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='item-app-sheet'; ov.style.zIndex = 620; ov._id = id;
+  ov.addEventListener('click', function(e){ if(e.target===ov) removeOverlay('item-app-sheet'); });
+  document.body.appendChild(ov); mAppDraw();
+}
+function mAppDraw(){
+  var ov = document.getElementById('item-app-sheet'); if(!ov) return; var id = ov._id, o = mAppOwner(id); if(!o) return;
+  var apps = appsOf(o), auto = o.appAuto!==false, isTask = id==='__task', qty = isTask && (M.task.qty||1)>1 && !(M.checklist&&M.checklist.length);
+  var cat = APP_CATALOG.map(function(a){ return '<button class="sc-chip" onclick="mAddApp(\''+a.id+'\')">'+esc(a.name)+'</button>'; }).join('');
+  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:19px;">Apps y enlaces</span><button onclick="removeOverlay(\'item-app-sheet\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:8px;">Puedes añadir más de una. Si hay varias, el botón abre una lista con cada una.</div>'+
+    (apps.length ? apps.map(function(a,i){ return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:10px;margin-bottom:6px;"><span style="color:var(--accent-text);display:inline-flex;">'+appHand(14)+'</span><span style="flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(appLinkLabel(a))+'</span><button onclick="mDelApp('+i+')" aria-label="Quitar" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;">×</button></div>'; }).join('') : '<div style="font-size:12.5px;color:var(--muted);padding:6px 0 10px;">Todavía no hay ninguna.</div>')+
+    '<div class="sc-lbl">Apps frecuentes</div><div class="sc-row">'+cat+'</div>'+
+    '<div class="sc-lbl">O pega un enlace</div><div style="display:flex;gap:8px;"><input id="app-url-in" type="url" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="https://… o strava://…" style="flex:1;min-width:0;border:1.5px solid var(--field-line);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--paper);color:var(--ink);font-family:Inter,sans-serif;"/><button class="sbtn" style="padding:10px 16px;font-size:13px;" onclick="mAddAppUrl()">Añadir</button></div>'+
+    '<div style="font-size:11px;color:var(--muted);line-height:1.55;margin-top:8px;">En la app que quieras, usa «Compartir → Copiar enlace». Con enlaces https se abre la app si la tienes instalada; si no, la web.</div>'+
+    '<label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:12.5px;color:var(--ink);cursor:pointer;"><input type="checkbox" '+(auto?'checked':'')+' onchange="mSetAppAuto(this.checked)" style="margin-top:3px;"/><span><b>Marcar al abrir</b><div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:2px;">'+(isTask?(qty?'Con varias apps, cada una que abras suma 1 al avance.':'Abrir una app marca la tarea como hecha.'):'Abrir una app marca el ítem como hecho.')+' Apágalo si prefieres marcarlo tú.</div></span></label>'+
+    '<button class="sbtn" style="width:100%;margin-top:14px;" onclick="removeOverlay(\'item-app-sheet\')">Listo</button></div>';
+}
+function mAddApp(appId){ var ov=document.getElementById('item-app-sheet'), a=APP_CATALOG.find(function(x){return x.id===appId;}); if(!ov||!a) return; var o=mAppOwner(ov._id), apps=appsOf(o).slice(); if(apps.some(function(x){return x.id===a.id;})){ toast('Ya está en la lista'); return; } apps.push({id:a.id,name:a.name,url:a.url}); mAppWrite(ov._id, apps); mAppDraw(); }
+function mAddAppUrl(){
+  var ov=document.getElementById('item-app-sheet'); if(!ov) return; var el=document.getElementById('app-url-in'), raw=el?el.value:'';
+  if(!String(raw).trim()){ toast('Pega un enlace'); return; }
+  var u = appLinkNormalize(raw); if(!u){ toast('Ese enlace no parece válido'); return; }
+  var apps = appsOf(mAppOwner(ov._id)).slice(); apps.push({url:u}); mAppWrite(ov._id, apps); mAppDraw();
+}
+function mDelApp(i){ var ov=document.getElementById('item-app-sheet'); if(!ov) return; var apps=appsOf(mAppOwner(ov._id)).slice(); apps.splice(i,1); mAppWrite(ov._id, apps); mAppDraw(); }
+function mSetAppAuto(v){
+  var ov=document.getElementById('item-app-sheet'); if(!ov) return; var id=ov._id;
+  var f = function(o){ var n=Object.assign({},o); if(v) delete n.appAuto; else n.appAuto=false; return n; };
+  if(id==='__task') M.task = f(M.task); else M.checklist = M.checklist.map(function(i){ return i.id===id ? f(i) : i; });
+}
 function itemTmPlayHTML(t,item,compact){ return itemTmPlayInner(t,item,compact)+itemAppChipHTML(t,item); }
 function itemTmPlayInner(t,item,compact){
   if(!(item.timer && item.timer.sec>0) || item.done) return '';
@@ -20870,6 +21229,7 @@ function grantNotif(){
     if(perm === 'granted'){
       toast('✓ Notificaciones activadas');
       scheduleNotifications();
+      schedulePushSync(true);
     } else {
       toast('Permiso denegado en el sistema');
     }
@@ -20878,6 +21238,7 @@ function grantNotif(){
 }
 function revokeNotif(){
   S.notifPermission = 'revoked';
+  try{ clearPushQueue(); }catch(e){}
   saveState();
   render();
   toast('Recordatorios desactivados');
@@ -21125,7 +21486,7 @@ function nextRegReminderTime(rr, now){
 }
 
 function showLocalNotification(title, body, tag){
-  var opts={body:body, icon:'icon-192.png', badge:'icon-192.png', tag:tag||undefined};
+  var opts={body:body, icon:'icon-192.png', badge:'badge-96.png', tag:tag||undefined}; // badge = silueta blanca sobre transparente (ícono de la barra de estado)
   function fallback(){ try{ new Notification(title, opts); return true; }catch(e){ return false; } }
   if('serviceWorker' in navigator){
     return navigator.serviceWorker.getRegistration().then(function(reg){
@@ -21312,6 +21673,9 @@ function scheduleNotifications(){
   _notifTimers = [];
   if(S.notifPermission !== 'granted') return;
   if(typeof Notification === 'undefined') return;
+  // Con avisos por servidor activos (FCM) no se programan timers locales:
+  // los enviaría dos veces, y además mueren cuando Android cierra la app.
+  if(pushActive()){ schedulePushSync(true); return; }
   var today = todayIdx();
   var now = new Date();
   // Solo tareas que el usuario activó explícitamente con "🔔 Recordatorio
@@ -21370,6 +21734,194 @@ function scheduleNotifications(){
   scheduleStreakRiskWarning();
   scheduleRegReminder();
   if(_notifTimers.length) console.log('[Notif] '+_notifTimers.length+' recordatorio(s) programado(s) para hoy');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🔔 AVISOS POR SERVIDOR (FCM) — funcionan con la app cerrada
+// ═══════════════════════════════════════════════════════════════════════
+// Los timers de arriba (setTimeout) mueren cuando Android cierra la app.
+// Para que los avisos lleguen siempre, la app calcula los próximos días de
+// avisos y los guarda en Firestore (colección "pushQueue", un documento por
+// aviso con su hora exacta). Una Cloud Function programada (ver carpeta
+// functions/) corre cada minuto, envía por FCM los que ya tocan y los borra.
+// La cola se recalcula cada vez que cambian tareas o ajustes (con espera de
+// 12 s y solo si algo cambió de verdad). Si el servidor no está disponible,
+// se siguen usando los timers locales como respaldo.
+var PUSH_HORIZON_DAYS = 7;
+var PUSH_MAX_ITEMS = 250;
+var _pushSyncTimer = null, _pushSyncBusy = false, _pushLastSig = null;
+
+function _pushHash(str){ var h=5381; for(var i=0;i<str.length;i++){ h=((h<<5)+h+str.charCodeAt(i))|0; } return (h>>>0).toString(36); }
+// ¿Hay sesión + permiso + token + cola ya sincronizada para este usuario?
+function pushActive(){
+  try{ return !!(firebaseAvailable && currentUser && S.notifPermission==='granted' && localStorage.getItem('og6-push-ok')===currentUser.uid); }
+  catch(e){ return false; }
+}
+function pushWanted(){
+  return !!(firebaseAvailable && currentUser && typeof db!=='undefined' && db && S.notifPermission==='granted' &&
+            typeof Notification!=='undefined' && Notification.permission==='granted');
+}
+function schedulePushSync(now){
+  try{
+    if(!pushWanted()) return;
+    if(_pushSyncTimer) clearTimeout(_pushSyncTimer);
+    _pushSyncTimer = setTimeout(function(){ _pushSyncTimer=null; syncPushQueue(); }, now?800:12000);
+  }catch(e){}
+}
+
+// Calcula los avisos de los próximos días como [{sendAt(ms), title, body, tag}].
+// Replica las mismas reglas que los timers locales (tareas con aviso,
+// recordatorios sueltos, revisión diaria, racha en riesgo, anotar gastos),
+// respetando el horario de silencio.
+function buildPushItems(){
+  var items = [], now = new Date(), nowMs = now.getTime();
+  var limitMs = nowMs + PUSH_HORIZON_DAYS*86400000;
+  function add(date, kind, key, body){
+    date = pushPastQuietHours(date);
+    var ms = date.getTime();
+    if(ms < nowMs+20000 || ms > limitMs) return;
+    items.push({sendAt:ms, title:'Gramifica', body:body, tag:'g-'+kind+'-'+key});
+  }
+  function at(d, hh, mm){ var x=new Date(d); x.setHours(hh||0, mm||0, 0, 0); return x; }
+  var dayTasksAll = (S.tasks||[]).filter(function(t){ return t && t.period==='dia'; });
+  for(var k=0; k<=PUSH_HORIZON_DAYS; k++){
+    var d = new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+k);
+    var key = localDateStr(d), di = dayIdxFromDate(d), sameWeek = isSameWeekAsToday(d);
+    var dayTasks = dayTasksAll.filter(function(t){
+      if(t.date ? t.date!==key : t.day!==di) return false;
+      if(sameWeek && isSkipped(t)) return false;
+      return true;
+    });
+    var pending = dayTasks.filter(function(t){ return !(k===0 && isDone(t)); });
+    // Tareas con "Recordatorio para esta tarea" y horario
+    pending.forEach(function(t){
+      if(t.hora && t.notif && t.notif.on){
+        var nt = t.notif||{hh:0,mm:15}, p=String(t.hora).split(':');
+        var taskTime = at(d, parseInt(p[0],10), parseInt(p[1]||'0',10));
+        var alertTime = new Date(taskTime.getTime() - ((nt.hh||0)*60+(nt.mm||0))*60000);
+        var exact = !nt.hh && !nt.mm;
+        var pre = exact ? '' : ((nt.hh?nt.hh+'h ':'')+(nt.mm?nt.mm+'min ':'')).trim();
+        add(alertTime, 'task', t.id+'-'+key, exact ? 'Es la hora: '+t.text : 'En '+pre+': '+t.text);
+      }
+      if(t.reminder && t.reminder.time){
+        var rp = String(t.reminder.time).split(':');
+        add(at(d, parseInt(rp[0],10), parseInt(rp[1]||'0',10)), 'rem', t.id+'-'+key, 'Recordatorio: '+t.text);
+      }
+    });
+    // Revisión diaria
+    var dr = S.dailyReviewReminder;
+    if(dr && dr.on){
+      var days = dr.days;
+      if(!days || !days.length || days.indexOf(di)!==-1){
+        add(at(d, dr.hh, dr.mm), 'review', key, 'Es hora de revisar tus tareas de hoy y marcar las que ya tengas listas ✓');
+      }
+    }
+    // Racha en riesgo
+    var sr = S.streakRisk;
+    if(sr && sr.on && streakActive()){
+      var wk = (k===0) ? isWeekend() : (d.getDay()===0 || d.getDay()===6);
+      if(!(S.streakCfg && S.streakCfg.skipWeekends && wk) && dayTasks.length){
+        var thr = modeThreshold(S.streakCfg?S.streakCfg.threshold:0.7), body = null;
+        if(k===0){
+          var partial = dayTasks.reduce(function(sum,tk){ return sum+tRatio(tk); },0);
+          var ratio = partial/dayTasks.length;
+          if(ratio < thr) body = '🔥 Tu racha está en riesgo — llevas '+Math.round(ratio*100)+'% de '+Math.round(thr*100)+'% hoy. ¡Todavía puedes lograrlo!';
+        } else {
+          body = '🔥 Tu racha está en riesgo — todavía no llegas al '+Math.round(thr*100)+'% de hoy. ¡Aún puedes lograrlo!';
+        }
+        if(body) add(at(d, sr.hh!=null?sr.hh:21, sr.mm||0), 'streak', key, body);
+      }
+    }
+    // Anotar gastos e ingresos
+    var rr = S.regReminder;
+    if(rr && rr.on){
+      var hit = false;
+      if(rr.mode==='daily') hit = true;
+      else if(rr.mode==='weekly') hit = (di === (rr.dow==null?6:rr.dow));
+      else hit = (new Date(d.getFullYear(), d.getMonth()+1, 0).getDate() === d.getDate());
+      if(hit) add(at(d, rr.hh, rr.mm), 'reg', key, 'Es hora de anotar tus gastos e ingresos');
+    }
+  }
+  items.sort(function(a,b){ return a.sendAt-b.sendAt; });
+  return items.slice(0, PUSH_MAX_ITEMS);
+}
+
+async function syncPushQueue(){
+  if(!pushWanted() || _pushSyncBusy) return;
+  _pushSyncBusy = true;
+  try{
+    var uid = currentUser.uid;
+    var wasActive = pushActive();
+    var items = buildPushItems();
+    var sig = _pushHash(JSON.stringify(items.map(function(i){ return [i.sendAt,i.body,i.tag]; })))+':'+items.length;
+    var tokenOk = false;
+    try{ tokenOk = localStorage.getItem('og6-fcm-token-uid')===uid; }catch(e){}
+    if(sig===_pushLastSig && tokenOk && wasActive) return; // nada cambió
+    if(!tokenOk){
+      tokenOk = await _registerFCMToken();
+      if(!tokenOk) return; // sin token no hay push: se siguen usando los timers locales
+    }
+    var col = db.collection('pushQueue');
+    var snap = await col.where('uid','==',uid).get();
+    var want = {};
+    items.forEach(function(it){ want[uid+'_'+it.sendAt+'_'+_pushHash(it.tag)] = it; });
+    var ops = [];
+    snap.forEach(function(doc){
+      var w = want[doc.id];
+      if(!w) ops.push({del:doc.ref});
+      else if(doc.get('body')===w.body) delete want[doc.id]; // ya está igual
+    });
+    var TS = firebase.firestore.Timestamp;
+    Object.keys(want).forEach(function(id){
+      var w = want[id];
+      ops.push({set:col.doc(id), data:{uid:uid, sendAt:TS.fromMillis(w.sendAt), title:w.title, body:w.body, tag:w.tag}});
+    });
+    for(var i=0; i<ops.length; i+=400){
+      var batch = db.batch();
+      ops.slice(i,i+400).forEach(function(op){ if(op.del) batch.delete(op.del); else batch.set(op.set, op.data); });
+      await batch.commit();
+    }
+    _pushLastSig = sig;
+    try{ localStorage.setItem('og6-push-ok', uid); }catch(e){}
+    if(!wasActive) scheduleNotifications(); // ya hay push: quitar los timers locales para no duplicar
+  }catch(e){
+    console.warn('[Push] no se pudo sincronizar la cola:', e && e.message);
+  }finally{
+    _pushSyncBusy = false;
+  }
+}
+
+// Borra todos los avisos pendientes de este usuario en el servidor
+// (al desactivar recordatorios o cerrar sesión).
+async function clearPushQueue(){
+  try{ localStorage.removeItem('og6-push-ok'); }catch(e){}
+  _pushLastSig = null;
+  if(!firebaseAvailable || !currentUser || typeof db==='undefined' || !db) return;
+  try{
+    var snap = await db.collection('pushQueue').where('uid','==',currentUser.uid).get();
+    var docs = []; snap.forEach(function(d){ docs.push(d.ref); });
+    for(var i=0; i<docs.length; i+=400){
+      var batch = db.batch();
+      docs.slice(i,i+400).forEach(function(r){ batch.delete(r); });
+      await batch.commit();
+    }
+  }catch(e){ console.warn('[Push] no se pudo vaciar la cola:', e && e.message); }
+}
+// Al cerrar sesión: vaciar la cola y quitar el token de ESTE dispositivo del
+// usuario, para que no sigan llegando sus avisos a un teléfono que ya salió.
+function _pushCleanupForLogout(){
+  var p = Promise.resolve();
+  try{
+    var uid = currentUser && currentUser.uid, tok = localStorage.getItem('og6-fcm-token');
+    p = clearPushQueue().then(function(){
+      if(!uid || !tok || !db) return;
+      return db.collection('users').doc(uid).set({fcmTokens: firebase.firestore.FieldValue.arrayRemove(tok)}, {merge:true})
+        .then(function(){ return db.collection('users').doc(uid).get(); })
+        .then(function(d){ if(d.exists && d.get('fcmToken')===tok) return db.collection('users').doc(uid).set({fcmToken: firebase.firestore.FieldValue.delete()}, {merge:true}); });
+    });
+    localStorage.removeItem('og6-fcm-token-uid'); localStorage.removeItem('og6-fcm-token');
+  }catch(e){}
+  return p.catch(function(){});
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -21843,7 +22395,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.14.116';
+var APP_VERSION = '2026.10.14.117';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
