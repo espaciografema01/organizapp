@@ -1245,7 +1245,7 @@ async function syncWithCloud(){
         shareData: shareCloudPayload(),
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
-        registries: S.registries||[],
+        registries: S.registries||[], skills: S.skills||[],
         timerTemplates: S.timerTemplates||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
@@ -1367,6 +1367,7 @@ function applySyncResult(cloud, useCloud){
       if(cloud.streakCfg) S.streakCfg = cloud.streakCfg;
       try{ shareMergeCloud(cloud); }catch(e){}
       if(cloud.timerCfg) S.timerCfg = Object.assign({}, S.timerCfg, cloud.timerCfg);
+      try{ if(cloud.skills) mergeSkills(cloud.skills); }catch(e){}
       // Preferencia + marcadores de "hasta qué ciclo ya se reinició": viajan
       // juntos con las tareas de la nube, para que otro dispositivo no vuelva
       // a reiniciar (y borre avance) algo que este ya reinició.
@@ -1490,7 +1491,7 @@ function pushToCloud(){
       shareData: shareCloudPayload(),
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
-      registries: S.registries||[],
+      registries: S.registries||[], skills: S.skills||[],
         timerTemplates: S.timerTemplates||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
@@ -1905,7 +1906,7 @@ var S = {
   // preferencias personales de sonido (ver openYoTimerScreen).
   timerCfg:{countdownBeepSec:3, volume:1, sounds:{start:true,work:true,rest:true,countdown:true,finish:true}, keepScreenOn:true},
   // Registros (finanzas y marcas) — ver openRegEditor / mergeRegistries
-  registries:[],
+  registries:[], skills:[],
   exerciseLib:[], setLib:[], exerciseGroups:[], timerBests:{}, timerHistory:[], planNotify:true, periodCloses:[], regPrefill:true,
   regReminder:{on:false, mode:'weekly', hh:20, mm:0, dow:6}, // recordatorio para anotar gastos e ingresos
   planWeekKey:null, // si se reinició la semana el fin de semana: clave de ESA semana → se muestran las fechas de la siguiente
@@ -2396,6 +2397,7 @@ function loadState(){
     var ac=localStorage.getItem('og6-achievements');if(ac)S.achievements=JSON.parse(ac);
     var md=localStorage.getItem('og6-medals');if(md)S.medals=JSON.parse(md);
     try{var rg=localStorage.getItem('og6-registries');if(rg)S.registries=JSON.parse(rg)||[];}catch(e){}
+    try{var sk_=localStorage.getItem('og6-skills');if(sk_)S.skills=JSON.parse(sk_)||[];}catch(e){}
     try{var ttp=localStorage.getItem('og6-timertemplates');if(ttp)S.timerTemplates=JSON.parse(ttp)||[];}catch(e){}
     try{var elb=localStorage.getItem('og6-exlib');if(elb)S.exerciseLib=JSON.parse(elb)||[];}catch(e){}
     try{var egr=localStorage.getItem('og6-exgroups');if(egr)S.exerciseGroups=JSON.parse(egr)||[];}catch(e){}
@@ -2530,6 +2532,7 @@ function _saveStateNow(){
     _lsSet('og6-achievements',JSON.stringify(S.achievements||[]));
     _lsSet('og6-medals',JSON.stringify(S.medals||[]));
     _lsSet('og6-registries',JSON.stringify(S.registries||[]));
+    _lsSet('og6-skills',JSON.stringify(S.skills||[]));
     _lsSet('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
     _lsSet('og6-exlib',JSON.stringify(S.exerciseLib||[]));
     _lsSet('og6-setlib',JSON.stringify(S.setLib||[]));
@@ -5956,7 +5959,7 @@ function canCreateAnyRegistry(){ return canCreateRegistry(); }
 function projViewCur(){
   if(S._projView) return S._projView;
   var v=null; try{ v=localStorage.getItem('og6-projview'); }catch(e){}
-  return (v==='reg'||v==='proj'||v==='timer') ? v : 'reg';
+  return (v==='reg'||v==='proj'||v==='timer'||v==='skill') ? v : 'reg';
 }
 function setProjView(v){ S._projView = v; try{ localStorage.setItem('og6-projview', v); }catch(e){} render(); }
 function exportRegCSV(regId){
@@ -6382,7 +6385,8 @@ function maybeOpenRegEntryForTask(taskId, extra){
   // desde el registro, sin enlazarlo a la tarea), se pregunta solo por ese: obtenido o postergar.
   if(!ex && reg.kind==='finance'){
     var tx = ((extra&&extra.label)||t.text||'').trim().toLowerCase();
-    var pend = regEntries(reg).filter(function(e){ return e.status==='expected' && (!e.taskId || e.taskId===t.id) && !(e.itemId&&!(extra&&extra.itemId)) && (e.taskId===t.id || (e.label||'').trim().toLowerCase()===tx); })
+    var _td = taskEntryDate(t);
+    var pend = regEntries(reg).filter(function(e){ return e.status==='expected' && e.date<=_td && (!e.taskId || e.taskId===t.id) && !(e.itemId&&!(extra&&extra.itemId)) && (e.taskId===t.id || (e.label||'').trim().toLowerCase()===tx); })
       .sort(function(a,b){ return (a.date||'')<(b.date||'')?-1:1; });
     if(pend.length) ex = pend[0];
   }
@@ -6494,9 +6498,9 @@ function openExpectedQuick(regId, entryId, taskId){
   var concept = e.label || e.taskName || (isIn?'Ingreso':'Gasto');
   ov.innerHTML = '<div class="sheet" id="eq-sheet">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(isIn?'Ingreso esperado':'Gasto esperado')+'</span><button onclick="removeOverlay(\'exp-quick\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;"><b>'+esc(concept)+'</b> · se esperaban <b>'+fmtMoney(e.amount,cur)+'</b> ('+fmtShortDate(e.date)+')</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;"><b>'+esc(concept)+'</b> · '+(e.amount>0?'se esperaban <b>'+fmtMoney(e.amount,cur)+'</b>':'monto por definir')+' ('+fmtShortDate(e.date)+')</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:5px;">'+(isIn?'¿Cuánto recibiste?':'¿Cuánto pagaste?')+'</div>'+
-    '<input id="eq-amount" class="finp" type="text" inputmode="decimal" value="'+fmtNum(e.amount).replace(/\./g,'')+'" style="font-size:22px;font-weight:700;margin-bottom:10px;"/>'+
+    '<input id="eq-amount" class="finp" type="text" inputmode="decimal" value="'+(e.amount>0?fmtNum(e.amount).replace(/\./g,''):'')+'" placeholder="Monto" style="font-size:22px;font-weight:700;margin-bottom:10px;"/>'+
     '<div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Fecha</div>'+dateFieldHTML('eq-date', todayStr(), false, false)+
     '<button onclick="expQuickConfirm(\''+regId+'\',\''+entryId+'\')" style="width:100%;margin-top:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(isIn?'Marcar como ingreso obtenido':'Marcar como gasto pagado')+'</button>'+
     '<div style="border-top:1px solid var(--line-soft);margin:16px 0 12px;"></div>'+
@@ -6580,7 +6584,7 @@ function openRegEntry(regId, opts){
   removeOverlay('reg-entry');
   var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-entry';
   overlay.style.zIndex = 620;
-  overlay.addEventListener('click',function(e){ if(e.target===overlay) removeOverlay('reg-entry'); });
+  overlay.addEventListener('click',function(e){ if(e.target===overlay) enDismiss(); });
   overlay.innerHTML = '<div class="sheet" id="en-sheet">'+regEntryBodyHTML()+'</div>';
   document.body.appendChild(overlay);
 }
@@ -6595,7 +6599,7 @@ function regEntryBodyHTML(){
   var pf = EN.prefill; var labelVal = ex ? (ex.label||'') : (EN.presetLabel || (pf&&pf.label) || (last && last.label ? last.label : ''));
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
       '<span class="serif" style="font-weight:700;font-size:18px;">'+regIcon(reg)+' '+esc(reg.name)+'</span>'+
-      '<button onclick="removeOverlay(\'reg-entry\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+      '<button onclick="enDismiss()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
     (task?'<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Tarea: '+esc(task.text)+(EN.presetLabel?' · ítem: '+esc(EN.presetLabel):'')+'</div>':'<div style="height:10px;"></div>')+
     (pf&&!ex?'<div style="font-size:11.5px;color:var(--accent-text);background:var(--accent-bg);border-radius:9px;padding:7px 10px;margin:-6px 0 12px;line-height:1.4;">Prellenado con lo último que anotaste en esta tarea. Cámbialo si hace falta.</div>':'')+
@@ -6636,10 +6640,64 @@ function regEntryBodyHTML(){
     dateFieldHTML('en-date', EN.date, false, false)+'<div style="height:18px;"></div>'+
     '<div style="display:flex;gap:8px;">'+
       (ex?'<button onclick="confirmDeleteRegEntry()" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>':
-         (EN.fromTask?'<button onclick="removeOverlay(\'reg-entry\')" style="background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Omitir</button>':''))+
+         (EN.fromTask?(isFin?'<button onclick="enPostponeMenu()" style="background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">Postergar</button>':'<button onclick="removeOverlay(\'reg-entry\')" style="background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">Omitir</button>'):''))+
       '<button onclick="saveRegEntry()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">'+(EN.confirming?'Confirmar':'Guardar')+'</button>'+
     '</div>';
   return html;
+}
+// ── Finanzas: postergar / dejar pendiente ──
+function enPendAmount(){
+  var v = parseNumInput((document.getElementById('en-amount')||{value:''}).value);
+  if(v>0) return v;
+  if(EN.prefill && EN.prefill.amount>0) return EN.prefill.amount;
+  if(EN.last && EN.last.amount>0 && (!EN.taskId || EN.last.taskId===EN.taskId)) return EN.last.amount;
+  return 0;
+}
+function enMakePending(date, remember){
+  var reg = regById(EN.regId); if(!reg) return;
+  var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null, amt = enPendAmount();
+  var lab = ((document.getElementById('en-label')||{value:''}).value||'').trim();
+  reg.entries = (reg.entries||[]).concat([{id:uid(), status:'expected', dir:EN.dir, amount:amt, date:date, label:lab, taskId:EN.taskId||null, itemId:EN.itemId||null,
+    taskName:task?task.text:null, ts:Date.now(), postponedFrom:EN.date||todayStr(), noAmount:amt<=0}]);
+  reg.updatedAt = new Date().toISOString();
+  if(remember && task){ S.tasks = S.tasks.map(function(t){ return t.id===task.id ? Object.assign({},t,{regDue:remember}) : t; }); }
+  EN.saved = true; saveState(); try{ refreshRegViews(); }catch(e){}
+}
+function enDismiss(){
+  var reg = EN && regById(EN.regId);
+  if(EN && !EN.saved && EN.fromTask && reg && reg.kind==='finance' && !EN.entryId && !EN.existing){
+    enMakePending(EN.due||todayStr(), null); toast('Quedó pendiente por confirmar');
+  }
+  removeOverlay('reg-entry');
+}
+function enPostponeMenu(){
+  var rm = '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin:12px 0 4px;cursor:pointer;"><input type="checkbox" id="en-rem" style="width:18px;height:18px;accent-color:var(--accent);"/> Recordar esta elección para esta task</label>';
+  var b = 'width:100%;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:var(--bg);color:var(--ink);border:1.5px solid var(--line);margin-bottom:8px;';
+  var box = document.createElement('div'); box.className='conf-box'; box.id='en-pp';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:17px;color:var(--ink);text-align:center;margin-bottom:4px;">Postergar</div>'+
+    '<div style="font-size:12.5px;color:var(--muted);text-align:center;line-height:1.5;margin-bottom:12px;">Queda como pendiente y te lo recuerdo para confirmarlo. Si lo repites otro día, se acumulan.</div>'+
+    '<button style="'+b+'" onclick="enPostponeTo(\'eom\')">A fin de mes</button>'+
+    '<button style="'+b+'" onclick="enPostponeTo(\'days\',7)">En 7 días</button>'+
+    '<button style="'+b+'" onclick="enPostponeTo(\'days\',15)">En 15 días</button>'+
+    '<button style="'+b+'" onclick="enPostponeTo(\'date\')">Elegir fecha…</button>'+
+    '<input id="en-pp-date" type="date" style="display:none;width:100%;margin-bottom:8px;" class="finp"/>'+rm+
+    '<button class="cbtn" style="width:100%;margin-top:6px;" onclick="document.getElementById(\'en-pp\').remove()">Cancelar</button></div>';
+  document.body.appendChild(box);
+}
+function enPostponeTo(mode, n){
+  var base = EN.date || todayStr(), date;
+  if(mode==='date'){
+    var inp = document.getElementById('en-pp-date');
+    if(inp.style.display==='none'){ inp.style.display='block'; inp.value = base; try{ inp.showPicker&&inp.showPicker(); }catch(e){} toast('Elige la fecha y vuelve a tocar «Elegir fecha…»'); return; }
+    if(!inp.value){ toast('Elige una fecha'); return; }
+    date = inp.value;
+  } else date = regDueDate({mode:mode, days:n||0}, todayStr());
+  var remember = (document.getElementById('en-rem')||{}).checked ? {mode:(mode==='date'?'days':mode), days:(mode==='eom'?undefined:(n||15))} : null;
+  if(remember && mode==='date') remember = null;
+  var pp = document.getElementById('en-pp'); if(pp) pp.remove();
+  enMakePending(date, remember);
+  removeOverlay('reg-entry');
+  toast('Pendiente para el '+fmtShortDate(date)+(remember?' · lo recordaré en esta task':''));
 }
 function enRedraw(){ var sh=document.getElementById('en-sheet'); if(sh) sh.innerHTML=regEntryBodyHTML(); }
 function enSetStatus(k){
@@ -7655,13 +7713,222 @@ function renderProyectosTab(){
   var tOn = S.timerPlacement==='seguimiento';
   var view = projViewCur();
   if(view==='timer' && !tOn) view = 'reg';
-  var segs = [['reg','Registros'],['proj','Proyectos']];
+  var segs = [['reg','Registros'],['skill','Habilidades'],['proj','Proyectos']];
   if(tOn) segs.push(['timer','Enfoque']);
   var html = '<div style="padding:16px 16px 0;">'+
     mSegHTML('proj-seg', segs, view, 'setProjView')+
   '</div>';
-  return html + (view==='reg' ? renderRegistriesSection() : view==='timer' ? renderTimerHome() : renderProjectsSection());
+  return html + (view==='skill' ? renderSkillsSection() : view==='reg' ? renderRegistriesSection() : view==='timer' ? renderTimerHome() : renderProjectsSection());
 }
+// ── Habilidades: gráfico radar (3 a 7 habilidades) ──────────────────────────
+var SK_COLORS = ['#c9693a','#3f7fbf','#4f9a6b','#b0589a','#d1a23a','#5bb0b5','#8a6fd1'];
+var SK_CURVES = {soft:{l:'Suave',k:1.2}, normal:{l:'Normal',k:2.2}, hard:{l:'Exigente',k:3.4}};
+var SK_MODES = [['mixed','Mixto'],['real','Medida real'],['consist','Constancia'],['effort','Esfuerzo'],['manual','Manual']];
+var SK = null;
+function skList(){ return (S.skills||[]).filter(function(s){return !s.del;}); }
+function skById(id){ return skList().find(function(s){return s.id===id;})||null; }
+function skDayStr(off){ var d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-off); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function skDaysAgo(ds){ var a=ds.split('-'); var d=new Date(+a[0],+a[1]-1,+a[2],12); var n=new Date(); n.setHours(12,0,0,0); return Math.round((n-d)/864e5); }
+function skEvents(s){
+  var days = {}, min = 0, hasMin = false;
+  var r = s.regId ? regById(s.regId) : null;
+  if(r) regEntries(r).forEach(function(e){ if(e.status==='expected') return; if(r.kind==='habit' && !e.yes) return; days[e.date] = days[e.date]||0; });
+  (s.taskIds||[]).forEach(function(id){ var m=(S.taskLog&&S.taskLog[id])||{}; Object.keys(m).forEach(function(d){ days[d]=days[d]||0; }); });
+  (S.timerHistory||[]).forEach(function(h){
+    if(h.del) return;
+    if((s.timerGroup && h.group===s.timerGroup) || (h.taskId && (s.taskIds||[]).indexOf(h.taskId)>=0)){
+      var m = (h.sec||0)/60; days[h.date] = (days[h.date]||0)+m; min += m; hasMin = true;
+    }
+  });
+  return {days:days, min:min, hasMin:hasMin, n:Object.keys(days).length};
+}
+function skReal(s){
+  var r = s.regId ? regById(s.regId) : null; if(!r || r.kind==='finance') return null;
+  var es = regEntries(r).filter(function(e){return e.status!=='expected';}).sort(function(a,b){return (a.date+(a.ts||0)).toString().localeCompare((b.date+(b.ts||0)).toString());});
+  var v = 0, mid = s.metricId||'__count', unit = '';
+  if(r.kind==='habit'){ v = es.filter(function(e){return e.yes;}).length; unit='días'; mid='__count'; }
+  else if(mid==='__count'){ v = es.length; unit='ses.'; }
+  else {
+    var m=(r.metrics||[]).find(function(x){return x.id===mid;}); if(!m) return null; unit=m.unit||'';
+    var vs = es.filter(function(e){return e.values&&e.values[mid]!=null;}).map(function(e){return +e.values[mid];});
+    if(!vs.length) v = null;
+    else v = s.agg==='last' ? vs[vs.length-1] : (s.agg==='sum' ? vs.reduce(function(a,b){return a+b;},0) : (s.low ? Math.min.apply(null,vs) : Math.max.apply(null,vs)));
+  }
+  var st = +s.start||0, tg = +s.target||0;
+  if(!tg || tg===st) return null;
+  var ratio = v==null ? 0 : (v-st)/(tg-st);
+  return {v:v, unit:unit, start:st, target:tg, ratio:Math.max(0,Math.min(1,ratio))};
+}
+function skEffortScore(total, target, curve){
+  var k=(SK_CURVES[curve]||SK_CURVES.normal).k, r=Math.max(0,Math.min(1,target>0?total/target:0));
+  return 100*(1-Math.exp(-k*r))/(1-Math.exp(-k));
+}
+function skCompute(s){
+  var ev = skEvents(s), parts = {}, notes = {};
+  var rl = skReal(s); if(rl){ parts.real = {pct:rl.ratio*100, d:rl}; }
+  // constancia: últimas 8 semanas, cada semana cuenta días activos / meta semanal
+  var goal = Math.max(1, +s.weeklyGoal||3), wk=[0,0,0,0,0,0,0,0];
+  Object.keys(ev.days).forEach(function(d){ var a=skDaysAgo(d); if(a>=0 && a<56) wk[Math.floor(a/7)]++; });
+  var cs = 0, wsum = 0; wk.forEach(function(n,i){ var w = 1 - i*0.08; cs += Math.min(1,n/goal)*w; wsum += w; });
+  parts.consist = {pct: cs/wsum*100, d:{wk:wk, goal:goal}};
+  var unit = s.effortUnit==='min' ? 'min' : 'ses', tot = unit==='min' ? ev.min : ev.n, et = Math.max(1, +s.effortTarget||(unit==='min'?1200:60));
+  parts.effort = {pct: skEffortScore(tot, et, s.curve||'normal'), d:{total:tot, target:et, unit:unit}};
+  var score = 0, w = s.w || {real:50,consist:30,effort:20}, used = [];
+  if(s.mode==='manual'){ score = Math.max(0,Math.min(100,+s.manual||0)); }
+  else if(s.mode==='mixed'){
+    ['real','consist','effort'].forEach(function(k){ if(parts[k] && (+w[k]||0)>0) used.push([k,+w[k]]); });
+    var ws = used.reduce(function(a,b){return a+b[1];},0);
+    if(ws>0) used.forEach(function(u){ score += parts[u[0]].pct*u[1]/ws; used[used.indexOf(u)] = [u[0], u[1]/ws*100]; });
+  } else { var p = parts[s.mode] || parts.consist; score = p.pct; }
+  return {score:Math.round(score), parts:parts, used:used, ev:ev};
+}
+function skSnapshot(){
+  var mk = todayStr().slice(0,7), ch = false;
+  skList().forEach(function(s){ var c=skCompute(s).score; if(!s.hist) s.hist={}; if(s.hist[mk]!==c){ s.hist[mk]=c; s.updatedAt=Date.now(); ch=true; } });
+  if(ch){ try{ saveState(); }catch(e){} }
+}
+function skPrevMonthKey(){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
+function skRadarSVG(list, prevKey, showPrev){
+  var n = list.length, cx=170, cy=160, R=100, pts=[], prev=[], hasPrev=false;
+  function P(i,r){ var a=-Math.PI/2+i*2*Math.PI/n; return [cx+Math.cos(a)*r, cy+Math.sin(a)*r]; }
+  var g = '';
+  [25,50,75,100].forEach(function(l){ var ps=[]; for(var i=0;i<n;i++){ var p=P(i,R*l/100); ps.push(p[0].toFixed(1)+','+p[1].toFixed(1)); } g += '<polygon points="'+ps.join(' ')+'" fill="'+(l===100?'var(--paper)':'none')+'" stroke="var(--line)" stroke-width="'+(l===100?1.4:1)+'" '+(l===100?'':'stroke-dasharray="3 4"')+'/>'; });
+  for(var i=0;i<n;i++){ var e=P(i,R); g += '<line x1="'+cx+'" y1="'+cy+'" x2="'+e[0].toFixed(1)+'" y2="'+e[1].toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>'; }
+  var sc = list.map(function(s){return skCompute(s).score;});
+  list.forEach(function(s,i){ var p=P(i,R*sc[i]/100); pts.push(p); var h=s.hist&&s.hist[prevKey]; if(h!=null){ hasPrev=true; prev.push(P(i,R*h/100)); } else prev.push(P(i,0)); });
+  if(showPrev && hasPrev) g += '<polygon points="'+prev.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".8"/>';
+  g += '<polygon points="'+pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="var(--accent)" fill-opacity=".24" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>';
+  list.forEach(function(s,i){
+    var p=pts[i], l=P(i,R+22), a=-Math.PI/2+i*2*Math.PI/n, c=Math.cos(a), anchor = Math.abs(c)<.25?'middle':(c>0?'start':'end');
+    g += '<g style="cursor:pointer" onclick="skOpen(\''+s.id+'\')"><circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="5" fill="'+s.color+'" stroke="var(--paper)" stroke-width="2"/>'+
+      '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+4).toFixed(1)+'" text-anchor="'+anchor+'" font-size="12" font-weight="600" fill="var(--ink)" font-family="Inter,sans-serif">'+esc(s.name.length>13?s.name.slice(0,12)+'…':s.name)+'</text>'+
+      '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+18).toFixed(1)+'" text-anchor="'+anchor+'" font-size="11" fill="var(--muted)" font-family="Inter,sans-serif">'+sc[i]+'</text></g>';
+  });
+  return {svg:'<svg viewBox="0 0 340 330" style="width:100%;max-width:360px;display:block;margin:0 auto;">'+g+'</svg>', hasPrev:hasPrev};
+}
+function skShowPrev(){ return S._skPrev!==false; }
+function skTogglePrev(){ S._skPrev = !skShowPrev(); render(); }
+function renderSkillsSection(){
+  var list = skList(); skSnapshot();
+  var html = '<div style="padding:10px 16px 90px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><span style="font-size:12.5px;font-weight:600;color:var(--ink);">Mis habilidades</span><span style="font-size:12px;color:var(--muted);">'+list.length+' / 7</span></div>';
+  if(list.length>=3){
+    var pk = skPrevMonthKey(), rd = skRadarSVG(list.slice(0,7), pk, skShowPrev());
+    html += '<div style="background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;padding:12px 8px 10px;margin-bottom:14px;">'+rd.svg+
+      (rd.hasPrev?'<div style="display:flex;justify-content:center;margin-top:4px;"><button onclick="skTogglePrev()" style="background:none;border:none;font-size:11.5px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">'+(skShowPrev()?'Ocultar':'Mostrar')+' comparación con el mes pasado (línea punteada)</button></div>':'')+'</div>';
+  } else {
+    html += '<div style="text-align:center;padding:26px 10px 18px;"><div style="display:flex;justify-content:center;color:var(--muted);opacity:.5;margin-bottom:10px;">'+ico('target',44,1.4)+'</div>'+
+      '<div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;">Tu gráfico de habilidades</div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.6;">Crea entre 3 y 7 habilidades (por ejemplo Fuerza, Escalada, Estudio) y mira su forma en un radar.'+(list.length?'<br>Te faltan '+(3-list.length)+' para dibujarlo.':'')+'</div></div>';
+  }
+  list.forEach(function(s){
+    var c = skCompute(s), tag = s.mode==='mixed' ? 'Mixto' : (SK_MODES.find(function(m){return m[0]===s.mode;})||[0,''])[1];
+    html += '<div onclick="skOpen(\''+s.id+'\')" style="display:flex;align-items:center;gap:12px;padding:11px 12px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+s.color+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
+      '<div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(s.name)+'</span><span style="font-size:11px;color:var(--muted);margin-left:8px;flex-shrink:0;">'+tag+'</span></div>'+
+      '<div style="height:6px;background:var(--line-soft);border-radius:4px;margin-top:7px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+s.color+';border-radius:4px;"></div></div></div>'+
+      '<div style="font-weight:700;font-size:18px;color:var(--ink);min-width:30px;text-align:right;">'+c.score+'</div></div>';
+  });
+  if(list.length<7) html += '<button onclick="skEdit(null)" style="width:100%;background:var(--accent);color:white;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;margin-top:8px;">+ Nueva habilidad</button>';
+  else html += '<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);">Máximo 7 habilidades.</div>';
+  return html + '</div>';
+}
+// ── Detalle ──
+function skBar(label, pct, sub, color, wtxt){
+  return '<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;"><span style="font-weight:600;color:var(--ink);">'+label+(wtxt?' <span style="color:var(--muted);font-weight:500;">· '+wtxt+'</span>':'')+'</span><span style="font-weight:700;color:var(--ink);">'+Math.round(pct)+'</span></div>'+
+    '<div style="height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden;"><div style="height:100%;width:'+Math.max(0,Math.min(100,pct))+'%;background:'+color+';border-radius:4px;"></div></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5;">'+sub+'</div></div>';
+}
+function skOpen(id){
+  var s = skById(id); if(!s) return; var c = skCompute(s), p = c.parts, html = '', wmap = {};
+  c.used.forEach(function(u){ wmap[u[0]] = Math.round(u[1])+'%'; });
+  var show = s.mode==='mixed' ? c.used.map(function(u){return u[0];}) : (s.mode==='manual'?[]:[ (p[s.mode]?s.mode:'consist') ]);
+  if(show.indexOf('real')>=0 && p.real){ var d=p.real.d; html += skBar('Medida real', p.real.pct, (d.v==null?'Sin marcas todavía':fmtNum(d.v)+' '+d.unit)+' de '+fmtNum(d.target)+' '+d.unit+(d.v!=null&&p.real.pct<100?' · te faltan '+fmtNum(Math.round(Math.abs(d.target-d.v)*10)/10)+' '+d.unit:' · meta lograda'), s.color, wmap.real); }
+  if(show.indexOf('consist')>=0){ var d2=p.consist.d, now=d2.wk[0]; html += skBar('Constancia', p.consist.pct, 'Meta: '+d2.goal+' día'+(d2.goal===1?'':'s')+' por semana · esta semana '+now+' · últimas 8 semanas: '+d2.wk.slice().reverse().join(' · '), s.color, wmap.consist); }
+  if(show.indexOf('effort')>=0){ var d3=p.effort.d, sc=p.effort.pct, nx = Math.min(100,Math.floor(sc/5)*5+5), k=(SK_CURVES[s.curve||'normal']).k, need='';
+    if(sc<99.5){ var r=-Math.log(1-nx/100*(1-Math.exp(-k)))/k, dl=Math.max(0,Math.ceil(r*d3.target-d3.total)); need=' · para llegar a '+nx+' puntos faltan ~'+dl+' '+d3.unit+'.'; }
+    html += skBar('Esfuerzo acumulado', sc, fmtNum(Math.round(d3.total))+' de '+fmtNum(d3.target)+' '+(d3.unit==='min'?'minutos':'sesiones')+' · curva '+SK_CURVES[s.curve||'normal'].l.toLowerCase()+' (cada punto cuesta más)'+need, s.color, wmap.effort); }
+  if(s.mode==='manual') html = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;">Puntaje manual: lo ajustas tú.</div>';
+  var el = document.createElement('div'); el.className='overlay'; el.id='skill-view';
+  el.addEventListener('click',function(e){ if(e.target===el) removeOverlay('skill-view'); });
+  el.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:19px;">'+esc(s.name)+'</span><button onclick="removeOverlay(\'skill-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:16px;"><span style="font-size:38px;font-weight:800;color:'+s.color+';">'+c.score+'</span><span style="font-size:13px;color:var(--muted);">/ 100</span></div>'+html+
+    '<div style="display:flex;gap:8px;margin-top:6px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'skill-view\');skEdit(\''+s.id+'\')">Editar</button></div></div>';
+  document.body.appendChild(el);
+}
+// ── Editor ──
+function skEdit(id){
+  var s = id ? skById(id) : null;
+  SK = s ? JSON.parse(JSON.stringify(s)) : {id:null, name:'', color:SK_COLORS[skList().length%SK_COLORS.length], mode:'mixed', w:{real:50,consist:30,effort:20}, regId:'', metricId:'', agg:'max', start:0, target:'', weeklyGoal:3, effortUnit:'ses', effortTarget:60, curve:'normal', taskIds:[], timerGroup:'', manual:50, low:false};
+  SK.w = SK.w || {real:50,consist:30,effort:20};
+  removeOverlay('skill-ed');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='skill-ed';
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('skill-ed'); });
+  document.body.appendChild(ov); skDraw();
+}
+function skLbl(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">'+t+'</div>'; }
+function skChip(on, label, fn){ return '<button class="cat-tab-btn'+(on?' on':'')+'" onclick="'+fn+'" style="padding:7px 12px;font-size:12.5px;'+(on?'background:var(--accent);color:#fff;border-color:var(--accent);':'')+'">'+label+'</button>'; }
+function skWTxt(){ var w=SK.w, t=(+w.real||0)+(+w.consist||0)+(+w.effort||0)||1; return {real:Math.round((+w.real||0)/t*100), consist:Math.round((+w.consist||0)/t*100), effort:Math.round((+w.effort||0)/t*100)}; }
+function skW(k, v){ SK.w[k] = +v; var t=skWTxt(); ['real','consist','effort'].forEach(function(x){ var e=document.getElementById('sk-w-'+x); if(e) e.textContent=t[x]+'%'; }); }
+function skDraw(){
+  var ov = document.getElementById('skill-ed'); if(!ov) return;
+  var regs = regList().filter(function(r){return r.kind!=='finance';}), reg = SK.regId ? regById(SK.regId) : null;
+  var groups = {}; (S.timerHistory||[]).forEach(function(h){ if(h.group) groups[h.group]=1; });
+  var tasks = {}, tl = []; (S.tasks||[]).forEach(function(t){ if(t.period==='dia' && !t.date && !tasks[t.id]){ tasks[t.id]=1; tl.push(t); } });
+  var needReal = SK.mode==='real' || SK.mode==='mixed', needAct = SK.mode!=='manual' && SK.mode!=='real';
+  var wt = skWTxt();
+  var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(SK.id?'Editar':'Nueva')+' habilidad</span><button onclick="removeOverlay(\'skill-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<input class="finp" placeholder="Nombre (ej. Fuerza, Escalada)" maxlength="24" value="'+esc(SK.name)+'" oninput="SK.name=this.value"/>'+
+    '<div style="display:flex;gap:8px;margin:2px 0 4px;">'+SK_COLORS.map(function(c){ return '<button onclick="SK.color=\''+c+'\';skRe()" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(SK.color===c?'3px solid var(--ink)':'3px solid transparent')+';cursor:pointer;padding:0;"></button>'; }).join('')+'</div>'+
+    skLbl('¿Cómo se calcula el puntaje?')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+SK_MODES.map(function(m){ return skChip(SK.mode===m[0], m[1], 'SK.mode=\''+m[0]+'\';skRe()'); }).join('')+'</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5;text-align:left;">'+({mixed:'Combina medida real, constancia y esfuerzo con los porcentajes que elijas.',real:'Solo tu marca real (ej. kilos levantados) frente a tu meta.',consist:'Qué tan seguido practicas, en las últimas 8 semanas.',effort:'Sesiones o minutos acumulados; cada punto nuevo cuesta más que el anterior.',manual:'Tú pones el puntaje a mano.'})[SK.mode]+'</div>';
+  if(SK.mode==='mixed'){
+    h += skLbl('Porcentajes')+['real','consist','effort'].map(function(k){ var nm={real:'Medida real',consist:'Constancia',effort:'Esfuerzo'}[k]; return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12.5px;"><span style="width:92px;color:var(--ink);">'+nm+'</span><input type="range" min="0" max="100" step="5" value="'+(+SK.w[k]||0)+'" oninput="skW(\''+k+'\',this.value)" style="flex:1;accent-color:var(--accent);"/><b id="sk-w-'+k+'" style="width:38px;text-align:right;">'+wt[k]+'%</b></div>'; }).join('')+
+      (SK.regId?'':'<div style="font-size:11px;color:var(--muted);">Sin registro vinculado, la parte de medida real se reparte entre las otras.</div>');
+  }
+  if(SK.mode==='manual'){
+    h += skLbl('Puntaje')+'<div style="display:flex;align-items:center;gap:10px;"><input type="range" min="0" max="100" value="'+(+SK.manual||0)+'" oninput="SK.manual=+this.value;document.getElementById(\'sk-man\').textContent=this.value" style="flex:1;accent-color:var(--accent);"/><b id="sk-man" style="width:34px;text-align:right;">'+(+SK.manual||0)+'</b></div>';
+  }
+  if(needReal){
+    h += skLbl('Medida real (de un registro)')+'<select class="finp" onchange="SK.regId=this.value;var r=regById(this.value);SK.metricId=r&&r.metrics&&r.metrics[0]?r.metrics[0].id:\'__count\';skRe()" style="margin-bottom:8px;"><option value="">Sin registro</option>'+regs.map(function(r){return '<option value="'+r.id+'"'+(r.id===SK.regId?' selected':'')+'>'+esc(r.name)+'</option>';}).join('')+'</select>';
+    if(reg && reg.kind==='metrics'){
+      h += '<select class="finp" onchange="SK.metricId=this.value;skRe()" style="margin-bottom:8px;">'+(reg.metrics||[]).map(function(m){return '<option value="'+m.id+'"'+(m.id===SK.metricId?' selected':'')+'>'+esc(m.name)+(m.unit?' ('+esc(m.unit)+')':'')+'</option>';}).join('')+'<option value="__count"'+(SK.metricId==='__count'?' selected':'')+'>Cantidad de sesiones</option></select>';
+      if(SK.metricId!=='__count') h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'+skChip(SK.agg==='max'&&!SK.low,'Mejor marca','SK.agg=\'max\';SK.low=false;skRe()')+skChip(SK.agg==='max'&&SK.low,'Menor marca','SK.agg=\'max\';SK.low=true;skRe()')+skChip(SK.agg==='last','Último valor','SK.agg=\'last\';skRe()')+skChip(SK.agg==='sum','Total','SK.agg=\'sum\';skRe()')+'</div>';
+    }
+    if(reg){ h += '<div style="display:flex;gap:12px;"><label style="flex:1;font-size:11.5px;color:var(--muted);">Punto de partida<input class="finp" type="number" inputmode="decimal" value="'+esc(SK.start)+'" oninput="SK.start=this.value" style="margin:4px 0 0;"/></label><label style="flex:1;font-size:11.5px;color:var(--muted);">Meta (100 puntos)<input class="finp" type="number" inputmode="decimal" value="'+esc(SK.target)+'" oninput="SK.target=this.value" style="margin:4px 0 0;"/></label></div>'; }
+  }
+  if(needAct){
+    h += skLbl('Qué cuenta como práctica')+(reg?'<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Cada registro de «'+esc(reg.name)+'» cuenta como una sesión.</div>':'')+
+      (tl.length?'<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Tareas diarias que sumarán:</div><div style="display:flex;flex-wrap:wrap;gap:6px;max-height:118px;overflow-y:auto;margin-bottom:10px;">'+tl.slice(0,60).map(function(t){ var on=SK.taskIds.indexOf(t.id)>=0; return skChip(on, esc((t.text||'').slice(0,22)), 'skTask(\''+t.id+'\')'); }).join('')+'</div>':'')+
+      (Object.keys(groups).length?'<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Grupo de temporizador (suma minutos):</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+skChip(!SK.timerGroup,'Ninguno','SK.timerGroup=\'\';skRe()')+Object.keys(groups).map(function(g){ return skChip(SK.timerGroup===g, esc(g), 'SK.timerGroup=\''+g.replace(/'/g,"\\'")+'\';skRe()'); }).join('')+'</div>':'');
+    if(SK.mode==='mixed'||SK.mode==='consist') h += skLbl('Constancia')+'<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;"><span>Días por semana</span><span>'+['1','2','3','4','5','6','7'].map(function(n){ return '<button onclick="SK.weeklyGoal='+n+';skRe()" style="width:28px;height:28px;margin-left:4px;border-radius:50%;border:1.5px solid '+(+SK.weeklyGoal==+n?'var(--accent)':'var(--line)')+';background:'+(+SK.weeklyGoal==+n?'var(--accent)':'transparent')+';color:'+(+SK.weeklyGoal==+n?'#fff':'var(--muted)')+';font-size:12px;cursor:pointer;">'+n+'</button>'; }).join('')+'</span></div>';
+    if(SK.mode==='mixed'||SK.mode==='effort') h += skLbl('Esfuerzo')+'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'+skChip(SK.effortUnit!=='min','Sesiones','SK.effortUnit=\'ses\';SK.effortTarget=60;skRe()')+skChip(SK.effortUnit==='min','Minutos','SK.effortUnit=\'min\';SK.effortTarget=1200;skRe()')+'</div>'+
+      '<label style="font-size:11.5px;color:var(--muted);">Para llegar a 100 puntos ('+(SK.effortUnit==='min'?'minutos':'sesiones')+')<input class="finp" type="number" inputmode="numeric" value="'+esc(SK.effortTarget)+'" oninput="SK.effortTarget=this.value" style="margin:4px 0 10px;"/></label>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Dificultad de la curva</div><div style="display:flex;gap:8px;">'+Object.keys(SK_CURVES).map(function(k){ return skChip((SK.curve||'normal')===k, SK_CURVES[k].l, 'SK.curve=\''+k+'\';skRe()'); }).join('')+'</div>';
+  }
+  h += '<div style="height:16px;"></div><div style="display:flex;gap:8px;">'+(SK.id?'<button class="cbtn" style="flex:1;color:var(--bad);" onclick="skDelete()">Eliminar</button>':'')+'<button class="sbtn" style="flex:2;" onclick="skSave()">Guardar</button></div></div>';
+  brPutSheet(ov, h);
+}
+function skRe(){ brRerender('skill-ed', skDraw); }
+function skTask(id){ var i=SK.taskIds.indexOf(id); if(i>=0) SK.taskIds.splice(i,1); else SK.taskIds.push(id); skRe(); }
+function skSave(){
+  var name=(SK.name||'').trim(); if(!name){ toast('Ponle un nombre'); return; }
+  if(SK.mode==='real' && !(SK.regId && +SK.target)){ toast('Elige un registro y una meta'); return; }
+  var o = JSON.parse(JSON.stringify(SK)); o.name=name; o.start=+o.start||0; o.target=+o.target||0; o.effortTarget=+o.effortTarget||60; o.updatedAt=Date.now();
+  if(!S.skills) S.skills=[];
+  if(o.id){ S.skills = S.skills.map(function(s){ return s.id===o.id ? Object.assign({}, s, o) : s; }); }
+  else { o.id = uid(); S.skills.push(o); }
+  saveState(); removeOverlay('skill-ed'); render(); toast('✓ Habilidad guardada');
+}
+function skDelete(){
+  var s = SK.id && skById(SK.id); if(!s) return;
+  s.del = true; s.updatedAt = Date.now(); saveState(); removeOverlay('skill-ed'); render(); toast('Habilidad eliminada');
+}
+function mergeSkills(cloud){
+  var map = {}; (S.skills||[]).forEach(function(s){ map[s.id]=s; });
+  (cloud||[]).forEach(function(c){ var l=map[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) map[c.id]=c; });
+  S.skills = Object.keys(map).map(function(k){return map[k];});
+}
+
 function renderProjectsSection(){
   var projects = S.projects || [];
   var can = projects.length < maxProjects();
@@ -9910,6 +10177,7 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       // Botón de temporizador (pedido): abre la pantalla de ejecución con
       // sets/descansos. La casilla de la izquierda sigue funcionando normal
       // para marcarla a mano, sin usar el temporizador — no son excluyentes.
+      taskAppChipHTML(t)+
       (hasTimer?'<button onclick="event.stopPropagation();openTimerRun(\''+t.id+'\')" title="'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'Continuar temporizador':'Iniciar temporizador')+'" style="background:'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'var(--ink)':'var(--accent)')+';border:none;color:#fff;font-size:12px;padding:0;width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="13" height="13" style="margin-left:1px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.5-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z"/></svg></button>':'')+
       // Insignia de vínculo: solo si la tarea está vinculada (editar y vincular viven en el menú ⋯ y al tocar el nombre)
       (_linked?'<button onclick="event.stopPropagation();openLinkModal(\''+t.id+'\')" title="Vinculada — toca para ver o cambiar" aria-label="Vinculada" style="background:none;border:none;color:var(--accent-text);opacity:.85;padding:0;width:28px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('link',14,1.8)+'</button>':'')+
@@ -11818,6 +12086,10 @@ var TIMER_SOUNDS = {
   ding:    {label:'Ding-dong',         v:[{t:0,f:988,d:1.3,w:'sine',g:.28,p:[[1,1,1],[2.4,.3,.4]],wet:.25},{t:.4,f:784,d:1.8,w:'sine',g:.28,p:[[1,1,1],[2.4,.3,.4]],wet:.3}]},
   soft:    {label:'Suave',             v:[{t:0,f:440,d:1.1,w:'sine',g:.26,a:.03,p:[[1,1,1],[2,.3,.7]],wet:.25}]},
   pluck:   {label:'Cuerda pulsada',    v:[{t:0,f:392,d:.8,w:'triangle',g:.32,p:[[1,1,1],[2,.5,.6],[3,.25,.4]],wet:.2}]},
+  zen:     {label:'Zen (cuenco suave)', v:[{t:0,f:261,d:3.4,w:'sine',g:.22,a:.06,p:[[1,1,1],[2.01,.3,.6],[3.02,.12,.4]],wet:.5}]},
+  dew:     {label:'Rocío (dos gotas)', v:[{t:0,f:988,d:1.0,w:'sine',g:.15,a:.01,p:[[1,1,1],[2,.2,.5]],wet:.45},{t:.16,f:1319,d:1.2,w:'sine',g:.12,a:.01,p:[[1,1,1],[2,.2,.5]],wet:.45}]},
+  harp:    {label:'Arpa suave',        v:[{t:0,f:523,d:1.6,w:'sine',g:.17,p:[[1,1,1],[2,.25,.5]],wet:.4},{t:.15,f:659,d:1.6,w:'sine',g:.17,p:[[1,1,1],[2,.25,.5]],wet:.4},{t:.3,f:784,d:1.7,w:'sine',g:.17,p:[[1,1,1],[2,.25,.5]],wet:.4},{t:.45,f:1047,d:2.2,w:'sine',g:.17,p:[[1,1,1],[2,.25,.5]],wet:.45}]},
+  woodsoft:{label:'Madera suave',      v:[{t:0,f:440,d:.3,w:'triangle',g:.18,a:.004,p:[[1,1,1],[2.4,.4,.3]],wet:.2}]},
   drop:    {label:'Gota',              v:[{t:0,f:1300,end:520,d:.32,w:'sine',g:.34,a:.004,wet:.35}]},
   // ── Neutros ──
   beep:    {label:'Pitido',            v:[{t:0,f:880,d:.32,w:'triangle',g:.3,sus:1,a:.005}]},
@@ -11829,7 +12101,7 @@ var TIMER_SOUNDS = {
 };
 var TIMER_SOUND_GROUPS = [
   ['Entrenamiento',['boxing','gym','gymlong','count','double','triple','whistle','horn','siren','drum','rise','fall','fanfare']],
-  ['Estudio y calma',['bowl','gong','marimba','glock','chime','bell','ding','soft','pluck','drop']],
+  ['Estudio y calma',['zen','harp','dew','woodsoft','bowl','gong','marimba','glock','chime','bell','ding','soft','pluck','drop']],
   ['Neutros',['beep','blip','tick','buzzer','alarm','coin']]
 ];
 var TIMER_EVENTS = [
@@ -11842,6 +12114,8 @@ var TIMER_EVENTS = [
 ];
 function timerCfgNorm(){
   var c = S.timerCfg || {};
+  var pk = (typeof TR!=='undefined' && TR && TR.pack && TIMER_PACKS[TR.pack] && TR.pack!=='train') ? TIMER_PACKS[TR.pack] : null;
+  if(pk){ c = Object.assign({}, c, {sounds:Object.assign({}, c.sounds||{}, pk.sounds||{}), snd:Object.assign({}, c.snd||{}, pk.snd||{}), volume:(c.volume==null?1:c.volume)*(pk.vol||1)}); }
   return {
     countdownBeepSec: c.countdownBeepSec==null?3:c.countdownBeepSec,
     volume: c.volume==null?1:Math.max(0,Math.min(3,c.volume)),
@@ -12055,13 +12329,15 @@ function buildTimerAndStart(taskId, timer, taskName, isPreview){
     taskId: isPreview?null:taskId, preview: !!isPreview, taskName: taskName,
     steps: built.steps, totalSec: built.totalSec,
     scheduledOscillators: [], wakeLock:null, paused:false, finished:false, tickHandle:null,
-    results: [], _lastIdx:-1, _frameKey:null, startedAt: Date.now()
+    results: [], _lastIdx:-1, _frameKey:null, startedAt: Date.now(),
+    pack: timer.soundPack||null, amb: timer.ambient||null
   };
   var ctx = _timerGetCtx();
   if(ctx){
     if(ctx.state==='suspended') ctx.resume();
     TR.audioStartCtxTime = ctx.currentTime + 0.15;
     scheduleTimerAudioFrom(0);
+    timerAmbStart();
   } else {
     TR.audioStartCtxTime = 0;
     toast('Tu navegador no soporta sonido para el temporizador — igual funciona la cuenta visual');
@@ -12235,6 +12511,7 @@ function timerMarkTask(){
 function timerFinish(){
   if(!TR) return;
   TR.finished = true; TR.ending = false;
+  timerAmbStop(3);
   if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
   timerReleaseWakeLock();
   timerSweepBests(TR.steps.length, true);
@@ -12342,6 +12619,7 @@ function timerSkip(delta){
 }
 function closeTimerRun(){
   if(TR){
+    timerAmbStop(.8);
     cancelScheduledTimerAudio();
     if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
     timerReleaseWakeLock();
@@ -12373,7 +12651,7 @@ function showTimerRunOverlay(){
   overlay.style.background='#000';
   overlay.style.alignItems='stretch';
   overlay.style.justifyContent='stretch';
-  overlay.innerHTML = '<div id="timer-run-body" style="width:100%;height:100%;display:flex;flex-direction:column;"></div>';
+  overlay.innerHTML = '<div id="timer-run-body" style="width:100%;height:100%;display:flex;flex-direction:column;"></div>'+ambBtnHTML();
   document.body.appendChild(overlay);
   timerRenderFrame(true);
 }
@@ -12679,7 +12957,8 @@ function startFreeCountdown(m){
   if(!(m>0)){ toast('Escribe cuántos minutos'); return; }
   removeOverlay('quick-cd');
   var sec = Math.max(1, Math.min(TIMER_MAX_SEC, Math.round(m*60)));
-  startFreeTimer({sets:[{id:uid(),name:'Cuenta regresiva',sec:sec,color:CATEGORY_COLORS[2]}],rounds:1,restBetween:0,restBetweenRounds:0}, 'Cuenta regresiva', 'Rápido');
+  ambStopPreview();
+  startFreeTimer({sets:[{id:uid(),name:'Cuenta regresiva',sec:sec,color:CATEGORY_COLORS[2]}],rounds:1,restBetween:0,restBetweenRounds:0, soundPack:(typeof QC_PACK!=='undefined'?QC_PACK:null), ambient:(typeof QC_AMB!=='undefined'&&QC_AMB)?{id:QC_AMB,vol:.5}:null}, 'Cuenta regresiva', 'Rápido');
 }
 function startTimerTpl(id){
   var tp = timerTplAll().find(function(x){return x.id===id;}); if(!tp) return;
@@ -12924,7 +13203,7 @@ function renderTimerHome(){
   html += timerHistSectionHTML();
   return html+'</div>';
 }
-var QC_MIN = 25;
+var QC_MIN = 25, QC_PACK = 'study', QC_AMB = '';
 function openQuickCountdown(){
   removeOverlay('quick-cd');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='quick-cd';
@@ -12943,9 +13222,13 @@ function openQuickCountdown(){
     '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+[5,10,15,25,45,60].map(chip).join('')+'</div>'+
     '<div style="display:flex;align-items:center;gap:10px;margin-top:16px;"><span style="font-size:13px;color:var(--ink-soft);flex:1;">Otro tiempo</span>'+
       '<input id="tm-free-min" class="finp" type="number" inputmode="decimal" min="1" max="600" placeholder="min" oninput="qcType(this.value)" style="width:90px;margin:0;text-align:center;"/><span style="font-size:13px;color:var(--muted);">min</span></div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Sonidos de aviso</div><div id="qc-pack">'+packChipsHTML(QC_PACK,'qcPack')+'</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Sonido de fondo</div><div id="qc-amb">'+ambChipsHTML(QC_AMB,'qcAmb')+'</div>'+
     '<button class="sbtn" onclick="startFreeCountdown(QC_MIN)" style="width:100%;margin-top:20px;padding:14px;font-size:15px;">Iniciar</button></div>';
   document.body.appendChild(ov); qcDraw();
 }
+function qcPack(k){ QC_PACK=(k==='train'?null:k); var e=document.getElementById('qc-pack'); if(e) e.innerHTML=packChipsHTML(QC_PACK,'qcPack'); }
+function qcAmb(id){ QC_AMB=id; if(id) ambPreview(id,.5); else ambStopPreview(); var e=document.getElementById('qc-amb'); if(e) e.innerHTML=ambChipsHTML(QC_AMB,'qcAmb'); }
 function qcDraw(){
   var b=document.getElementById('qc-big'); if(!b) return;
   var m=QC_MIN, h=Math.floor(m/60), mm=Math.round((m-h*60)*10)/10;
@@ -16035,6 +16318,7 @@ function taskModalDayHTML(showFreshCL){
     '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Temporizador'+infoBtn('timeradd')+'</div>'+
       '<button type="button" class="tog" id="m-timer-tog" onclick="mToggleTimerSection()" style="background:'+(M.hasTimer?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(M.hasTimer?22:2)+'px;"></span></button></div>'+
     '<div id="m-timer-area" style="display:'+(M.hasTimer?'block':'none')+';margin-top:12px;">'+timerAreaHTML()+'</div>'+
+    '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Abrir una app o enlace</div><span id="m-app-wrap">'+taskAppBtnHTML()+'</span></div>'+
     '<div style="height:18px;"></div>'+
     mRegistrySectionHTML()+
     mSecLabel('Cuándo','when')+
@@ -17155,7 +17439,7 @@ var BR_PRESETS = {
 var BR_TIMBRES = {pad:'Pad suave', flute:'Flauta', bowl:'Cuenco', drone:'Zumbido', wind:'Viento', none:'Silencio'};
 function brDefault(key){
   var p = BR_PRESETS[key||'caja'];
-  return {preset:key||'caja', pat:p.pat.slice(), sigh:!!p.sigh, min:p.min, view:'orb', bell:true, haptic:true, lead:3,
+  return {preset:key||'caja', pat:p.pat.slice(), sigh:!!p.sigh, min:p.min, view:'orb', bell:true, haptic:true, lead:3, amb:'', ambVol:.4,
     snd:{in:{t:'flute',v:.7,p:1}, hold:{t:'bowl',v:.6,p:1}, out:{t:'pad',v:.7,p:1}, rest:{t:'none',v:.4,p:1}}};
 }
 function brNorm(b){
@@ -17285,7 +17569,7 @@ var STUDY_PRESETS = {pomodoro:{l:'Pomodoro',f:25,r:5,n:4},largo:{l:'Bloques de 5
 function openStudyEditor(id){
   var tp = id ? timerTplAll().find(function(x){return x.id===id;}) : null;
   var st = tp && tp.study ? tp.study : (tp && tp.timer && tp.timer.sets && tp.timer.sets[0] ? {focus:Math.round(tp.timer.sets[0].sec/60), rest:Math.round((tp.timer.restBetweenRounds||0)/60), rounds:tp.timer.rounds||1} : {focus:25,rest:5,rounds:4});
-  SE = {id:id||null, name:tp?tp.name:'', focus:st.focus, rest:st.rest, rounds:st.rounds};
+  SE = {id:id||null, name:tp?tp.name:'', focus:st.focus, rest:st.rest, rounds:st.rounds, pack:(st.pack!==undefined?st.pack:'study'), amb:st.amb||'', ambVol:st.ambVol==null?.5:st.ambVol};
   removeOverlay('study-ed');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='study-ed';
   ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('study-ed'); });
@@ -17306,14 +17590,21 @@ function seDraw(){
     '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'+Object.keys(STUDY_PRESETS).map(function(k){ var p=STUDY_PRESETS[k], on = p.f===SE.focus&&p.r===SE.rest&&p.n===SE.rounds; return '<button class="cat-tab-btn'+(on?' on':'')+'" onclick="seSet(\''+k+'\')" style="padding:8px 14px;font-size:13px;'+(on?'background:var(--accent);color:#fff;border-color:var(--accent);':'')+'">'+p.l+' <span style="opacity:.7;font-size:11px;">'+p.f+'/'+p.r+'</span></button>'; }).join('')+'</div>'+
     brStep('Foco', SE.focus,'min','seAdj(\'focus\',-5)','seAdj(\'focus\',5)')+brStep('Descanso', SE.rest,'min','seAdj(\'rest\',-1)','seAdj(\'rest\',1)')+brStep('Bloques', SE.rounds,'','seAdj(\'rounds\',-1)','seAdj(\'rounds\',1)')+
     '<div style="display:flex;gap:3px;align-items:center;margin:12px 0 4px;">'+bar+'</div><div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:12px;">'+fmtDur(tot)+' en total · foco <span style="color:#3f7fbf;font-weight:700;">■</span> descanso <span style="color:#9bc4e8;font-weight:700;">■</span></div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Sonidos de aviso</div>'+packChipsHTML(SE.pack,'seSetPack')+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">Sonido de fondo</div>'+ambChipsHTML(SE.amb,'seSetAmb')+
+    (SE.amb?'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--muted);"><span style="width:52px;">Volumen</span><input type="range" min="5" max="100" value="'+Math.round(SE.ambVol*100)+'" oninput="SE.ambVol=this.value/100;ambSetPrevVol(SE.ambVol)" style="flex:1;accent-color:var(--accent);"/></div><div style="font-size:11px;color:var(--muted);margin-top:6px;">Suena durante todo el bloque, se puede silenciar desde el temporizador.</div>':'')+
+    '<div style="height:16px;"></div>'+
     '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="seStart()">Iniciar ahora</button><button class="sbtn" style="flex:1.4;" onclick="seSave()">Guardar</button></div></div>');
 }
+function seSetPack(k){ SE.pack=(k==='train'?null:k); brRerender('study-ed',seDraw); }
+function seSetAmb(id){ SE.amb=id; if(id) ambPreview(id,SE.ambVol); else ambStopPreview(); brRerender('study-ed',seDraw); }
+function ambSetPrevVol(v){ if(_ambPrev) _ambPrev.setVol(v); }
 function seSet(k){ var p=STUDY_PRESETS[k]; SE.focus=p.f; SE.rest=p.r; SE.rounds=p.n; brRerender('study-ed',seDraw); }
 function seAdj(k,d){ var lim={focus:[5,180],rest:[0,60],rounds:[1,12]}[k]; SE[k]=Math.max(lim[0],Math.min(lim[1],SE[k]+d)); brRerender('study-ed',seDraw); }
-function seTimer(){ return {sets:[{id:uid(),name:'Estudio',sec:SE.focus*60,color:CATEGORY_COLORS[2]}],rounds:SE.rounds,restBetween:0,restBetweenRounds:SE.rest*60}; }
-function seStart(){ var n=(SE.name||'').trim()||'Estudio'; removeOverlay('study-ed'); startFreeTimer(seTimer(), n, n); }
+function seTimer(){ return {sets:[{id:uid(),name:'Estudio',sec:SE.focus*60,color:CATEGORY_COLORS[2]}],rounds:SE.rounds,restBetween:0,restBetweenRounds:SE.rest*60, soundPack:SE.pack||null, ambient:SE.amb?{id:SE.amb,vol:SE.ambVol}:null}; }
+function seStart(){ ambStopPreview(); var n=(SE.name||'').trim()||'Estudio'; removeOverlay('study-ed'); startFreeTimer(seTimer(), n, n); }
 function seSave(){ var n=(SE.name||'').trim(); if(!n){ toast('Ponle un nombre'); return; }
-  brSaveTpl('estudio', n, {study:{focus:SE.focus,rest:SE.rest,rounds:SE.rounds}}, seTimer(), SE.id); removeOverlay('study-ed'); toast('Guardado'); }
+  ambStopPreview(); brSaveTpl('estudio', n, {study:{focus:SE.focus,rest:SE.rest,rounds:SE.rounds,pack:SE.pack,amb:SE.amb,ambVol:SE.ambVol}}, seTimer(), SE.id); removeOverlay('study-ed'); toast('Guardado'); }
 
 // ── Editor de Respiración ──
 var BE = null;
@@ -17359,6 +17650,8 @@ function beDraw(){
     lbl('Pantalla')+'<div style="display:flex;gap:8px;">'+[['orb','Orbe'],['ring','Ciclo'],['graph','Onda']].map(function(q){ var on=b.view===q[0]; return '<button onclick="beView(\''+q[0]+'\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;cursor:pointer;font-family:Inter,sans-serif;background:#16222a;border:2px solid '+(on?'var(--accent)':'transparent')+';color:#fff;font-size:12px;font-weight:600;">'+beViewThumb(q[0])+q[1]+'</button>'; }).join('')+'</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-top:6px;">Podrás cambiarla durante la sesión.</div>'+
     lbl('Sonido por fase')+snd+
+    lbl('Sonido de fondo')+ambChipsHTML(b.amb,'beAmb')+
+    (b.amb?'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--muted);"><span style="width:52px;">Volumen</span><input type="range" min="5" max="100" value="'+Math.round((b.ambVol==null?.4:b.ambVol)*100)+'" oninput="BE.b.ambVol=this.value/100;ambSetPrevVol(BE.b.ambVol)" style="flex:1;accent-color:var(--accent);"/></div>':'')+
     lbl('Extras')+tog('bell','Campana al empezar y terminar')+tog('haptic','Vibración en cada cambio de fase')+
     brStep('Cuenta previa', b.lead, 's', 'beLead(-1)', 'beLead(1)')+
     '<div style="display:flex;gap:8px;margin-top:16px;"><button class="cbtn" style="flex:1;" onclick="beStart()">Probar ahora</button><button class="sbtn" style="flex:1.4;" onclick="beSave()">Guardar</button></div></div>');
@@ -17367,11 +17660,12 @@ function bePreset(k){ var d = brDefault(k); BE.b.preset=k; BE.b.pat=d.pat; BE.b.
 function beAdj(i,dir){ var b=BE.b, lim=[[1,15],[0,20],[1,20],[0,15]][i]; b.pat[i] = Math.max(lim[0], Math.min(lim[1], Math.round((b.pat[i]+dir*.5)*10)/10)); b.preset = (b.preset==='custom'||BR_PRESETS[b.preset].pat.join()===b.pat.join()) ? b.preset : 'custom'; beRe(); }
 function beMin(d){ BE.b.min = Math.max(1, Math.min(60, BE.b.min+d)); beRe(); }
 function beLead(d){ BE.b.lead = Math.max(0, Math.min(10, BE.b.lead+d)); beRe(); }
+function beAmb(id){ BE.b.amb=id; if(id) ambPreview(id,BE.b.ambVol==null?.4:BE.b.ambVol); else ambStopPreview(); beRe(); }
 function beTog(k){ BE.b[k]=!BE.b[k]; beRe(); }
 function beView(v){ BE.b.view=v; beRe(); }
 function beSnd(ph,k,v){ BE.b.snd[ph][k]=v; beRe(); if(k==='t') brPreviewSound(ph); }
-function beStart(){ var b = JSON.parse(JSON.stringify(BE.b)), n=(BE.name||'').trim()||'Respiración'; removeOverlay('breath-ed'); openBreathRun(b, n, null); }
-function beSave(){ var n=(BE.name||'').trim(); if(!n){ toast('Ponle un nombre'); return; }
+function beStart(){ ambStopPreview(); var b = JSON.parse(JSON.stringify(BE.b)), n=(BE.name||'').trim()||'Respiración'; removeOverlay('breath-ed'); openBreathRun(b, n, null); }
+function beSave(){ ambStopPreview(); var n=(BE.name||'').trim(); if(!n){ toast('Ponle un nombre'); return; }
   brSaveTpl('breath', n, {breath:BE.b}, null, BE.id); removeOverlay('breath-ed'); toast('Guardado'); }
 
 // ── Sesión guiada ──
@@ -17392,6 +17686,7 @@ function openBreathRun(b, name, tplId){
         next:0, muted:false, paused:false, raf:0, sched:0, lastIdx:-1, started:Date.now(), done:false, view:b.view, wake:null,
         reduce: !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)};
   if(b.bell) brBell(ctx, master, BR.t0, .8);
+  ambStopPreview(); if(b.amb) BR.amb = ambStart(ctx, b.amb, b.ambVol==null?.4:b.ambVol, master);
   try{ if('wakeLock' in navigator) navigator.wakeLock.request('screen').then(function(l){ if(BR) BR.wake=l; else l.release(); }).catch(function(){}); }catch(e){}
   removeOverlay('breath-run');
   var ov = document.createElement('div'); ov.id='breath-run';
@@ -17536,13 +17831,13 @@ function brLog(sec){
   if(!S.timerHistory) S.timerHistory=[]; S.timerHistory.push(h); if(S.timerHistory.length>600) S.timerHistory = S.timerHistory.slice(-600); saveState();
 }
 function brCleanup(){
-  if(!BR) return; clearInterval(BR.sched); cancelAnimationFrame(BR.raf);
+  if(!BR) return; try{ if(BR.amb) BR.amb.stop(.8); }catch(e){} clearInterval(BR.sched); cancelAnimationFrame(BR.raf);
   try{ if(BR.wake) BR.wake.release(); }catch(e){}
   var c = BR.ctx; setTimeout(function(){ try{c.close();}catch(e){} }, 3500);
   BR = null;
 }
 function brFinish(ok){
-  if(!BR||BR.done) return; BR.done = true; cancelAnimationFrame(BR.raf);
+  if(!BR||BR.done) return; BR.done = true; cancelAnimationFrame(BR.raf); try{ if(BR.amb) BR.amb.stop(3); }catch(e){}
   var cycles = BR.cycles, total = BR.total, name = BR.name; brLog(total);
   var ov = document.getElementById('breath-run'); if(ov) ov.style.background = '#1b2a22';
   if(ov) ov.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;">'+
@@ -17558,6 +17853,116 @@ function brClose(fromDone){
     var el = (BR.ctx.currentTime - BR.t0); if(el>=20) brLog(el);
   }
   var ov = document.getElementById('breath-run'); if(ov) ov.remove(); brCleanup(); render();
+}
+
+// ══ Sonidos de fondo (ambientes) y paquetes de sonido suaves ══
+// Los ambientes se sintetizan (sin archivos): se genera un bucle de audio una sola vez y se reproduce
+// en loop con fundido de entrada/salida. Usan el mismo AudioContext que el temporizador, así que
+// pausar el temporizador también pausa el ambiente.
+var AMB_LIST = [['rain','Lluvia'],['fire','Fogata'],['lofi','Lo-fi'],['ocean','Olas'],['wind','Viento'],['brown','Ruido marrón']];
+var TIMER_PACKS = {
+  train:  {label:'Entrenamiento', sub:'Pitidos y campanas marcadas (los de siempre)'},
+  study:  {label:'Suaves', sub:'Arpa, gotas y cuenco: aviso amable al empezar y terminar', snd:{start:'harp',work:'dew',rest:'soft',finish:'zen'}, sounds:{start:true,work:true,rest:true,countdown:false,exerciseEnd:false,finish:true}, vol:.8},
+  minimal:{label:'Mínimos', sub:'Solo un cuenco al inicio y al final', snd:{start:'zen',finish:'zen'}, sounds:{start:true,work:false,rest:false,countdown:false,exerciseEnd:false,finish:true}, vol:.75},
+  silent: {label:'Silencio', sub:'Sin sonidos de aviso', sounds:{start:false,work:false,rest:false,countdown:false,exerciseEnd:false,finish:false}}
+};
+var _ambCache = {};
+function ambBuild(ctx, id){
+  var key = id+'@'+ctx.sampleRate; if(_ambCache[key]) return _ambCache[key];
+  var sr = ctx.sampleRate, dur = {rain:12, fire:14, ocean:16, wind:12, brown:10, lofi:16}[id]||10, N = Math.round(sr*dur);
+  var buf = ctx.createBuffer(2, N, sr), ch = [buf.getChannelData(0), buf.getChannelData(1)];
+  for(var c=0;c<2;c++){
+    var d = ch[c], b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0, brown=0, hp=0, lp=0, lp2=0, i;
+    var pink = function(){ var w=Math.random()*2-1; b0=.99886*b0+w*.0555179; b1=.99332*b1+w*.0750759; b2=.969*b2+w*.153852; b3=.8665*b3+w*.3104856; b4=.55*b4+w*.5329522; b5=-.7616*b5-w*.016898; var o=b0+b1+b2+b3+b4+b5+b6+w*.5362; b6=w*.115926; return o*.11; };
+    var brn = function(){ brown = (brown + (Math.random()*2-1)*.02)/1.02; return brown*3.5; };
+    if(id==='rain'){
+      var prev=0;
+      for(i=0;i<N;i++){ var p=pink(); hp = .93*(hp + p - prev); prev = p; lp += .35*(hp-lp); d[i] = lp*1.6 + brn()*.12; }
+      var drops = Math.round(dur*55);
+      for(var k=0;k<drops;k++){ var st=Math.floor(Math.random()*N), f=2500+Math.random()*3500, a=.05+Math.random()*.12, L=Math.floor(sr*.012);
+        for(var j=0;j<L;j++){ d[(st+j)%N] += a*Math.sin(2*Math.PI*f*j/sr)*Math.exp(-j/(L*.3)); } }
+    } else if(id==='fire'){
+      for(i=0;i<N;i++){ lp += .08*(brn()-lp); d[i] = lp*.9 + (Math.random()*2-1)*.01; }
+      var pops = Math.round(dur*9);
+      for(var k2=0;k2<pops;k2++){ var s2=Math.floor(Math.random()*N), L2=Math.floor(sr*(.003+Math.random()*.012)), a2=(Math.random()<.15?.7:.25)*(.4+Math.random()*.6);
+        for(var j2=0;j2<L2;j2++){ d[(s2+j2)%N] += a2*(Math.random()*2-1)*Math.exp(-j2/(L2*.35)); } }
+      var hiss = 0; for(i=0;i<N;i++){ hiss += .5*((Math.random()*2-1)-hiss); d[i] += hiss*.012; }
+    } else if(id==='ocean'){
+      for(i=0;i<N;i++){ var t=i/sr, sw=.5+.5*Math.sin(2*Math.PI*t/8+(c?.35:0)), env=.12+.88*sw*sw, cut=.03+.22*sw; lp += cut*(pink()*2.4-lp); d[i]=lp*env*1.6; }
+    } else if(id==='wind'){
+      for(i=0;i<N;i++){ var t2=i/sr, g=.35+.65*(.5+.5*Math.sin(2*Math.PI*t2/6+(c?.7:0))); lp += (.05+.12*g)*(pink()*2.2-lp); lp2 += .02*(lp-lp2); d[i]=(lp-lp2)*g*1.8; }
+    } else if(id==='brown'){
+      for(i=0;i<N;i++){ d[i]=brn()*.9; }
+    } else if(id==='lofi'){
+      var bpm=75, beat=60/bpm, chords=[[261.63,329.63,392,493.88,65.41],[220,261.63,329.63,392,55],[293.66,349.23,440,523.25,73.42],[196,246.94,293.66,349.23,49]];
+      var note=function(f,t0,len,amp,ov){ var s0=Math.floor(t0*sr), L=Math.floor(len*sr);
+        for(var j=0;j<L;j++){ var t=j/sr, e=Math.min(1,t/.006)*Math.exp(-t*(ov||1.3)); var v=Math.sin(2*Math.PI*f*t)+.34*Math.sin(2*Math.PI*f*2*t+.4)+.09*Math.sin(2*Math.PI*f*4*t); d[(s0+j)%N]+=amp*e*v; } };
+      chords.forEach(function(ch4,ci){ var T=ci*4;
+        [0,2.4].forEach(function(off,ri){ for(var q=0;q<4;q++){ note(ch4[q], T+off+q*(.035+c*.004), 3.2, .09*(ri?.7:1)); } });
+        note(ch4[4], T, 2.2, .26, 1.7); note(ch4[4], T+2.4, 1.6, .2, 2.2);
+      });
+      for(var hb=0; hb<dur/beat*2; hb++){ var ht=hb*beat/2+(hb%2?beat*.03:0), hs=Math.floor(ht*sr), hl=Math.floor(sr*.03), ha=(hb%2?.05:.025); for(var hj=0;hj<hl;hj++){ d[(hs+hj)%N]+=ha*(Math.random()*2-1)*Math.exp(-hj/(hl*.18)); } }
+      for(var vc=0; vc<dur*7; vc++){ var vs=Math.floor(Math.random()*N), va=.04+Math.random()*.08; d[vs]+=va; d[(vs+1)%N]-=va*.6; }
+      for(i=0;i<N;i++){ lp += .33*(d[i]-lp); d[i] = lp + (Math.random()*2-1)*.004; }
+    }
+  }
+  var peak = 0; for(var cc=0;cc<2;cc++) for(var q2=0;q2<N;q2+=7) peak = Math.max(peak, Math.abs(ch[cc][q2]));
+  var nm = peak>0 ? .55/peak : 1; for(var c2=0;c2<2;c2++){ var dd=ch[c2]; for(var z=0;z<N;z++) dd[z]*=nm; }
+  _ambCache[key] = buf; return buf;
+}
+// Devuelve {stop(), setVol(v), el} o null
+function ambStart(ctx, id, vol, dest){
+  if(!id || !ctx) return null;
+  try{
+    var src = ctx.createBufferSource(); src.buffer = ambBuild(ctx, id); src.loop = true;
+    var g = ctx.createGain(), now = ctx.currentTime; g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(Math.max(.0001, (vol==null?.5:vol)), now+2.5);
+    src.connect(g); g.connect(dest||ctx.destination); src.start(now);
+    return {src:src, g:g, ctx:ctx,
+      setVol:function(v){ try{ g.gain.cancelScheduledValues(ctx.currentTime); g.gain.setTargetAtTime(Math.max(.0001,v), ctx.currentTime, .15); }catch(e){} },
+      stop:function(fade){ try{ var t=ctx.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(.0001, t+(fade==null?1.5:fade)); src.stop(t+(fade==null?1.5:fade)+.1); }catch(e){} }};
+  }catch(e){ return null; }
+}
+var _ambPrev = null;
+function ambPreview(id, vol){
+  if(_ambPrev){ _ambPrev.stop(.3); _ambPrev = null; }
+  if(!id){ return; }
+  var ctx = _timerGetCtx(); if(!ctx) return; if(ctx.state==='suspended') ctx.resume();
+  _ambPrev = ambStart(ctx, id, vol==null?.5:vol);
+  var me = _ambPrev; setTimeout(function(){ if(_ambPrev===me){ me.stop(1); _ambPrev=null; } }, 7000);
+}
+function ambStopPreview(){ if(_ambPrev){ _ambPrev.stop(.3); _ambPrev=null; } }
+// Sesión del temporizador
+function timerAmbStart(){
+  if(!TR || !TR.amb || !TR.amb.id) return;
+  var ctx = _timerGetCtx(); if(!ctx) return;
+  ambStopPreview();
+  TR.ambNode = ambStart(ctx, TR.amb.id, TR.amb.vol==null?.5:TR.amb.vol);
+}
+function timerAmbStop(fade){ if(TR && TR.ambNode){ TR.ambNode.stop(fade); TR.ambNode=null; } }
+function timerAmbToggle(){
+  if(!TR || !TR.ambNode) { if(TR && TR.amb && TR.amb.id && TR.ambMuted){ TR.ambMuted=false; timerAmbStart(); } return; }
+  TR.ambMuted = true; timerAmbStop(.6); var b=document.getElementById('amb-btn'); if(b) b.style.opacity='.5';
+}
+function ambBtnHTML(){
+  if(!TR || !TR.amb || !TR.amb.id) return '';
+  var nm = (AMB_LIST.find(function(x){return x[0]===TR.amb.id;})||['','Ambiente'])[1];
+  return '<button id="amb-btn" onclick="timerAmbToggle()" aria-label="Sonido de fondo" style="position:absolute;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:6;background:#ffffff26;border:none;color:#fff;font-size:11px;font-weight:700;padding:6px 12px;border-radius:14px;cursor:pointer;font-family:Inter,sans-serif;">♫ '+nm+'</button>';
+}
+// Selector reutilizable (chips) — prefix distingue de qué editor viene
+function ambChipsHTML(sel, callOn, prev){
+  var chip = function(id,txt){ var on=(sel||'')===id; return '<button type="button" onclick="'+callOn+'(\''+id+'\')" style="padding:7px 13px;border-radius:16px;font-size:12.5px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';font-weight:'+(on?'700':'500')+';">'+txt+'</button>'; };
+  return '<div style="display:flex;flex-wrap:wrap;gap:7px;">'+chip('','Ninguno')+AMB_LIST.map(function(a){return chip(a[0],a[1]);}).join('')+'</div>';
+}
+function packChipsHTML(sel, callOn){
+  return '<div style="display:flex;flex-direction:column;gap:7px;">'+Object.keys(TIMER_PACKS).map(function(k){ var p=TIMER_PACKS[k], on=(sel||'train')===k;
+    return '<button type="button" onclick="'+callOn+'(\''+k+'\')" style="text-align:left;padding:9px 12px;border-radius:12px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';"><span style="display:block;font-size:13px;font-weight:700;color:var(--ink);">'+p.label+'</span><span style="display:block;font-size:11px;color:var(--muted);margin-top:1px;">'+p.sub+'</span></button>'; }).join('')+
+    '<button type="button" onclick="previewPack(\''+(sel||'train')+'\')" style="align-self:flex-start;background:none;border:none;color:var(--accent-text);font-size:12px;font-weight:700;cursor:pointer;padding:2px 0;font-family:Inter,sans-serif;">▶ Escuchar inicio y fin</button></div>';
+}
+function previewPack(k){
+  var p = TIMER_PACKS[k], ctx=_timerGetCtx(); if(!ctx) return; if(ctx.state==='suspended') ctx.resume();
+  var snd = (p&&p.snd) || {start:'boxing', finish:'fanfare'}, v = ((p&&p.vol)||1)*timerCfgNorm().volume, t = ctx.currentTime+.05;
+  if(p && p.sounds && p.sounds.start===false) { toast('Este paquete no suena'); return; }
+  playTimerSound(ctx, snd.start||'boxing', t, v, 1); playTimerSound(ctx, snd.finish||'fanfare', t+2.4, v, 1);
 }
 
 var EXE = null;
@@ -18140,8 +18545,22 @@ function openItemApp(taskId, itemId){
     else window.location.href = u;
   }catch(e){ toast('No se pudo abrir el enlace'); }
 }
+// ── App/enlace a nivel de TAREA (además de los ítems de checklist) ──
+function taskAppBtnHTML(){
+  var a = M.task && M.task.app, has = !!(a && a.url);
+  return '<button type="button" onclick="mOpenItemApp(\'__task\')" aria-label="Abrir una app o enlace" style="display:inline-flex;align-items:center;gap:6px;background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted)')+';border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+ico('open',13,2)+' '+(has?esc(appLinkLabel(a)).slice(0,18):'Elegir')+'</button>';
+}
+function taskAppChipHTML(t){
+  if(!(t.app && t.app.url) || isDone(t)) return '';
+  return '<button onclick="event.stopPropagation();openTaskApp(\''+t.id+'\')" aria-label="Abrir '+esc(appLinkLabel(t.app))+'" title="Abrir '+esc(appLinkLabel(t.app))+'" style="background:var(--accent-bg);border:none;color:var(--accent-text);font-size:10.5px;font-weight:700;padding:0 8px;height:26px;border-radius:13px;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;cursor:pointer;font-family:Inter,sans-serif;">'+ico('open',11,2.2)+' '+esc(appLinkLabel(t.app)).slice(0,12)+'</button>';
+}
+function openTaskApp(taskId){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.app || !t.app.url) return;
+  var u = t.app.url;
+  try{ if(/^https?:/i.test(u)) window.open(u, '_blank', 'noopener'); else window.location.href = u; }catch(e){ toast('No se pudo abrir el enlace'); }
+}
 function mOpenItemApp(id){
-  var item = M.checklist.find(function(i){return i.id===id;}); if(!item) return;
+  var item = id==='__task' ? {id:'__task', app:(M.task&&M.task.app)||null} : M.checklist.find(function(i){return i.id===id;}); if(!item) return;
   removeOverlay('item-app-sheet');
   var cur = item.app || null;
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='item-app-sheet'; ov.style.zIndex = 620;
@@ -18151,7 +18570,7 @@ function mOpenItemApp(id){
     return '<button class="sc-chip'+(on?' on':'')+'" onclick="mSetItemApp(\''+id+'\',\''+a.id+'\')">'+esc(a.name)+'</button>';
   }).join('');
   ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:19px;">Abrir una app</span><button onclick="removeOverlay(\'item-app-sheet\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:4px;">Este ítem tendrá un botón que abre la app o el enlace que elijas.</div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:4px;">Habrá un botón que abre la app o el enlace que elijas.</div>'+
     '<div class="sc-lbl">Apps frecuentes</div><div class="sc-row">'+cat+'</div>'+
     '<div class="sc-lbl">O pega tu propio enlace</div>'+
     '<input id="app-url-in" type="url" inputmode="url" autocapitalize="off" autocomplete="off" placeholder="https://… o strava://…" value="'+esc(cur && !cur.id ? cur.url : '')+'" style="width:100%;border:1.5px solid var(--field-line,var(--line));border-radius:10px;padding:11px 12px;font-size:16px;font-family:Inter,sans-serif;background:var(--bg);color:var(--ink);outline:none;"/>'+
@@ -18160,6 +18579,10 @@ function mOpenItemApp(id){
   document.body.appendChild(ov);
 }
 function mApplyItemApp(id, app){
+  if(id==='__task'){
+    if(app) M.task.app = app; else delete M.task.app;
+    removeOverlay('item-app-sheet'); var w=document.getElementById('m-app-wrap'); if(w) w.innerHTML = taskAppBtnHTML(); return;
+  }
   M.checklist = M.checklist.map(function(i){ if(i.id!==id) return i; var n = Object.assign({}, i); if(app) n.app = app; else delete n.app; return n; });
   removeOverlay('item-app-sheet'); mRerenderCL();
 }
@@ -21257,7 +21680,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.112';
+var APP_VERSION = '2026.10.01.113';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
