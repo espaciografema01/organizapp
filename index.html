@@ -1245,7 +1245,7 @@ async function syncWithCloud(){
         shareData: shareCloudPayload(),
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
-        registries: S.registries||[], skills: S.skills||[],
+        registries: S.registries||[],
         timerTemplates: S.timerTemplates||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
@@ -1367,7 +1367,6 @@ function applySyncResult(cloud, useCloud){
       if(cloud.streakCfg) S.streakCfg = cloud.streakCfg;
       try{ shareMergeCloud(cloud); }catch(e){}
       if(cloud.timerCfg) S.timerCfg = Object.assign({}, S.timerCfg, cloud.timerCfg);
-      try{ if(cloud.skills) mergeSkills(cloud.skills); }catch(e){}
       // Preferencia + marcadores de "hasta qué ciclo ya se reinició": viajan
       // juntos con las tareas de la nube, para que otro dispositivo no vuelva
       // a reiniciar (y borre avance) algo que este ya reinició.
@@ -1491,7 +1490,7 @@ function pushToCloud(){
       shareData: shareCloudPayload(),
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
-      registries: S.registries||[], skills: S.skills||[],
+      registries: S.registries||[],
         timerTemplates: S.timerTemplates||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
@@ -1906,7 +1905,7 @@ var S = {
   // preferencias personales de sonido (ver openYoTimerScreen).
   timerCfg:{countdownBeepSec:3, volume:1, sounds:{start:true,work:true,rest:true,countdown:true,finish:true}, keepScreenOn:true},
   // Registros (finanzas y marcas) — ver openRegEditor / mergeRegistries
-  registries:[], skills:[],
+  registries:[],
   exerciseLib:[], setLib:[], exerciseGroups:[], timerBests:{}, timerHistory:[], planNotify:true, periodCloses:[], regPrefill:true,
   regReminder:{on:false, mode:'weekly', hh:20, mm:0, dow:6}, // recordatorio para anotar gastos e ingresos
   planWeekKey:null, // si se reinició la semana el fin de semana: clave de ESA semana → se muestran las fechas de la siguiente
@@ -2397,7 +2396,6 @@ function loadState(){
     var ac=localStorage.getItem('og6-achievements');if(ac)S.achievements=JSON.parse(ac);
     var md=localStorage.getItem('og6-medals');if(md)S.medals=JSON.parse(md);
     try{var rg=localStorage.getItem('og6-registries');if(rg)S.registries=JSON.parse(rg)||[];}catch(e){}
-    try{var sk_=localStorage.getItem('og6-skills');if(sk_)S.skills=JSON.parse(sk_)||[];}catch(e){}
     try{var ttp=localStorage.getItem('og6-timertemplates');if(ttp)S.timerTemplates=JSON.parse(ttp)||[];}catch(e){}
     try{var elb=localStorage.getItem('og6-exlib');if(elb)S.exerciseLib=JSON.parse(elb)||[];}catch(e){}
     try{var egr=localStorage.getItem('og6-exgroups');if(egr)S.exerciseGroups=JSON.parse(egr)||[];}catch(e){}
@@ -2532,7 +2530,6 @@ function _saveStateNow(){
     _lsSet('og6-achievements',JSON.stringify(S.achievements||[]));
     _lsSet('og6-medals',JSON.stringify(S.medals||[]));
     _lsSet('og6-registries',JSON.stringify(S.registries||[]));
-    _lsSet('og6-skills',JSON.stringify(S.skills||[]));
     _lsSet('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
     _lsSet('og6-exlib',JSON.stringify(S.exerciseLib||[]));
     _lsSet('og6-setlib',JSON.stringify(S.setLib||[]));
@@ -3280,7 +3277,7 @@ function modeThreshold(base){
 // Devuelve el plan actual: 'free', 'donante'
 // Cuentas autorizadas para probar la suscripción sin pagar (vista previa). Pon aquí TU correo.
 // Mientras la lista esté vacía, la vista previa queda desactivada para todo el mundo.
-var DEV_EMAILS = ['joaquinferrercarmona@gmail.com'];
+var DEV_EMAILS = [];
 function isDevUser(){
   try{ return !!(currentUser && currentUser.email && DEV_EMAILS.map(function(e){return String(e).toLowerCase();}).indexOf(String(currentUser.email).toLowerCase())!==-1); }catch(e){ return false; }
 }
@@ -5817,82 +5814,17 @@ function renderYoDatosScreen(){
   return html;
 }
 
-// ── Billing de Google Play (TWA + Digital Goods API) ─────────────────────────
-// En una TWA (Bubblewrap) NO existe un puente nativo tipo AndroidBridge: Chrome
-// expone Play Billing mediante la Digital Goods API + Payment Request API.
-// Solo funciona en la app instalada desde Google Play (pista interna/cerrada/
-// producción) y con billing activado en el twa-manifest.
-// Los IDs deben coincidir EXACTAMENTE con los de Play Console:
-//  - suscripción: usar el ID de la SUSCRIPCIÓN (no el del plan básico)
-//  - donación: debe existir como "producto integrado" (pago único)
-var PLAY_BILLING_URL = 'https://play.google.com/billing';
-var SKU_SUBSCRIPTION = 'subscription_annual_12k';
-var SKU_DONATION = 'donation_5k';
-var _purchaseBusy = false;
-
-async function _getPlayService(){
-  if(!('getDigitalGoodsService' in window)) return null;
-  try{ return await window.getDigitalGoodsService(PLAY_BILLING_URL); }
-  catch(e){ console.warn('Play Billing no disponible:', e); return null; }
-}
-
-async function triggerGooglePlayPurchase(sku){
-  if(_purchaseBusy) return;
-  // El plan se lee con getPlan(), que exige sesión iniciada: sin login el pago
-  // se cobraría pero la app seguiría mostrando "gratis".
-  if(!currentUser){
-    toast('Inicia sesión antes de suscribirte');
-    try{ showAuthModal('login'); }catch(e){}
+// Punto de entrada para el billing de Google Play.
+// Cuando la app esté empaquetada (Android/PWA), el wrapper nativo intercepta
+// esta llamada e inicia el flujo de compra del Play Store.
+// En browser, muestra un mensaje informativo.
+function triggerGooglePlayPurchase(sku){
+  if(window.AndroidBridge && window.AndroidBridge.startPurchase){
+    window.AndroidBridge.startPurchase(sku);
     return;
   }
-  var service = await _getPlayService();
-  if(!service || typeof PaymentRequest==='undefined'){
-    showInfoModal('Pago via Google Play','Las compras solo funcionan con la app instalada desde Google Play. SKU: '+sku,'Entendido');
-    return;
-  }
-  _purchaseBusy = true;
-  try{
-    var details = await service.getDetails([sku]);
-    if(!details || !details.length){ toast('Producto no encontrado en Google Play'); return; }
-    var d = details[0];
-    var req = new PaymentRequest(
-      [{supportedMethods: PLAY_BILLING_URL, data:{sku: sku}}],
-      {total:{label: d.title || 'Gramifica', amount:{currency: d.price.currency, value: d.price.value}}}
-    );
-    var resp = await req.show();
-    var token = resp.details && resp.details.purchaseToken;
-    if(!token){ await resp.complete('fail'); toast('No se recibió confirmación de la compra'); return; }
-    // Reconocer la compra (si no, Google la reembolsa a los 3 días).
-    // Suscripción => 'repeatable'; donación (pago único) => 'onetime'.
-    await service.acknowledge(token, sku===SKU_DONATION ? 'onetime' : 'repeatable');
-    await resp.complete('success');
-    await refreshSubscription();
-    toast('✓ ¡Gracias por tu apoyo!');
-  }catch(e){
-    console.warn('Compra cancelada o fallida:', e);
-    toast('Compra cancelada o no disponible');
-  }finally{
-    _purchaseBusy = false;
-  }
-}
-
-// Consulta a Play qué compras están activas y actualiza window.userSubscription,
-// que es lo que lee getPlan(). Se llama al arrancar y tras cada compra.
-// NOTA de seguridad: esto confía en el cliente. Para verificar de verdad, envía
-// el purchaseToken a una Cloud Function que lo valide con la Google Play
-// Developer API (purchases.subscriptionsv2.get) y guarde el estado en Firestore.
-async function refreshSubscription(){
-  var service = await _getPlayService();
-  if(!service) return;
-  try{
-    var purchases = await service.listPurchases();
-    var has = purchases.some(function(p){ return p.itemId === SKU_SUBSCRIPTION; });
-    window.userSubscription = has ? {status:'active', expiryDate:null} : {status:'none'};
-  }catch(e){
-    console.warn('No se pudo verificar la suscripción:', e);
-    return;
-  }
-  try{ render(); }catch(e){}
+  // Fallback en browser (durante desarrollo)
+  showInfoModal('Pago via Google Play','Esta compra se procesa a través de Google Play Store cuando la app está instalada desde la tienda. SKU: '+sku,'Entendido');
 }
 
 
@@ -6024,7 +5956,7 @@ function canCreateAnyRegistry(){ return canCreateRegistry(); }
 function projViewCur(){
   if(S._projView) return S._projView;
   var v=null; try{ v=localStorage.getItem('og6-projview'); }catch(e){}
-  return (v==='reg'||v==='proj'||v==='timer'||v==='skill') ? v : 'reg';
+  return (v==='reg'||v==='proj'||v==='timer') ? v : 'reg';
 }
 function setProjView(v){ S._projView = v; try{ localStorage.setItem('og6-projview', v); }catch(e){} render(); }
 function exportRegCSV(regId){
@@ -6700,7 +6632,7 @@ function regEntryBodyHTML(){
     html += mSecLabel('Nota (opcional)')+
       '<input id="en-note" class="finp" type="text" value="'+esc(ex?(ex.note||''):'')+'" style="margin-bottom:14px;"/>';
   }
-  html += '<datalist id="en-labels">'+Object.keys(labels).map(function(l){return '<option value="'+esc(l)+'">';}).join('')+'</datalist>'+
+  html += enAxesHTML()+'<datalist id="en-labels">'+Object.keys(labels).map(function(l){return '<option value="'+esc(l)+'">';}).join('')+'</datalist>'+
     '<div id="en-date-lbl">'+mSecLabel(isFin && EN.status==='expected' ? 'Fecha estimada' : 'Fecha')+'</div>'+
     dateFieldHTML('en-date', EN.date, false, false)+'<div style="height:18px;"></div>'+
     '<div style="display:flex;gap:8px;">'+
@@ -6797,6 +6729,7 @@ function saveRegEntry(){
     (reg.metrics||[]).forEach(function(m){ var v=parseNumInput(g('en-m-'+m.id)); if(!isNaN(v)){ vals[m.id]=v; any=true; } });
     if(!any && !(EN.existing && EN.existing.auto)){ toast('Escribe al menos un valor'); return; }
     entry.values = vals; entry.note = g('en-note').trim();
+    if(EN.axes && EN.axes.length) entry.axes = EN.axes.slice();
   }
   var wasRecord = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
   reg.entries = (reg.entries||[]).filter(function(e){return e.id!==entry.id;}).concat([entry]);
@@ -6906,8 +6839,8 @@ function goalRange(period){
   if(period==='año') return {from:localDateStr(new Date(y,0,1)), to:localDateStr(new Date(y,11,31)), end:new Date(y,11,31)};
   return {from:localDateStr(new Date(y,m,1)), to:localDateStr(new Date(y,m+1,0)), end:new Date(y,m+1,0)};
 }
-function regGoalValue(reg, g){
-  var R = goalRange(g.period);
+function regGoalValue(reg, g, Rover){
+  var R = Rover || goalRange(g.period);
   var es = regEntries(reg).filter(function(e){return e.status!=='expected' && e.date>=R.from && e.date<=R.to;});
   if(g.label){ var _gl = g.label.trim().toLowerCase(); es = es.filter(function(e){ return (e.label||'').trim().toLowerCase()===_gl; }); }
   if(reg.kind==='finance'){
@@ -7778,220 +7711,319 @@ function renderProyectosTab(){
   var tOn = S.timerPlacement==='seguimiento';
   var view = projViewCur();
   if(view==='timer' && !tOn) view = 'reg';
-  var segs = [['reg','Registros'],['skill','Habilidades'],['proj','Proyectos']];
+  var segs = [['reg','Registros'],['proj','Proyectos']];
   if(tOn) segs.push(['timer','Enfoque']);
   var html = '<div style="padding:16px 16px 0;">'+
     mSegHTML('proj-seg', segs, view, 'setProjView')+
   '</div>';
-  return html + (view==='skill' ? renderSkillsSection() : view==='reg' ? renderRegistriesSection() : view==='timer' ? renderTimerHome() : renderProjectsSection());
+  return html + (view==='reg' ? renderRegistriesSection() : view==='timer' ? renderTimerHome() : renderProjectsSection());
 }
-// ── Habilidades: gráfico radar (3 a 7 habilidades) ──────────────────────────
+// ── Indicadores (habilidades) de un seguimiento: gráfico radar ──────────────
+// Cada seguimiento (levelTracks) PUEDE tener de 3 a 7 indicadores en tr.axes.
+// Fuentes de un indicador: entradas de registro (marcadas con la habilidad, o
+// automáticas por registro/concepto) y tareas agrupadas por nombre. Esfuerzo =
+// XP de esos eventos pasado por la curva de niveles; constancia = periodos
+// (semanas/meses) con la meta del registro cumplida, o con práctica.
 var SK_COLORS = ['#c9693a','#3f7fbf','#4f9a6b','#b0589a','#d1a23a','#5bb0b5','#8a6fd1'];
-var SK_CURVES = {soft:{l:'Suave',k:1.2}, normal:{l:'Normal',k:2.2}, hard:{l:'Exigente',k:3.4}};
 var SK_MODES = [['mixed','Mixto'],['real','Medida real'],['consist','Constancia'],['effort','Esfuerzo'],['manual','Manual']];
 var SK = null;
-function skList(){ return (S.skills||[]).filter(function(s){return !s.del;}); }
-function skById(id){ return skList().find(function(s){return s.id===id;})||null; }
-function skDayStr(off){ var d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-off); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-function skDaysAgo(ds){ var a=ds.split('-'); var d=new Date(+a[0],+a[1]-1,+a[2],12); var n=new Date(); n.setHours(12,0,0,0); return Math.round((n-d)/864e5); }
-function skEvents(s){
-  var days = {}, min = 0, hasMin = false;
-  var r = s.regId ? regById(s.regId) : null;
-  if(r) regEntries(r).forEach(function(e){ if(e.status==='expected') return; if(r.kind==='habit' && !e.yes) return; days[e.date] = days[e.date]||0; });
-  (s.taskIds||[]).forEach(function(id){ var m=(S.taskLog&&S.taskLog[id])||{}; Object.keys(m).forEach(function(d){ days[d]=days[d]||0; }); });
-  (S.timerHistory||[]).forEach(function(h){
-    if(h.del) return;
-    if((s.timerGroup && h.group===s.timerGroup) || (h.taskId && (s.taskIds||[]).indexOf(h.taskId)>=0)){
-      var m = (h.sec||0)/60; days[h.date] = (days[h.date]||0)+m; min += m; hasMin = true;
-    }
-  });
-  return {days:days, min:min, hasMin:hasMin, n:Object.keys(days).length};
+function skTrack(id){ return (S.levelTracks||[]).find(function(t){return t.id===id;})||null; }
+function skAxes(tr){ return (tr.axes||[]).filter(function(a){return !a.del;}); }
+function skNorm(s){ return String(s||'').trim().toLowerCase(); }
+function skRegs(tr, ax){
+  var ids = (tr.regSources||[]).map(function(r){return r.regId;});
+  if(ax && ax.regId && ids.indexOf(ax.regId)<0) ids.push(ax.regId);
+  return ids.map(function(i){return regById(i);}).filter(function(r){return r && r.kind!=='finance';});
 }
-function skReal(s){
-  var r = s.regId ? regById(s.regId) : null; if(!r || r.kind==='finance') return null;
-  var es = regEntries(r).filter(function(e){return e.status!=='expected';}).sort(function(a,b){return (a.date+(a.ts||0)).toString().localeCompare((b.date+(b.ts||0)).toString());});
-  var v = 0, mid = s.metricId||'__count', unit = '';
-  if(r.kind==='habit'){ v = es.filter(function(e){return e.yes;}).length; unit='días'; mid='__count'; }
-  else if(mid==='__count'){ v = es.length; unit='ses.'; }
+function skMatch(ax, reg, e){
+  if((e.axes||[]).indexOf(ax.id)>=0) return 'tag';
+  if(reg.id!==ax.regId) return '';
+  if(ax.scope==='all') return 'rule';
+  if(ax.scope==='label'){ var L=(ax.labels||[]).map(skNorm); if(L.length && L.indexOf(skNorm(e.label))>=0) return 'rule'; }
+  return '';
+}
+function skEvents(tr, ax){
+  var ev = {};
+  skRegs(tr, ax).forEach(function(reg){
+    var inSrc = (tr.regSources||[]).some(function(x){return x.regId===reg.id;});
+    regEntries(reg).forEach(function(e){
+      if(e.status==='expected') return;
+      if(reg.kind==='habit' && !e.yes) return;
+      if(!skMatch(ax, reg, e)) return;
+      var key = e.taskId ? 'd'+e.date+'|t'+e.taskId : 'e'+(e.id||e.date);
+      var aw = tr.regAwarded || {}, xp = aw[e.id]!=null ? aw[e.id] : (aw['h:'+e.date]!=null ? aw['h:'+e.date] : (e.xp || (inSrc?0:1)));
+      ev[key] = {date:e.date, xp:xp, reg:reg.id, e:e};
+    });
+  });
+  var keys = ax.taskKeys || [];
+  if(keys.length) (S.tasks||[]).forEach(function(t){
+    if(keys.indexOf(skNorm(t.text))<0) return;
+    var m = (S.taskLog && S.taskLog[t.id]) || {};
+    Object.keys(m).forEach(function(d){
+      var key = 'd'+d+'|t'+t.id; if(ev[key]) return;
+      ev[key] = {date:d, xp: taskQualifiesForTrack(t,tr) ? tkCompleteXP(tr,t,PT[t.period]||1) : (PT[t.period]||1)};
+    });
+  });
+  return Object.keys(ev).map(function(k){return ev[k];});
+}
+function skReal(ax, list){
+  var reg = ax.regId ? regById(ax.regId) : null; if(!reg || reg.kind==='finance') return null;
+  var es = list.filter(function(x){return x.reg===reg.id;}).sort(function(a,b){return (a.date+(a.e.ts||0)).toString().localeCompare((b.date+(b.e.ts||0)).toString());});
+  var mid = reg.kind==='habit' ? '__count' : (ax.metricId||'__count'), v, unit;
+  if(mid==='__count'){ v = es.length; unit = reg.kind==='habit' ? 'días' : 'veces'; }
   else {
-    var m=(r.metrics||[]).find(function(x){return x.id===mid;}); if(!m) return null; unit=m.unit||'';
-    var vs = es.filter(function(e){return e.values&&e.values[mid]!=null;}).map(function(e){return +e.values[mid];});
-    if(!vs.length) v = null;
-    else v = s.agg==='last' ? vs[vs.length-1] : (s.agg==='sum' ? vs.reduce(function(a,b){return a+b;},0) : (s.low ? Math.min.apply(null,vs) : Math.max.apply(null,vs)));
+    var m = (reg.metrics||[]).find(function(x){return x.id===mid;}); if(!m) return null; unit = m.unit||'';
+    var vs = es.map(function(x){return x.e.values && x.e.values[mid]!=null ? +x.e.values[mid] : null;}).filter(function(x){return x!=null;});
+    v = !vs.length ? null : (ax.agg==='last' ? vs[vs.length-1] : (ax.agg==='sum' ? vs.reduce(function(a,b){return a+b;},0) : (ax.low ? Math.min.apply(null,vs) : Math.max.apply(null,vs))));
   }
-  var st = +s.start||0, tg = +s.target||0;
-  if(!tg || tg===st) return null;
+  var st = +ax.start||0, tg = +ax.target||0; if(!tg || tg===st) return null;
   var ratio = v==null ? 0 : (v-st)/(tg-st);
   return {v:v, unit:unit, start:st, target:tg, ratio:Math.max(0,Math.min(1,ratio))};
 }
-function skEffortScore(total, target, curve){
-  var k=(SK_CURVES[curve]||SK_CURVES.normal).k, r=Math.max(0,Math.min(1,target>0?total/target:0));
-  return 100*(1-Math.exp(-k*r))/(1-Math.exp(-k));
+function skPeriodRange(period, i){
+  var now = new Date();
+  if(period==='semana'){
+    var mon = new Date(now.getFullYear(), now.getMonth(), now.getDate()-todayIdx()-7*i), sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+6);
+    return {from:localDateStr(mon), to:localDateStr(sun)};
+  }
+  var a = new Date(now.getFullYear(), now.getMonth()-i, 1), b = new Date(a.getFullYear(), a.getMonth()+1, 0);
+  return {from:localDateStr(a), to:localDateStr(b)};
 }
-function skCompute(s){
-  var ev = skEvents(s), parts = {}, notes = {};
-  var rl = skReal(s); if(rl){ parts.real = {pct:rl.ratio*100, d:rl}; }
-  // constancia: últimas 8 semanas, cada semana cuenta días activos / meta semanal
-  var goal = Math.max(1, +s.weeklyGoal||3), wk=[0,0,0,0,0,0,0,0];
-  Object.keys(ev.days).forEach(function(d){ var a=skDaysAgo(d); if(a>=0 && a<56) wk[Math.floor(a/7)]++; });
-  var cs = 0, wsum = 0; wk.forEach(function(n,i){ var w = 1 - i*0.08; cs += Math.min(1,n/goal)*w; wsum += w; });
-  parts.consist = {pct: cs/wsum*100, d:{wk:wk, goal:goal}};
-  var unit = s.effortUnit==='min' ? 'min' : 'ses', tot = unit==='min' ? ev.min : ev.n, et = Math.max(1, +s.effortTarget||(unit==='min'?1200:60));
-  parts.effort = {pct: skEffortScore(tot, et, s.curve||'normal'), d:{total:tot, target:et, unit:unit}};
-  var score = 0, w = s.w || {real:50,consist:30,effort:20}, used = [];
-  if(s.mode==='manual'){ score = Math.max(0,Math.min(100,+s.manual||0)); }
-  else if(s.mode==='mixed'){
-    ['real','consist','effort'].forEach(function(k){ if(parts[k] && (+w[k]||0)>0) used.push([k,+w[k]]); });
-    var ws = used.reduce(function(a,b){return a+b[1];},0);
-    if(ws>0) used.forEach(function(u){ score += parts[u[0]].pct*u[1]/ws; used[used.indexOf(u)] = [u[0], u[1]/ws*100]; });
-  } else { var p = parts[s.mode] || parts.consist; score = p.pct; }
-  return {score:Math.round(score), parts:parts, used:used, ev:ev};
+function skGoalOf(ax){
+  var reg = ax.regId ? regById(ax.regId) : null; if(!reg || !ax.goalId) return null;
+  var g = (reg.goals||[]).find(function(x){return x.id===ax.goalId;});
+  return g && (g.period==='semana'||g.period==='mes') && g.target>0 ? {reg:reg, g:g} : null;
 }
-function skSnapshot(){
+function skConsist(ax, list){
+  var go = skGoalOf(ax), per = go ? go.g.period : 'semana', n = per==='mes' ? 6 : 8, hits = [], cs = 0, ws = 0;
+  for(var i=0;i<n;i++){
+    var R = skPeriodRange(per, i), ok;
+    if(go) ok = regGoalValue(go.reg, go.g, R) >= go.g.target ? 1 : 0;
+    else ok = list.some(function(x){return x.date>=R.from && x.date<=R.to;}) ? 1 : 0;
+    if(i===0 && !ok){ hits.unshift(null); continue; } // el periodo en curso no penaliza
+    var w = 1 - i*0.08; cs += ok*w; ws += w; hits.unshift(ok);
+  }
+  return {pct: ws ? cs/ws*100 : 0, d:{hits:hits, per:per, goal: go ? regGoalTitle(go.reg, go.g) : null}};
+}
+function skXpForScore(ax, sc){
+  var N = Math.max(2, +ax.lvTarget||10), lf = 1 + sc/100*(N-1), L = Math.floor(lf), r = lf-L;
+  return lvlThresh(L) + r*(lvlThresh(L+1)-lvlThresh(L));
+}
+function skCompute(tr, ax){
+  var list = skEvents(tr, ax), parts = {};
+  var rl = skReal(ax, list); if(rl) parts.real = {pct:rl.ratio*100, d:rl};
+  parts.consist = skConsist(ax, list);
+  var xp = list.reduce(function(a,x){return a+(x.xp||0);},0), li = lvlInfo(xp), N = Math.max(2, +ax.lvTarget||10);
+  parts.effort = {pct: Math.min(100, (li.lvl+li.ratio-1)/(N-1)*100), d:{xp:xp, lvl:li.lvl, N:N, n:list.length}};
+  var score = 0, used = [], w = ax.w || {real:50,consist:30,effort:20};
+  if(ax.mode==='manual') score = Math.max(0, Math.min(100, +ax.manual||0));
+  else if(ax.mode==='mixed'){
+    var tot = 0; ['real','consist','effort'].forEach(function(k){ if(parts[k] && (+w[k]||0)>0){ used.push([k,+w[k]]); tot += +w[k]; } });
+    used = used.map(function(u){ return [u[0], u[1]/tot*100]; });
+    used.forEach(function(u){ score += parts[u[0]].pct*u[1]/100; });
+  } else score = (parts[ax.mode] || parts.consist).pct;
+  return {score:Math.round(score), parts:parts, used:used, list:list};
+}
+function skSnapshot(tr){
   var mk = todayStr().slice(0,7), ch = false;
-  skList().forEach(function(s){ var c=skCompute(s).score; if(!s.hist) s.hist={}; if(s.hist[mk]!==c){ s.hist[mk]=c; s.updatedAt=Date.now(); ch=true; } });
+  skAxes(tr).forEach(function(a){ var c = skCompute(tr,a).score; if(!a.hist) a.hist = {}; if(a.hist[mk]!==c){ a.hist[mk]=c; ch=true; } });
   if(ch){ try{ saveState(); }catch(e){} }
 }
 function skPrevMonthKey(){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
-function skRadarSVG(list, prevKey, showPrev){
-  var n = list.length, cx=170, cy=160, R=100, pts=[], prev=[], hasPrev=false;
+function skRadarSVG(tr, list, prevKey, showPrev){
+  var n = list.length, cx=170, cy=160, R=100, pts=[], prev=[], hasPrev=false, g='';
   function P(i,r){ var a=-Math.PI/2+i*2*Math.PI/n; return [cx+Math.cos(a)*r, cy+Math.sin(a)*r]; }
-  var g = '';
   [25,50,75,100].forEach(function(l){ var ps=[]; for(var i=0;i<n;i++){ var p=P(i,R*l/100); ps.push(p[0].toFixed(1)+','+p[1].toFixed(1)); } g += '<polygon points="'+ps.join(' ')+'" fill="'+(l===100?'var(--paper)':'none')+'" stroke="var(--line)" stroke-width="'+(l===100?1.4:1)+'" '+(l===100?'':'stroke-dasharray="3 4"')+'/>'; });
   for(var i=0;i<n;i++){ var e=P(i,R); g += '<line x1="'+cx+'" y1="'+cy+'" x2="'+e[0].toFixed(1)+'" y2="'+e[1].toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>'; }
-  var sc = list.map(function(s){return skCompute(s).score;});
-  list.forEach(function(s,i){ var p=P(i,R*sc[i]/100); pts.push(p); var h=s.hist&&s.hist[prevKey]; if(h!=null){ hasPrev=true; prev.push(P(i,R*h/100)); } else prev.push(P(i,0)); });
-  if(showPrev && hasPrev) g += '<polygon points="'+prev.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".8"/>';
-  g += '<polygon points="'+pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+'" fill="var(--accent)" fill-opacity=".24" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>';
-  list.forEach(function(s,i){
-    var p=pts[i], l=P(i,R+22), a=-Math.PI/2+i*2*Math.PI/n, c=Math.cos(a), anchor = Math.abs(c)<.25?'middle':(c>0?'start':'end');
-    g += '<g style="cursor:pointer" onclick="skOpen(\''+s.id+'\')"><circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="5" fill="'+s.color+'" stroke="var(--paper)" stroke-width="2"/>'+
-      '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+4).toFixed(1)+'" text-anchor="'+anchor+'" font-size="12" font-weight="600" fill="var(--ink)" font-family="Inter,sans-serif">'+esc(s.name.length>13?s.name.slice(0,12)+'…':s.name)+'</text>'+
+  var sc = list.map(function(a){return skCompute(tr,a).score;});
+  list.forEach(function(a,i){ pts.push(P(i,R*sc[i]/100)); var h=a.hist&&a.hist[prevKey]; if(h!=null){ hasPrev=true; prev.push(P(i,R*h/100)); } else prev.push(P(i,0)); });
+  var fmt = function(ps){ return ps.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' '); };
+  if(showPrev && hasPrev) g += '<polygon points="'+fmt(prev)+'" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".8"/>';
+  g += '<polygon points="'+fmt(pts)+'" fill="var(--accent)" fill-opacity=".24" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>';
+  list.forEach(function(a,i){
+    var p=pts[i], l=P(i,R+22), c=Math.cos(-Math.PI/2+i*2*Math.PI/n), anchor = Math.abs(c)<.25?'middle':(c>0?'start':'end');
+    g += '<g style="cursor:pointer" onclick="skOpen(\''+tr.id+'\',\''+a.id+'\')"><circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="5" fill="'+a.color+'" stroke="var(--paper)" stroke-width="2"/>'+
+      '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+4).toFixed(1)+'" text-anchor="'+anchor+'" font-size="12" font-weight="600" fill="var(--ink)" font-family="Inter,sans-serif">'+esc(a.name.length>13?a.name.slice(0,12)+'…':a.name)+'</text>'+
       '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+18).toFixed(1)+'" text-anchor="'+anchor+'" font-size="11" fill="var(--muted)" font-family="Inter,sans-serif">'+sc[i]+'</text></g>';
   });
-  return {svg:'<svg viewBox="0 0 340 330" style="width:100%;max-width:360px;display:block;margin:0 auto;">'+g+'</svg>', hasPrev:hasPrev};
+  return {svg:'<svg viewBox="-36 0 412 330" style="width:100%;max-width:380px;display:block;margin:0 auto;">'+g+'</svg>', hasPrev:hasPrev};
 }
 function skShowPrev(){ return S._skPrev!==false; }
-function skTogglePrev(){ S._skPrev = !skShowPrev(); render(); }
-function renderSkillsSection(){
-  var list = skList(); skSnapshot();
-  var html = '<div style="padding:10px 16px 90px;">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><span style="font-size:12.5px;font-weight:600;color:var(--ink);">Mis habilidades</span><span style="font-size:12px;color:var(--muted);">'+list.length+' / 7</span></div>';
-  if(list.length>=3){
-    var pk = skPrevMonthKey(), rd = skRadarSVG(list.slice(0,7), pk, skShowPrev());
-    html += '<div style="background:var(--paper);border:1px solid var(--line-soft);border-radius:16px;padding:12px 8px 10px;margin-bottom:14px;">'+rd.svg+
-      (rd.hasPrev?'<div style="display:flex;justify-content:center;margin-top:4px;"><button onclick="skTogglePrev()" style="background:none;border:none;font-size:11.5px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">'+(skShowPrev()?'Ocultar':'Mostrar')+' comparación con el mes pasado (línea punteada)</button></div>':'')+'</div>';
+function skRefreshDetail(tid){ var tr = skTrack(tid), ov = document.getElementById('track-detail'); if(!tr||!ov) return; var sh = ov.querySelector('.sheet'); if(sh){ var y=sh.scrollTop; sh.innerHTML = trackDetailBodyHTML(tr); sh.scrollTop=y; } }
+function skTogglePrev(tid){ S._skPrev = !skShowPrev(); skRefreshDetail(tid); }
+// Sección dentro del detalle del seguimiento
+function skSectionHTML(tr){
+  var axes = skAxes(tr); skSnapshot(tr);
+  var h = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;justify-content:space-between;"><span>Habilidades</span><span style="font-weight:600;">'+axes.length+' / 7</span></div>';
+  if(axes.length>=3){
+    var pk = skPrevMonthKey(), rd = skRadarSVG(tr, axes, pk, skShowPrev());
+    h += '<div style="background:var(--bg);border-radius:14px;padding:8px 4px 6px;margin-bottom:10px;">'+rd.svg+(rd.hasPrev?'<div style="display:flex;justify-content:center;"><button onclick="skTogglePrev(\''+tr.id+'\')" style="background:none;border:none;font-size:11px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">'+(skShowPrev()?'Ocultar':'Mostrar')+' comparación con el mes pasado</button></div>':'')+'</div>';
   } else {
-    html += '<div style="text-align:center;padding:26px 10px 18px;"><div style="display:flex;justify-content:center;color:var(--muted);opacity:.5;margin-bottom:10px;">'+ico('target',44,1.4)+'</div>'+
-      '<div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;">Tu gráfico de habilidades</div>'+
-      '<div style="font-size:12px;color:var(--muted);line-height:1.6;">Crea entre 3 y 7 habilidades (por ejemplo Fuerza, Escalada, Estudio) y mira su forma en un radar.'+(list.length?'<br>Te faltan '+(3-list.length)+' para dibujarlo.':'')+'</div></div>';
+    h += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;text-align:left;">Opcional: define de 3 a 7 indicadores (por ejemplo Fuerza, Técnica, Equilibrio) para ver este seguimiento como un gráfico de radar'+(axes.length?'. Te faltan '+(3-axes.length)+' para dibujarlo.':'.')+'</div>';
   }
-  list.forEach(function(s){
-    var c = skCompute(s), tag = s.mode==='mixed' ? 'Mixto' : (SK_MODES.find(function(m){return m[0]===s.mode;})||[0,''])[1];
-    html += '<div onclick="skOpen(\''+s.id+'\')" style="display:flex;align-items:center;gap:12px;padding:11px 12px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+s.color+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
-      '<div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(s.name)+'</span><span style="font-size:11px;color:var(--muted);margin-left:8px;flex-shrink:0;">'+tag+'</span></div>'+
-      '<div style="height:6px;background:var(--line-soft);border-radius:4px;margin-top:7px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+s.color+';border-radius:4px;"></div></div></div>'+
-      '<div style="font-weight:700;font-size:18px;color:var(--ink);min-width:30px;text-align:right;">'+c.score+'</div></div>';
+  axes.forEach(function(a){
+    var c = skCompute(tr,a);
+    h += '<div onclick="skOpen(\''+tr.id+'\',\''+a.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+a.color+';border-radius:10px;margin-bottom:6px;cursor:pointer;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name)+'</div><div style="height:5px;background:var(--line-soft);border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+a.color+';"></div></div></div><b style="font-size:16px;color:var(--ink);min-width:28px;text-align:right;">'+c.score+'</b></div>';
   });
-  if(list.length<7) html += '<button onclick="skEdit(null)" style="width:100%;background:var(--accent);color:white;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;margin-top:8px;">+ Nueva habilidad</button>';
-  else html += '<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);">Máximo 7 habilidades.</div>';
-  return html + '</div>';
+  if(axes.length<7) h += '<button onclick="skEdit(\''+tr.id+'\',null)" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">+ Nueva habilidad</button>';
+  return h;
 }
-// ── Detalle ──
+// ── Detalle de una habilidad ──
 function skBar(label, pct, sub, color, wtxt){
   return '<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;"><span style="font-weight:600;color:var(--ink);">'+label+(wtxt?' <span style="color:var(--muted);font-weight:500;">· '+wtxt+'</span>':'')+'</span><span style="font-weight:700;color:var(--ink);">'+Math.round(pct)+'</span></div>'+
     '<div style="height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden;"><div style="height:100%;width:'+Math.max(0,Math.min(100,pct))+'%;background:'+color+';border-radius:4px;"></div></div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5;">'+sub+'</div></div>';
 }
-function skOpen(id){
-  var s = skById(id); if(!s) return; var c = skCompute(s), p = c.parts, html = '', wmap = {};
+function skOpen(tid, aid){
+  var tr = skTrack(tid), a = tr && skAxes(tr).find(function(x){return x.id===aid;}); if(!a) return;
+  var c = skCompute(tr,a), p = c.parts, html = '', wmap = {};
   c.used.forEach(function(u){ wmap[u[0]] = Math.round(u[1])+'%'; });
-  var show = s.mode==='mixed' ? c.used.map(function(u){return u[0];}) : (s.mode==='manual'?[]:[ (p[s.mode]?s.mode:'consist') ]);
-  if(show.indexOf('real')>=0 && p.real){ var d=p.real.d; html += skBar('Medida real', p.real.pct, (d.v==null?'Sin marcas todavía':fmtNum(d.v)+' '+d.unit)+' de '+fmtNum(d.target)+' '+d.unit+(d.v!=null&&p.real.pct<100?' · te faltan '+fmtNum(Math.round(Math.abs(d.target-d.v)*10)/10)+' '+d.unit:' · meta lograda'), s.color, wmap.real); }
-  if(show.indexOf('consist')>=0){ var d2=p.consist.d, now=d2.wk[0]; html += skBar('Constancia', p.consist.pct, 'Meta: '+d2.goal+' día'+(d2.goal===1?'':'s')+' por semana · esta semana '+now+' · últimas 8 semanas: '+d2.wk.slice().reverse().join(' · '), s.color, wmap.consist); }
-  if(show.indexOf('effort')>=0){ var d3=p.effort.d, sc=p.effort.pct, nx = Math.min(100,Math.floor(sc/5)*5+5), k=(SK_CURVES[s.curve||'normal']).k, need='';
-    if(sc<99.5){ var r=-Math.log(1-nx/100*(1-Math.exp(-k)))/k, dl=Math.max(0,Math.ceil(r*d3.target-d3.total)); need=' · para llegar a '+nx+' puntos faltan ~'+dl+' '+d3.unit+'.'; }
-    html += skBar('Esfuerzo acumulado', sc, fmtNum(Math.round(d3.total))+' de '+fmtNum(d3.target)+' '+(d3.unit==='min'?'minutos':'sesiones')+' · curva '+SK_CURVES[s.curve||'normal'].l.toLowerCase()+' (cada punto cuesta más)'+need, s.color, wmap.effort); }
-  if(s.mode==='manual') html = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;">Puntaje manual: lo ajustas tú.</div>';
+  var show = a.mode==='mixed' ? c.used.map(function(u){return u[0];}) : (a.mode==='manual' ? [] : [p[a.mode]?a.mode:'consist']);
+  if(show.indexOf('real')>=0 && p.real){ var d=p.real.d; html += skBar('Medida real', p.real.pct, (d.v==null?'Sin marcas todavía':fmtNum(d.v)+' '+d.unit)+' · de '+fmtNum(d.start)+' (0 pts) a '+fmtNum(d.target)+' '+d.unit+' (100 pts)'+(d.v!=null&&p.real.pct<100?' · te faltan '+fmtNum(Math.round(Math.abs(d.target-d.v)*10)/10)+' '+d.unit:' · meta lograda'), a.color, wmap.real); }
+  if(show.indexOf('consist')>=0){ var d2=p.consist.d, perN = d2.per==='mes'?'meses':'semanas';
+    html += skBar('Constancia', p.consist.pct, (d2.goal?'Meta cumplida en cada periodo: «'+esc(d2.goal)+'»':'Con práctica en cada semana')+' · últimas '+d2.hits.length+' '+perN+': '+d2.hits.map(function(x){return x==null?'…':(x?'✓':'✗');}).join(' '), a.color, wmap.consist); }
+  if(show.indexOf('effort')>=0){ var d3=p.effort.d, sc=p.effort.pct, nx=Math.min(100,Math.floor(sc/5)*5+5), need='';
+    if(sc<99.5) need = ' · para '+nx+' puntos faltan ~'+Math.max(1,Math.ceil(skXpForScore(a,nx)-d3.xp))+' XP';
+    html += skBar('Esfuerzo (XP)', sc, fmtNum(d3.xp)+' XP en '+d3.n+' práctica'+(d3.n===1?'':'s')+' · nivel '+d3.lvl+' de '+d3.N+need, a.color, wmap.effort); }
+  if(a.mode==='manual') html = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;">Puntaje manual: lo ajustas tú.</div>';
+  var _v = document.getElementById('skill-view'); if(_v) _v.remove();
   var el = document.createElement('div'); el.className='overlay'; el.id='skill-view';
   el.addEventListener('click',function(e){ if(e.target===el) removeOverlay('skill-view'); });
-  el.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:19px;">'+esc(s.name)+'</span><button onclick="removeOverlay(\'skill-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:16px;"><span style="font-size:38px;font-weight:800;color:'+s.color+';">'+c.score+'</span><span style="font-size:13px;color:var(--muted);">/ 100</span></div>'+html+
-    '<div style="display:flex;gap:8px;margin-top:6px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'skill-view\');skEdit(\''+s.id+'\')">Editar</button></div></div>';
+  el.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:19px;">'+esc(a.name)+'</span><button onclick="removeOverlay(\'skill-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">'+esc(tr.name)+'</div>'+
+    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:16px;"><span style="font-size:38px;font-weight:800;color:'+a.color+';">'+c.score+'</span><span style="font-size:13px;color:var(--muted);">/ 100</span></div>'+html+
+    '<div style="display:flex;gap:8px;margin-top:6px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'skill-view\');skEdit(\''+tr.id+'\',\''+a.id+'\')">Editar</button></div></div>';
   document.body.appendChild(el);
 }
 // ── Editor ──
-function skEdit(id){
-  var s = id ? skById(id) : null;
-  SK = s ? JSON.parse(JSON.stringify(s)) : {id:null, name:'', color:SK_COLORS[skList().length%SK_COLORS.length], mode:'mixed', w:{real:50,consist:30,effort:20}, regId:'', metricId:'', agg:'max', start:0, target:'', weeklyGoal:3, effortUnit:'ses', effortTarget:60, curve:'normal', taskIds:[], timerGroup:'', manual:50, low:false};
-  SK.w = SK.w || {real:50,consist:30,effort:20};
-  removeOverlay('skill-ed');
+function skEdit(tid, aid){
+  var tr = skTrack(tid); if(!tr) return;
+  var ex = aid ? skAxes(tr).find(function(x){return x.id===aid;}) : null;
+  var used = skAxes(tr).map(function(x){return x.color;});
+  var col = SK_COLORS.find(function(c){return used.indexOf(c)<0;}) || SK_COLORS[0];
+  SK = {tid:tid, o:{}, a: ex ? JSON.parse(JSON.stringify(ex)) : {id:null, name:'', color:col, mode:'mixed', w:{real:50,consist:30,effort:20}, regId:'', metricId:'', agg:'max', low:false, start:0, target:'', scope:'tagged', labels:[], goalId:'', taskKeys:[], lvTarget:10, manual:50}};
+  SK.a.w = SK.a.w || {real:50,consist:30,effort:20}; SK.a.labels = SK.a.labels||[]; SK.a.taskKeys = SK.a.taskKeys||[];
+  if(!SK.a.regId) SK.o.reg = true;
+  var _o = document.getElementById('skill-ed'); if(_o) _o.remove();
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='skill-ed';
   ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('skill-ed'); });
   document.body.appendChild(ov); skDraw();
 }
 function skLbl(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">'+t+'</div>'; }
 function skChip(on, label, fn){ return '<button class="cat-tab-btn'+(on?' on':'')+'" onclick="'+fn+'" style="padding:7px 12px;font-size:12.5px;'+(on?'background:var(--accent);color:#fff;border-color:var(--accent);':'')+'">'+label+'</button>'; }
-function skWTxt(){ var w=SK.w, t=(+w.real||0)+(+w.consist||0)+(+w.effort||0)||1; return {real:Math.round((+w.real||0)/t*100), consist:Math.round((+w.consist||0)/t*100), effort:Math.round((+w.effort||0)/t*100)}; }
-function skW(k, v){ SK.w[k] = +v; var t=skWTxt(); ['real','consist','effort'].forEach(function(x){ var e=document.getElementById('sk-w-'+x); if(e) e.textContent=t[x]+'%'; }); }
+function skNote(t){ return '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:6px 0 8px;text-align:left;">'+t+'</div>'; }
+function skDet(key, title, inner, hint){
+  return '<details'+(SK.o[key]?' open':'')+' ontoggle="SK.o[\''+key+'\']=this.open" style="border:1px solid var(--line-soft);border-radius:12px;margin-bottom:8px;padding:0 12px;"><summary style="cursor:pointer;padding:11px 0;font-size:13px;font-weight:700;color:var(--ink);list-style:none;display:flex;justify-content:space-between;align-items:center;"><span>'+title+'</span><span style="font-size:11px;font-weight:600;color:var(--muted);">'+(hint||'')+'</span></summary><div style="padding-bottom:12px;">'+inner+'</div></details>';
+}
+function skWSum(){ var w=SK.a.w; return (+w.real||0)+(+w.consist||0)+(+w.effort||0); }
+function skWUpd(k, v){
+  SK.a.w[k] = Math.max(0, Math.min(100, +v||0));
+  var s = skWSum(), e = document.getElementById('sk-wsum'); if(e){ e.textContent = s===100 ? 'Suma 100 % ✓' : 'Suma '+s+' % · '+(s<100?'faltan '+(100-s):'sobran '+(s-100))+' %'; e.style.color = s===100?'var(--good,#3a8f5c)':'var(--bad)'; }
+}
+function skWFix(){ var w=SK.a.w, s=skWSum(); if(!s){ w.real=50; w.consist=30; w.effort=20; } else { var r=Math.round((+w.real||0)/s*100), c=Math.round((+w.consist||0)/s*100); w.real=r; w.consist=c; w.effort=100-r-c; } skRe(); }
+function skWEq(){ SK.a.w={real:34,consist:33,effort:33}; skRe(); }
+function skPrevUpd(){
+  var a = SK.a, tr = skTrack(SK.tid), e = document.getElementById('sk-prev'); if(!e||!tr) return;
+  var rl = skReal(Object.assign({}, a, {start:+a.start||0, target:+a.target||0}), skEvents(tr, a));
+  e.textContent = !rl ? 'Escribe una marca meta para ver tu puntaje.' : (rl.v==null ? 'Aún no hay marcas en este registro.' : 'Hoy: '+fmtNum(rl.v)+' '+rl.unit+' → '+Math.round(rl.ratio*100)+' puntos de 100.');
+}
+function skFirstMark(){
+  var a = SK.a, tr = skTrack(SK.tid), list = skEvents(tr, a).filter(function(x){return x.reg===a.regId && x.e.values && x.e.values[a.metricId]!=null;}).sort(function(x,y){return x.date<y.date?-1:1;});
+  if(!list.length){ toast('Todavía no hay marcas'); return; }
+  SK.a.start = list[0].e.values[a.metricId]; skRe();
+}
 function skDraw(){
-  var ov = document.getElementById('skill-ed'); if(!ov) return;
-  var regs = regList().filter(function(r){return r.kind!=='finance';}), reg = SK.regId ? regById(SK.regId) : null;
-  var groups = {}; (S.timerHistory||[]).forEach(function(h){ if(h.group) groups[h.group]=1; });
-  var tasks = {}, tl = []; (S.tasks||[]).forEach(function(t){ if(t.period==='dia' && !t.date && !tasks[t.id]){ tasks[t.id]=1; tl.push(t); } });
-  var needReal = SK.mode==='real' || SK.mode==='mixed', needAct = SK.mode!=='manual' && SK.mode!=='real';
-  var wt = skWTxt();
-  var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(SK.id?'Editar':'Nueva')+' habilidad</span><button onclick="removeOverlay(\'skill-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<input class="finp" placeholder="Nombre (ej. Fuerza, Escalada)" maxlength="24" value="'+esc(SK.name)+'" oninput="SK.name=this.value"/>'+
-    '<div style="display:flex;gap:8px;margin:2px 0 4px;">'+SK_COLORS.map(function(c){ return '<button onclick="SK.color=\''+c+'\';skRe()" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(SK.color===c?'3px solid var(--ink)':'3px solid transparent')+';cursor:pointer;padding:0;"></button>'; }).join('')+'</div>'+
-    skLbl('¿Cómo se calcula el puntaje?')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+SK_MODES.map(function(m){ return skChip(SK.mode===m[0], m[1], 'SK.mode=\''+m[0]+'\';skRe()'); }).join('')+'</div>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5;text-align:left;">'+({mixed:'Combina medida real, constancia y esfuerzo con los porcentajes que elijas.',real:'Solo tu marca real (ej. kilos levantados) frente a tu meta.',consist:'Qué tan seguido practicas, en las últimas 8 semanas.',effort:'Sesiones o minutos acumulados; cada punto nuevo cuesta más que el anterior.',manual:'Tú pones el puntaje a mano.'})[SK.mode]+'</div>';
-  if(SK.mode==='mixed'){
-    h += skLbl('Porcentajes')+['real','consist','effort'].map(function(k){ var nm={real:'Medida real',consist:'Constancia',effort:'Esfuerzo'}[k]; return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12.5px;"><span style="width:92px;color:var(--ink);">'+nm+'</span><input type="range" min="0" max="100" step="5" value="'+(+SK.w[k]||0)+'" oninput="skW(\''+k+'\',this.value)" style="flex:1;accent-color:var(--accent);"/><b id="sk-w-'+k+'" style="width:38px;text-align:right;">'+wt[k]+'%</b></div>'; }).join('')+
-      (SK.regId?'':'<div style="font-size:11px;color:var(--muted);">Sin registro vinculado, la parte de medida real se reparte entre las otras.</div>');
+  var ov = document.getElementById('skill-ed'), tr = skTrack(SK&&SK.tid); if(!ov||!tr) return;
+  var a = SK.a, regs = regList().filter(function(r){return r.kind!=='finance';}), reg = a.regId ? regById(a.regId) : null;
+  var needReal = a.mode==='real' || a.mode==='mixed', needConsist = a.mode==='consist' || a.mode==='mixed';
+  var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(a.id?'Editar':'Nueva')+' habilidad</span><button onclick="removeOverlay(\'skill-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">en «'+esc(tr.name)+'»</div>'+
+    '<input class="finp" placeholder="Nombre (ej. Fuerza, Técnica)" maxlength="24" value="'+esc(a.name)+'" oninput="SK.a.name=this.value"/>'+
+    '<div style="display:flex;gap:8px;margin:2px 0 4px;">'+SK_COLORS.map(function(c){ return '<button onclick="SK.a.color=\''+c+'\';skRe()" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(a.color===c?'3px solid var(--ink)':'3px solid transparent')+';cursor:pointer;padding:0;"></button>'; }).join('')+'</div>'+
+    skLbl('¿Cómo se calcula el puntaje?')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+SK_MODES.map(function(m){ return skChip(a.mode===m[0], m[1], 'SK.a.mode=\''+m[0]+'\';skRe()'); }).join('')+'</div>'+
+    skNote({mixed:'Combina medida real, constancia y esfuerzo con los porcentajes que escribas.',real:'Tu marca real (ej. kilos levantados) frente a una meta.',consist:'Qué tan seguido practicas: periodos (semanas o meses) en que cumpliste tu meta.',effort:'El XP que ganas en esta habilidad. Pasa por la curva de niveles: cada nivel cuesta más que el anterior.',manual:'Tú pones el puntaje a mano.'}[a.mode]);
+  if(a.mode==='mixed'){
+    var wk = [['real','Medida real'],['consist','Constancia'],['effort','Esfuerzo']], s = skWSum();
+    h += skLbl('Porcentajes (deben sumar 100)')+wk.map(function(x){ return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;"><span style="flex:1;color:var(--ink);">'+x[1]+'</span><input type="number" inputmode="numeric" min="0" max="100" value="'+(+a.w[x[0]]||0)+'" oninput="skWUpd(\''+x[0]+'\',this.value)" style="width:64px;text-align:right;border:1.5px solid var(--line);border-radius:9px;padding:7px 8px;font-size:15px;font-weight:700;background:var(--paper);color:var(--ink);font-family:Inter,sans-serif;"/><span style="color:var(--muted);">%</span></div>'; }).join('')+
+      '<div style="display:flex;align-items:center;justify-content:space-between;"><b id="sk-wsum" style="font-size:12px;color:'+(s===100?'var(--good,#3a8f5c)':'var(--bad)')+';">'+(s===100?'Suma 100 % ✓':'Suma '+s+' % · '+(s<100?'faltan '+(100-s):'sobran '+(s-100))+' %')+'</b><span style="display:flex;gap:6px;"><button class="cat-tab-btn" onclick="skWEq()" style="padding:5px 10px;font-size:12px;">Igualar</button><button class="cat-tab-btn" onclick="skWFix()" style="padding:5px 10px;font-size:12px;">Ajustar a 100</button></span></div>'+
+      (reg?'':skNote('Mientras no haya registro con meta, la parte de medida real se reparte entre las otras.'));
   }
-  if(SK.mode==='manual'){
-    h += skLbl('Puntaje')+'<div style="display:flex;align-items:center;gap:10px;"><input type="range" min="0" max="100" value="'+(+SK.manual||0)+'" oninput="SK.manual=+this.value;document.getElementById(\'sk-man\').textContent=this.value" style="flex:1;accent-color:var(--accent);"/><b id="sk-man" style="width:34px;text-align:right;">'+(+SK.manual||0)+'</b></div>';
-  }
+  if(a.mode==='manual') h += skLbl('Puntaje')+'<div style="display:flex;align-items:center;gap:10px;"><input type="range" min="0" max="100" value="'+(+a.manual||0)+'" oninput="SK.a.manual=+this.value;document.getElementById(\'sk-man\').textContent=this.value" style="flex:1;accent-color:var(--accent);"/><b id="sk-man" style="width:34px;text-align:right;">'+(+a.manual||0)+'</b></div>';
   if(needReal){
-    h += skLbl('Medida real (de un registro)')+'<select class="finp" onchange="SK.regId=this.value;var r=regById(this.value);SK.metricId=r&&r.metrics&&r.metrics[0]?r.metrics[0].id:\'__count\';skRe()" style="margin-bottom:8px;"><option value="">Sin registro</option>'+regs.map(function(r){return '<option value="'+r.id+'"'+(r.id===SK.regId?' selected':'')+'>'+esc(r.name)+'</option>';}).join('')+'</select>';
-    if(reg && reg.kind==='metrics'){
-      h += '<select class="finp" onchange="SK.metricId=this.value;skRe()" style="margin-bottom:8px;">'+(reg.metrics||[]).map(function(m){return '<option value="'+m.id+'"'+(m.id===SK.metricId?' selected':'')+'>'+esc(m.name)+(m.unit?' ('+esc(m.unit)+')':'')+'</option>';}).join('')+'<option value="__count"'+(SK.metricId==='__count'?' selected':'')+'>Cantidad de sesiones</option></select>';
-      if(SK.metricId!=='__count') h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'+skChip(SK.agg==='max'&&!SK.low,'Mejor marca','SK.agg=\'max\';SK.low=false;skRe()')+skChip(SK.agg==='max'&&SK.low,'Menor marca','SK.agg=\'max\';SK.low=true;skRe()')+skChip(SK.agg==='last','Último valor','SK.agg=\'last\';skRe()')+skChip(SK.agg==='sum','Total','SK.agg=\'sum\';skRe()')+'</div>';
+    h += skLbl('Medida real');
+    if(!reg) h += skNote('Elige primero un registro en «Qué cuenta para esta habilidad» (más abajo).');
+    else {
+      if(reg.kind==='metrics') h += '<select class="finp" onchange="SK.a.metricId=this.value;skRe()" style="margin-bottom:8px;">'+(reg.metrics||[]).map(function(m){return '<option value="'+m.id+'"'+(m.id===a.metricId?' selected':'')+'>'+esc(m.name)+(m.unit?' ('+esc(m.unit)+')':'')+'</option>';}).join('')+'<option value="__count"'+(a.metricId==='__count'?' selected':'')+'>Cantidad de veces</option></select>'+
+        (a.metricId!=='__count'?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'+skChip(a.agg==='max'&&!a.low,'Mejor marca','SK.a.agg=\'max\';SK.a.low=false;skRe()')+skChip(a.agg==='max'&&a.low,'Menor marca','SK.a.agg=\'max\';SK.a.low=true;skRe()')+skChip(a.agg==='last','Última','SK.a.agg=\'last\';skRe()')+skChip(a.agg==='sum','Total','SK.a.agg=\'sum\';skRe()')+'</div>':'');
+      h += '<div style="display:flex;gap:12px;"><label style="flex:1;font-size:11.5px;color:var(--muted);line-height:1.35;">Marca de partida<br><span style="font-size:10.5px;">tu nivel al empezar = 0 puntos</span><input class="finp" type="number" inputmode="decimal" value="'+esc(a.start)+'" oninput="SK.a.start=this.value;skPrevUpd()" style="margin:4px 0 0;"/></label><label style="flex:1;font-size:11.5px;color:var(--muted);line-height:1.35;">Marca meta<br><span style="font-size:10.5px;">lo que quieres lograr = 100 puntos</span><input class="finp" type="number" inputmode="decimal" value="'+esc(a.target)+'" oninput="SK.a.target=this.value;skPrevUpd()" style="margin:4px 0 0;"/></label></div>'+
+        '<div id="sk-prev" style="font-size:12px;font-weight:600;color:var(--accent-text);margin:2px 0 6px;"></div>'+
+        skNote('Ejemplo: levantas 40 kg hoy y quieres llegar a 100 kg → partida 40, meta 100; con 70 kg tendrás 50 puntos. Si menos es mejor (un tiempo), la partida es la más alta y la meta la más baja.')+
+        (a.metricId&&a.metricId!=='__count'?'<button class="cat-tab-btn" onclick="skFirstMark()" style="padding:5px 10px;font-size:12px;">Usar mi primera marca como partida</button>':'');
     }
-    if(reg){ h += '<div style="display:flex;gap:12px;"><label style="flex:1;font-size:11.5px;color:var(--muted);">Punto de partida<input class="finp" type="number" inputmode="decimal" value="'+esc(SK.start)+'" oninput="SK.start=this.value" style="margin:4px 0 0;"/></label><label style="flex:1;font-size:11.5px;color:var(--muted);">Meta (100 puntos)<input class="finp" type="number" inputmode="decimal" value="'+esc(SK.target)+'" oninput="SK.target=this.value" style="margin:4px 0 0;"/></label></div>'; }
   }
-  if(needAct){
-    h += skLbl('Qué cuenta como práctica')+(reg?'<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Cada registro de «'+esc(reg.name)+'» cuenta como una sesión.</div>':'')+
-      (tl.length?'<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Tareas diarias que sumarán:</div><div style="display:flex;flex-wrap:wrap;gap:6px;max-height:118px;overflow-y:auto;margin-bottom:10px;">'+tl.slice(0,60).map(function(t){ var on=SK.taskIds.indexOf(t.id)>=0; return skChip(on, esc((t.text||'').slice(0,22)), 'skTask(\''+t.id+'\')'); }).join('')+'</div>':'')+
-      (Object.keys(groups).length?'<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Grupo de temporizador (suma minutos):</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+skChip(!SK.timerGroup,'Ninguno','SK.timerGroup=\'\';skRe()')+Object.keys(groups).map(function(g){ return skChip(SK.timerGroup===g, esc(g), 'SK.timerGroup=\''+g.replace(/'/g,"\\'")+'\';skRe()'); }).join('')+'</div>':'');
-    if(SK.mode==='mixed'||SK.mode==='consist') h += skLbl('Constancia')+'<div style="display:flex;align-items:center;justify-content:space-between;font-size:13px;"><span>Días por semana</span><span>'+['1','2','3','4','5','6','7'].map(function(n){ return '<button onclick="SK.weeklyGoal='+n+';skRe()" style="width:28px;height:28px;margin-left:4px;border-radius:50%;border:1.5px solid '+(+SK.weeklyGoal==+n?'var(--accent)':'var(--line)')+';background:'+(+SK.weeklyGoal==+n?'var(--accent)':'transparent')+';color:'+(+SK.weeklyGoal==+n?'#fff':'var(--muted)')+';font-size:12px;cursor:pointer;">'+n+'</button>'; }).join('')+'</span></div>';
-    if(SK.mode==='mixed'||SK.mode==='effort') h += skLbl('Esfuerzo')+'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">'+skChip(SK.effortUnit!=='min','Sesiones','SK.effortUnit=\'ses\';SK.effortTarget=60;skRe()')+skChip(SK.effortUnit==='min','Minutos','SK.effortUnit=\'min\';SK.effortTarget=1200;skRe()')+'</div>'+
-      '<label style="font-size:11.5px;color:var(--muted);">Para llegar a 100 puntos ('+(SK.effortUnit==='min'?'minutos':'sesiones')+')<input class="finp" type="number" inputmode="numeric" value="'+esc(SK.effortTarget)+'" oninput="SK.effortTarget=this.value" style="margin:4px 0 10px;"/></label>'+
-      '<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Dificultad de la curva</div><div style="display:flex;gap:8px;">'+Object.keys(SK_CURVES).map(function(k){ return skChip((SK.curve||'normal')===k, SK_CURVES[k].l, 'SK.curve=\''+k+'\';skRe()'); }).join('')+'</div>';
+  if(needConsist && reg && (reg.goals||[]).some(function(g){return (g.period==='semana'||g.period==='mes') && g.target>0;})){
+    h += skLbl('Constancia')+skNote('Elige una meta de este registro: la constancia será el porcentaje de semanas o meses en que la cumpliste. Sin meta, cuenta las semanas con práctica.')+
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+skChip(!a.goalId,'Semanas con práctica','SK.a.goalId=\'\';skRe()')+(reg.goals||[]).filter(function(g){return (g.period==='semana'||g.period==='mes') && g.target>0;}).map(function(g){ return skChip(a.goalId===g.id, esc(regGoalTitle(reg,g)), 'SK.a.goalId=\''+g.id+'\';skRe()'); }).join('')+'</div>';
   }
-  h += '<div style="height:16px;"></div><div style="display:flex;gap:8px;">'+(SK.id?'<button class="cbtn" style="flex:1;color:var(--bad);" onclick="skDelete()">Eliminar</button>':'')+'<button class="sbtn" style="flex:2;" onclick="skSave()">Guardar</button></div></div>';
-  brPutSheet(ov, h);
+  if(a.mode==='effort' || a.mode==='mixed') h += skLbl('Esfuerzo')+skNote('Suma el XP de todo lo que cuente para esta habilidad. ¿En qué nivel tiene 100 puntos?')+'<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="flex:1;">Nivel para 100 puntos</span>'+[5,8,10,15].map(function(n){ return skChip(+a.lvTarget===n, String(n), 'SK.a.lvTarget='+n+';skRe()'); }).join('')+'</div>';
+  if(a.mode!=='manual'){
+    var labels = {}; if(reg) regEntries(reg).forEach(function(e){ if(e.label) labels[e.label]=1; });
+    var tk = {}; (S.tasks||[]).forEach(function(t){ var k=skNorm(t.text); if(k && (t.period==='dia' && !t.date)) tk[k]=t.text; });
+    var regIn = '<select class="finp" onchange="SK.a.regId=this.value;var r=regById(this.value);SK.a.metricId=r&&r.metrics&&r.metrics[0]?r.metrics[0].id:\'__count\';SK.a.goalId=\'\';SK.a.labels=[];skRe()" style="margin-bottom:8px;"><option value="">Sin registro</option>'+regs.map(function(r){return '<option value="'+r.id+'"'+(r.id===a.regId?' selected':'')+'>'+esc(r.name)+'</option>';}).join('')+'</select>'+
+      skNote('Las entradas que marques con esta habilidad al anotarlas siempre cuentan (aparece «Cuenta para» en la ventanilla del registro). Además puedes automatizarlo:')+
+      (reg?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'+skChip(a.scope==='tagged','Solo las marcadas','SK.a.scope=\'tagged\';skRe()')+skChip(a.scope==='label','Por concepto','SK.a.scope=\'label\';skRe()')+skChip(a.scope==='all','Todas las del registro','SK.a.scope=\'all\';skRe()')+'</div>'+
+        (a.scope==='label'?(Object.keys(labels).length?'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+Object.keys(labels).slice(0,24).map(function(l){ var on=a.labels.indexOf(l)>=0; return skChip(on, esc(l), 'skLabel(\''+l.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')'); }).join('')+'</div>':skNote('Aún no hay conceptos en este registro.')):''):'');
+    var taskIn = Object.keys(tk).length ? skNote('Tareas diarias que cuentan al completarlas (las que se llaman igual se agrupan como una).')+'<div style="display:flex;flex-wrap:wrap;gap:6px;max-height:130px;overflow-y:auto;">'+Object.keys(tk).slice(0,60).map(function(k){ var on=a.taskKeys.indexOf(k)>=0; return skChip(on, esc(tk[k].slice(0,24)), 'skTaskKey(\''+k.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')'); }).join('')+'</div>' : skNote('No tienes tareas diarias todavía.');
+    h += skLbl('Qué cuenta para esta habilidad')+skDet('reg','Entradas de un registro', regIn, reg?esc(reg.name):'')+skDet('task','Tareas', taskIn, a.taskKeys.length?a.taskKeys.length+' elegida'+(a.taskKeys.length===1?'':'s'):'')+
+      skNote('Si una tarea y una entrada son de la misma tarea y día, cuentan una sola vez. Lo que no marques aquí no suma a esta habilidad.');
+  }
+  h += '<div style="height:12px;"></div><div style="display:flex;gap:8px;">'+(a.id?'<button class="cbtn" style="flex:1;color:var(--bad);" onclick="skDelete()">Eliminar</button>':'')+'<button class="sbtn" style="flex:2;" onclick="skSave()">Guardar</button></div></div>';
+  brPutSheet(ov, h); skPrevUpd();
 }
 function skRe(){ brRerender('skill-ed', skDraw); }
-function skTask(id){ var i=SK.taskIds.indexOf(id); if(i>=0) SK.taskIds.splice(i,1); else SK.taskIds.push(id); skRe(); }
+function skLabel(l){ var i=SK.a.labels.indexOf(l); if(i>=0) SK.a.labels.splice(i,1); else SK.a.labels.push(l); skRe(); }
+function skTaskKey(k){ var i=SK.a.taskKeys.indexOf(k); if(i>=0) SK.a.taskKeys.splice(i,1); else SK.a.taskKeys.push(k); skRe(); }
 function skSave(){
-  var name=(SK.name||'').trim(); if(!name){ toast('Ponle un nombre'); return; }
-  if(SK.mode==='real' && !(SK.regId && +SK.target)){ toast('Elige un registro y una meta'); return; }
-  var o = JSON.parse(JSON.stringify(SK)); o.name=name; o.start=+o.start||0; o.target=+o.target||0; o.effortTarget=+o.effortTarget||60; o.updatedAt=Date.now();
-  if(!S.skills) S.skills=[];
-  if(o.id){ S.skills = S.skills.map(function(s){ return s.id===o.id ? Object.assign({}, s, o) : s; }); }
-  else { o.id = uid(); S.skills.push(o); }
-  saveState(); removeOverlay('skill-ed'); render(); toast('✓ Habilidad guardada');
+  var tr = skTrack(SK.tid); if(!tr) return; var a = SK.a, name = (a.name||'').trim();
+  if(!name){ toast('Ponle un nombre'); return; }
+  if(a.mode==='mixed' && skWSum()!==100){ toast('Los porcentajes deben sumar 100 (suman '+skWSum()+')'); return; }
+  if(a.mode==='real' && !(a.regId && +a.target)){ toast('Elige un registro y una marca meta'); return; }
+  var o = JSON.parse(JSON.stringify(a)); o.name = name; o.start = +o.start||0; o.target = +o.target||0;
+  if(!tr.axes) tr.axes = [];
+  if(o.id) tr.axes = tr.axes.map(function(x){ return x.id===o.id ? Object.assign({}, x, o) : x; });
+  else { if(skAxes(tr).length>=7){ toast('Máximo 7 habilidades'); return; } o.id = uid(); tr.axes.push(o); }
+  saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); render(); toast('✓ Habilidad guardada');
 }
 function skDelete(){
-  var s = SK.id && skById(SK.id); if(!s) return;
-  s.del = true; s.updatedAt = Date.now(); saveState(); removeOverlay('skill-ed'); render(); toast('Habilidad eliminada');
+  var tr = skTrack(SK.tid), a = tr && (tr.axes||[]).find(function(x){return x.id===SK.a.id;}); if(!a) return;
+  tr.axes = tr.axes.filter(function(x){return x!==a;});
+  (S.registries||[]).forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.axes) e.axes = e.axes.filter(function(i){return i!==a.id;}); }); });
+  saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); toast('Habilidad eliminada');
 }
-function mergeSkills(cloud){
-  var map = {}; (S.skills||[]).forEach(function(s){ map[s.id]=s; });
-  (cloud||[]).forEach(function(c){ var l=map[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) map[c.id]=c; });
-  S.skills = Object.keys(map).map(function(k){return map[k];});
+// ── «Cuenta para» en la ventanilla de un registro ──
+function skEntryAxes(reg){
+  var out = [];
+  (S.levelTracks||[]).forEach(function(tr){
+    var fed = (tr.regSources||[]).some(function(x){return x.regId===reg.id;});
+    skAxes(tr).forEach(function(a){ if(fed || a.regId===reg.id) out.push({tr:tr, a:a}); });
+  });
+  return out;
+}
+function enAxesHTML(){
+  var reg = regById(EN.regId); if(!reg || reg.kind==='finance') return '';
+  var list = skEntryAxes(reg); if(!list.length) return '';
+  if(!EN.axes) EN.axes = ((EN.existing && EN.existing.axes) || []).slice();
+  var lab = ((document.getElementById('en-label')||{}).value) || (EN.existing?EN.existing.label:'') || EN.presetLabel || '';
+  var multi = {}; list.forEach(function(x){ multi[x.tr.id]=1; });
+  return '<div id="en-axes" style="margin-bottom:14px;">'+mSecLabel('Cuenta para')+'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+list.map(function(x){
+    var auto = skMatch(x.a, reg, {label:lab, axes:[]})==='rule', on = auto || EN.axes.indexOf(x.a.id)>=0;
+    return '<button type="button" onclick="'+(auto?'':'enToggleAxis(\''+x.a.id+'\')')+'" style="padding:6px 11px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?x.a.color:'var(--line)')+';background:'+(on?x.a.color+'22':'transparent')+';color:'+(on?'var(--ink)':'var(--muted)')+';">'+(on?'✓ ':'')+esc(x.a.name)+(Object.keys(multi).length>1?' <span style="opacity:.6;font-weight:500;">· '+esc(x.tr.name)+'</span>':'')+(auto?' <span style="opacity:.6;font-weight:500;">auto</span>':'')+'</button>';
+  }).join('')+'</div></div>';
+}
+function enToggleAxis(id){
+  if(!EN.axes) EN.axes = [];
+  var i = EN.axes.indexOf(id); if(i>=0) EN.axes.splice(i,1); else EN.axes.push(id);
+  var e = document.getElementById('en-axes'); if(e){ var t=document.createElement('div'); t.innerHTML = enAxesHTML(); if(t.firstChild) e.replaceWith(t.firstChild); }
 }
 
 function renderProjectsSection(){
@@ -11669,7 +11701,8 @@ function trackDetailBodyHTML(track){
       '<div style="font-size:11.5px;color:var(--muted);">'+info.inLvl+' / '+info.needed+' XP · faltan '+(info.needed-info.inLvl)+' para <b style="color:var(--ink-soft);">'+esc(trackLevelName(track,info.lvl+1))+'</b></div>'+
     '</div>'+
     '<div style="display:flex;gap:8px;margin-bottom:16px;">'+stat('XP total',track.xp||0)+stat('Esta semana','+'+trackWeekXP(track))+stat('Contribuciones',log.length)+'</div>'+
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Últimos 14 días</div>'+barsSVG+
+    skSectionHTML(track)+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 6px;">Últimos 14 días</div>'+barsSVG+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px;">Camino de niveles</div>'+
     '<div style="display:flex;gap:4px;overflow-x:auto;padding-bottom:6px;">'+path+'</div>'+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 4px;">Últimas contribuciones</div>'+
@@ -21745,7 +21778,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.114';
+var APP_VERSION = '2026.10.01.115';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
@@ -21788,7 +21821,6 @@ if('serviceWorker' in navigator){
 // que S.visitHistory quedaba vacío para siempre y las medallas "Presente"
 // (7 días seguidos) y "Habitual" (30 días) eran imposibles de conseguir.
 trackVisit();          // Registrar la visita de hoy
-refreshSubscription();  // Verificar suscripción de Google Play (solo en la TWA instalada)
 checkMedals();         // Revisar medallas al iniciar
 checkStreakOnLoad();
 var _bootAutoReset = checkAutoReset();      // Reinicio automático por período (ver checkAutoReset)
