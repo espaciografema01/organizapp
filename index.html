@@ -3280,7 +3280,7 @@ function modeThreshold(base){
 // Devuelve el plan actual: 'free', 'donante'
 // Cuentas autorizadas para probar la suscripción sin pagar (vista previa). Pon aquí TU correo.
 // Mientras la lista esté vacía, la vista previa queda desactivada para todo el mundo.
-var DEV_EMAILS = [];
+var DEV_EMAILS = ['joaquinferrercarmona@gmail.com'];
 function isDevUser(){
   try{ return !!(currentUser && currentUser.email && DEV_EMAILS.map(function(e){return String(e).toLowerCase();}).indexOf(String(currentUser.email).toLowerCase())!==-1); }catch(e){ return false; }
 }
@@ -5817,17 +5817,82 @@ function renderYoDatosScreen(){
   return html;
 }
 
-// Punto de entrada para el billing de Google Play.
-// Cuando la app esté empaquetada (Android/PWA), el wrapper nativo intercepta
-// esta llamada e inicia el flujo de compra del Play Store.
-// En browser, muestra un mensaje informativo.
-function triggerGooglePlayPurchase(sku){
-  if(window.AndroidBridge && window.AndroidBridge.startPurchase){
-    window.AndroidBridge.startPurchase(sku);
+// ── Billing de Google Play (TWA + Digital Goods API) ─────────────────────────
+// En una TWA (Bubblewrap) NO existe un puente nativo tipo AndroidBridge: Chrome
+// expone Play Billing mediante la Digital Goods API + Payment Request API.
+// Solo funciona en la app instalada desde Google Play (pista interna/cerrada/
+// producción) y con billing activado en el twa-manifest.
+// Los IDs deben coincidir EXACTAMENTE con los de Play Console:
+//  - suscripción: usar el ID de la SUSCRIPCIÓN (no el del plan básico)
+//  - donación: debe existir como "producto integrado" (pago único)
+var PLAY_BILLING_URL = 'https://play.google.com/billing';
+var SKU_SUBSCRIPTION = 'subscription_annual_12k';
+var SKU_DONATION = 'donation_5k';
+var _purchaseBusy = false;
+
+async function _getPlayService(){
+  if(!('getDigitalGoodsService' in window)) return null;
+  try{ return await window.getDigitalGoodsService(PLAY_BILLING_URL); }
+  catch(e){ console.warn('Play Billing no disponible:', e); return null; }
+}
+
+async function triggerGooglePlayPurchase(sku){
+  if(_purchaseBusy) return;
+  // El plan se lee con getPlan(), que exige sesión iniciada: sin login el pago
+  // se cobraría pero la app seguiría mostrando "gratis".
+  if(!currentUser){
+    toast('Inicia sesión antes de suscribirte');
+    try{ showAuthModal('login'); }catch(e){}
     return;
   }
-  // Fallback en browser (durante desarrollo)
-  showInfoModal('Pago via Google Play','Esta compra se procesa a través de Google Play Store cuando la app está instalada desde la tienda. SKU: '+sku,'Entendido');
+  var service = await _getPlayService();
+  if(!service || typeof PaymentRequest==='undefined'){
+    showInfoModal('Pago via Google Play','Las compras solo funcionan con la app instalada desde Google Play. SKU: '+sku,'Entendido');
+    return;
+  }
+  _purchaseBusy = true;
+  try{
+    var details = await service.getDetails([sku]);
+    if(!details || !details.length){ toast('Producto no encontrado en Google Play'); return; }
+    var d = details[0];
+    var req = new PaymentRequest(
+      [{supportedMethods: PLAY_BILLING_URL, data:{sku: sku}}],
+      {total:{label: d.title || 'Gramifica', amount:{currency: d.price.currency, value: d.price.value}}}
+    );
+    var resp = await req.show();
+    var token = resp.details && resp.details.purchaseToken;
+    if(!token){ await resp.complete('fail'); toast('No se recibió confirmación de la compra'); return; }
+    // Reconocer la compra (si no, Google la reembolsa a los 3 días).
+    // Suscripción => 'repeatable'; donación (pago único) => 'onetime'.
+    await service.acknowledge(token, sku===SKU_DONATION ? 'onetime' : 'repeatable');
+    await resp.complete('success');
+    await refreshSubscription();
+    toast('✓ ¡Gracias por tu apoyo!');
+  }catch(e){
+    console.warn('Compra cancelada o fallida:', e);
+    toast('Compra cancelada o no disponible');
+  }finally{
+    _purchaseBusy = false;
+  }
+}
+
+// Consulta a Play qué compras están activas y actualiza window.userSubscription,
+// que es lo que lee getPlan(). Se llama al arrancar y tras cada compra.
+// NOTA de seguridad: esto confía en el cliente. Para verificar de verdad, envía
+// el purchaseToken a una Cloud Function que lo valide con la Google Play
+// Developer API (purchases.subscriptionsv2.get) y guarde el estado en Firestore.
+async function refreshSubscription(){
+  var service = await _getPlayService();
+  if(!service) return;
+  try{
+    var purchases = await service.listPurchases();
+    var has = purchases.some(function(p){ return p.itemId === SKU_SUBSCRIPTION; });
+    window.userSubscription = has ? {status:'active', expiryDate:null} : {status:'none'};
+  }catch(e){
+    console.warn('No se pudo verificar la suscripción:', e);
+    return;
+  }
+  try{ render(); }catch(e){}
 }
 
 
@@ -21680,7 +21745,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.01.113';
+var APP_VERSION = '2026.10.01.114';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
@@ -21723,6 +21788,7 @@ if('serviceWorker' in navigator){
 // que S.visitHistory quedaba vacío para siempre y las medallas "Presente"
 // (7 días seguidos) y "Habitual" (30 días) eran imposibles de conseguir.
 trackVisit();          // Registrar la visita de hoy
+refreshSubscription();  // Verificar suscripción de Google Play (solo en la TWA instalada)
 checkMedals();         // Revisar medallas al iniciar
 checkStreakOnLoad();
 var _bootAutoReset = checkAutoReset();      // Reinicio automático por período (ver checkAutoReset)
