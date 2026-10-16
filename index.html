@@ -949,6 +949,10 @@ function initGoogleIdentity(){
 }
 function renderGoogleButton(){
   var el = document.getElementById('gsiBtnWrap'); if(!el) return;
+  if(Platform.isNative){
+    el.innerHTML = '<button type="button" onclick="nativeGoogleLogin(false)" style="width:280px;max-width:100%;background:#fff;color:#3c4043;border:1px solid #dadce0;border-radius:20px;padding:11px 16px;font-size:14px;font-weight:600;font-family:Inter,sans-serif;cursor:pointer;">Continuar con Google</button>';
+    return;
+  }
   gsiReady(function(){
     if(!initGoogleIdentity()) return;
     el.innerHTML = '';
@@ -970,11 +974,31 @@ function onGoogleCredential(resp){
 }
 function handleGoogleSignIn(){
   if(!firebaseAvailable){ toast('Firebase no disponible'); return; }
+  if(Platform.isNative){ nativeGoogleLogin(true); return; }
   gsiReady(function(){
     if(!initGoogleIdentity()) return;
     google.accounts.id.prompt(function(n){
       try{ if((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment())) toast('Usa el botón "Continuar con Google" de la pantalla de acceso'); }catch(e){}
     });
+  });
+}
+// Login con Google en la app nativa (Capacitor). withCalendar=true pide además el
+// permiso de Calendar. En navegador/TWA esta función no se usa.
+function nativeGoogleLogin(withCalendar){
+  if(!firebaseAvailable){ toast('Firebase no disponible'); return; }
+  toast('Conectando con Google…');
+  Platform.auth.signInWithGoogle(!!withCalendar).then(function(r){
+    if(r.accessToken){ window._googleAccessToken = r.accessToken; window._googleAccessTokenAt = Date.now(); }
+    var cred = firebase.auth.GoogleAuthProvider.credential(r.idToken, r.accessToken || undefined);
+    return auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){ return auth.signInWithCredential(cred); });
+  }).then(function(){
+    toast('Sesión iniciada con Google');
+    closeAuthModal();
+    try{ _registerFCMToken(); }catch(e){}
+  }).catch(function(e){
+    var m = String((e && (e.message||e.code)) || e || '');
+    if(/cancel/i.test(m)) { toast('Inicio de sesión cancelado'); return; }
+    toast('No se pudo iniciar sesión: '+m);
   });
 }
 renderGoogleButton();
@@ -1086,7 +1110,7 @@ function toggleAuthMode(){ setAuthMode(_authMode==='login'?'signup':'login'); }
 
 function handleLogout(){
   if(!auth){ toast('No hay sesión activa'); return; }
-  _pushCleanupForLogout().then(function(){ return auth.signOut(); }).then(function(){
+  _pushCleanupForLogout().then(function(){ return auth.signOut(); }).then(function(){ return Platform.isNative ? Platform.auth.signOut() : null; }).then(function(){
     toast('Sesión cerrada');
     // BUGFIX: estos campos solo existen si el usuario entró con el
     // formulario de email/contraseña. Si entró con Google, no existen en el
@@ -1115,8 +1139,30 @@ function getCalToken(){
   // re-autenticar silenciosamente para obtener uno fresco.
   return window._googleAccessToken || null;
 }
+// Token de Calendar. En navegador/TWA es el de siempre. En la app nativa, si falta
+// o tiene más de 50 min, se pide uno nuevo al inicio de sesión nativo.
+async function ensureCalToken(){
+  var t = getCalToken();
+  if(!Platform.isNative) return t;
+  if(t && window._googleAccessTokenAt && (Date.now()-window._googleAccessTokenAt) < 50*60*1000) return t;
+  try{
+    var r = await Platform.auth.signInWithGoogle(true);
+    if(r.accessToken){ window._googleAccessToken = r.accessToken; window._googleAccessTokenAt = Date.now(); return r.accessToken; }
+  }catch(e){ console.warn('Token de Calendar:', e); }
+  return null;
+}
+// Desfase horario real de America/Santiago para una fecha (antes estaba fijo en -04:00).
+function calOffset(dateStr){
+  try{
+    var parts = new Intl.DateTimeFormat('en-US',{timeZone:'America/Santiago',timeZoneName:'longOffset'}).formatToParts(new Date(dateStr+'T12:00:00-03:00'));
+    var tz = parts.find(function(p){return p.type==='timeZoneName';}).value;
+    var m = tz.match(/GMT([+-]\d{2}):?(\d{2})?/);
+    if(m) return m[1]+':'+(m[2]||'00');
+  }catch(e){}
+  return '-04:00';
+}
 async function syncTaskToCalendar(task){
-  var token = getCalToken();
+  var token = await ensureCalToken();
   if(!token || !task.hora) return;
   var prefs = S.calendarSync || {enabled:false, direction:'app_to_cal'};
   if(!prefs.enabled) return;
@@ -1167,7 +1213,7 @@ async function syncTaskToCalendar(task){
 // "ahora") en vez de dispararse solo al guardar una tarea, para no crear
 // eventos duplicados en Calendar cada vez que se edita la misma tarea.
 async function exportTodayToCalendar(){
-  var token = getCalToken();
+  var token = await ensureCalToken();
   if(!token){ toast('Inicia sesión con Google primero'); return; }
   var pending = (S.tasks||[]).filter(function(t){
     return isTaskToday(t) && t.hora && !t.googleEventId;
@@ -1182,7 +1228,7 @@ async function exportTodayToCalendar(){
 }
 
 async function importFromCalendar(){
-  var token = getCalToken();
+  var token = await ensureCalToken();
   if(!token) { toast('Inicia sesión con Google primero'); return; }
   var prefs = S.calendarSync || {enabled:false, direction:'app_to_cal'};
   if(!prefs.enabled) return;
@@ -1193,8 +1239,8 @@ async function importFromCalendar(){
   try {
     var res = await fetch(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events'+
-      '?timeMin='+encodeURIComponent(dateStr+'T00:00:00-04:00')+
-      '&timeMax='+encodeURIComponent(dateStr+'T23:59:59-04:00')+
+      '?timeMin='+encodeURIComponent(dateStr+'T00:00:00'+calOffset(dateStr))+
+      '&timeMax='+encodeURIComponent(dateStr+'T23:59:59'+calOffset(dateStr))+
       '&singleEvents=true&orderBy=startTime',
       { headers: { 'Authorization': 'Bearer '+token } }
     );

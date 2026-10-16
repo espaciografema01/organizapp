@@ -9,8 +9,19 @@
   var native = false;
   try{ native = !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform()); }catch(e){}
 
+  var _pcache = {};
   function plugin(name){
-    try{ return (native && C && C.Plugins && C.Plugins[name]) || null; }catch(e){ return null; }
+    if(!native || !C) return null;
+    if(_pcache[name]) return _pcache[name];
+    try{
+      // Con server.url el JS de los plugins no está empaquetado: se usa el puente
+      // nativo de Capacitor (registerPlugin) y se comprueba que exista en Android.
+      var p = C.Plugins && C.Plugins[name];
+      if(!p && typeof C.registerPlugin === 'function' &&
+         (typeof C.isPluginAvailable !== 'function' || C.isPluginAvailable(name))) p = C.registerPlugin(name);
+      if(p) _pcache[name] = p;
+      return p || null;
+    }catch(e){ return null; }
   }
 
   // Claves og6-* que NO deben viajar en un respaldo (son del dispositivo/sesión).
@@ -49,6 +60,27 @@
         setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
         return Promise.resolve({ok:true, via:'download'});
       }catch(e){ return Promise.resolve({ok:false, via:'download', error:String(e)}); }
+    },
+
+    // Inicio de sesión nativo (solo Capacitor). Devuelve {idToken, accessToken|null}.
+    // El inicio de sesión de Firebase lo completa la página con signInWithCredential.
+    auth: {
+      CAL_SCOPE: 'https://www.googleapis.com/auth/calendar.events',
+      signInWithGoogle: function(withCalendar){
+        var P = plugin('FirebaseAuthentication');
+        if(!P) return Promise.reject(new Error('El inicio de sesión nativo no está disponible'));
+        var opts = {skipNativeAuth: true};
+        if(withCalendar) opts.scopes = [Platform.auth.CAL_SCOPE];
+        return P.signInWithGoogle(opts).then(function(r){
+          var c = (r && r.credential) || {};
+          if(!c.idToken) throw new Error('Google no devolvió credencial');
+          return {idToken: c.idToken, accessToken: c.accessToken || null};
+        });
+      },
+      signOut: function(){
+        var P = plugin('FirebaseAuthentication');
+        return P ? P.signOut().catch(function(){}) : Promise.resolve();
+      }
     },
 
     // Stubs seguros: en navegador/TWA nunca hacen nada ni fallan.
