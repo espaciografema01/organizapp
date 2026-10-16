@@ -1074,6 +1074,19 @@ var _fcmMessagingBound = false;
 var FCM_VAPID_KEY = 'BEe1Pp0ir_6WBmgqmNCV0-mGxoL9R5NJzYXWLbldCaDo_Hjf-glsawgPTmF5_cHHYA0IUA2udUydlIWLD-I2W8E';
 async function _registerFCMToken(){
   if(!firebaseAvailable || !currentUser) return false;
+  if(Platform.isNative){
+    // App nativa: token FCM de Android, guardado aparte (fcmNativeTokens) para que
+    // la Cloud Function le envíe un aviso con bloque "notification".
+    try{
+      if(!Platform.push.available() || S.notifPermission!=='granted') return false;
+      var ntoken = await Platform.push.getToken();
+      if(!ntoken) return false;
+      await db.collection('users').doc(currentUser.uid).set({fcmNativeTokens: firebase.firestore.FieldValue.arrayUnion(ntoken)}, {merge:true});
+      try{ localStorage.setItem('og6-fcm-token-uid', currentUser.uid); localStorage.setItem('og6-fcm-token', ntoken); }catch(e){}
+      Platform.push.onForeground = function(n){ toast((n && n.title || 'Gramifica')+': '+(n && n.body || '')); };
+      return true;
+    }catch(e){ console.warn('FCM nativo:', e && e.message); return false; }
+  }
   try {
     if(typeof firebase.messaging !== 'function') return false;
     if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
@@ -5490,7 +5503,7 @@ function renderYoNotificacionesScreen(){
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
       '<div style="flex:1;">'+
         '<div style="font-weight:700;font-size:14px;color:var(--ink);">'+ico('bell',16,1.8)+' Permiso de notificaciones</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">'+(notifOn?'Activo — elige abajo cuáles quieres recibir. Los avisos solo suenan con la app abierta o en segundo plano reciente; si el sistema la cierra, no llegan.':(typeof Notification!=='undefined'&&Notification.permission==='denied'?'El sistema las tiene bloqueadas para esta app: actívalas en los ajustes del navegador o del teléfono (permisos del sitio).':'Actívalo para poder usar cualquiera de los avisos de abajo. Puedes revisar cómo quedarían configurados igual, sin activarlos todavía.'))+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">'+(notifOn?'Activo — elige abajo cuáles quieres recibir. Los avisos solo suenan con la app abierta o en segundo plano reciente; si el sistema la cierra, no llegan.':((Platform.isNative ? S.notifPermission==='denied' : (typeof Notification!=='undefined'&&Notification.permission==='denied'))?'El sistema las tiene bloqueadas para esta app: actívalas en los ajustes del navegador o del teléfono (permisos del sitio).':'Actívalo para poder usar cualquiera de los avisos de abajo. Puedes revisar cómo quedarían configurados igual, sin activarlos todavía.'))+'</div>'+
       '</div>'+
       (notifOn
         ? '<div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;"><button onclick="testNotif()" class="sbtn" style="font-size:11px;padding:7px 12px;">Probar aviso</button><button onclick="revokeNotif()" class="cbtn" style="font-size:11px;padding:7px 12px;">Desactivar</button></div>'
@@ -21250,7 +21263,7 @@ function maybeShowTutorial(){
 
 function maybeAskNotifPermission(){
   // Solo preguntar si: la API existe, no se preguntó nunca o pasaron 30+ días, no rechazó
-  if(typeof Notification === 'undefined')return;
+  if(typeof Notification === 'undefined' && !Platform.isNative)return;
   if(S.notifPermission === 'granted' || S.notifPermission === 'denied')return;
   // Si nunca se preguntó, esperar a que el usuario tenga al menos 3 días de uso
   var hist = S.dailyHistory || {};
@@ -21284,6 +21297,16 @@ function showNotifAsk(){
 }
 
 function grantNotif(){
+  if(Platform.isNative){
+    Platform.push.requestPermission().then(function(perm){
+      S.notifPermission = (perm==='granted'||perm==='denied') ? perm : 'default';
+      saveState();
+      if(perm==='granted'){ toast('✓ Notificaciones activadas'); schedulePushSync(true); }
+      else toast('Permiso denegado en el sistema');
+      render();
+    }).catch(function(){ toast('No se pudo pedir el permiso'); });
+    return;
+  }
   if(typeof Notification === 'undefined'){toast('Tu navegador no soporta notificaciones');return;}
   Notification.requestPermission().then(function(perm){
     S.notifPermission = perm;
@@ -21559,11 +21582,29 @@ function showLocalNotification(title, body, tag){
   return Promise.resolve(fallback());
 }
 function testNotif(){
+  if(Platform.isNative){
+    if(!pushWanted()){ toast('Inicia sesión y activa los permisos primero'); return; }
+    _registerFCMToken().then(function(ok){
+      if(!ok){ toast('No se pudo registrar este dispositivo para avisos'); return; }
+      var ms = Date.now()+8000;
+      return db.collection('pushQueue').doc(currentUser.uid+'_'+ms+'_'+_pushHash('test')).set({
+        uid:currentUser.uid, sendAt:firebase.firestore.Timestamp.fromMillis(ms),
+        title:'Gramifica', body:'Prueba: los avisos funcionan en este dispositivo', tag:'test'
+      }).then(function(){ toast('El aviso llega en 1 minuto como máximo. Cierra la app para probarlo.'); });
+    }).catch(function(e){ toast('No se pudo programar el aviso de prueba'); });
+    return;
+  }
   showLocalNotification('Gramifica','Prueba: los avisos funcionan en este dispositivo','test').then(function(ok){
     toast(ok?'Aviso enviado — revisa la barra de notificaciones':'El sistema no permitió mostrar el aviso');
   });
 }
 function syncNotifPermission(){
+  if(Platform.isNative){
+    try{ Platform.push.checkPermission().then(function(p){
+      if(S.notifPermission==='granted' && p!=='granted' && p!=='unsupported'){ S.notifPermission = (p==='denied'?'denied':'default'); saveState(); render(); }
+    }).catch(function(){}); }catch(e){}
+    return;
+  }
   try{
     if(typeof Notification==='undefined') return;
     var real=Notification.permission;
@@ -21819,9 +21860,14 @@ function pushActive(){
   try{ return !!(firebaseAvailable && currentUser && S.notifPermission==='granted' && localStorage.getItem('og6-push-ok')===currentUser.uid); }
   catch(e){ return false; }
 }
+// Permiso real de notificaciones: en nativo se guarda en S.notifPermission (se revisa al volver a la app).
+function notifGranted(){
+  if(Platform.isNative) return S.notifPermission==='granted';
+  return typeof Notification!=='undefined' && Notification.permission==='granted';
+}
 function pushWanted(){
   return !!(firebaseAvailable && currentUser && typeof db!=='undefined' && db && S.notifPermission==='granted' &&
-            typeof Notification!=='undefined' && Notification.permission==='granted');
+            notifGranted());
 }
 function schedulePushSync(now){
   try{
@@ -21977,7 +22023,7 @@ function _pushCleanupForLogout(){
     var uid = currentUser && currentUser.uid, tok = localStorage.getItem('og6-fcm-token');
     p = clearPushQueue().then(function(){
       if(!uid || !tok || !db) return;
-      return db.collection('users').doc(uid).set({fcmTokens: firebase.firestore.FieldValue.arrayRemove(tok)}, {merge:true})
+      return db.collection('users').doc(uid).set(Object.assign({fcmTokens: firebase.firestore.FieldValue.arrayRemove(tok)}, Platform.isNative ? {fcmNativeTokens: firebase.firestore.FieldValue.arrayRemove(tok)} : {}), {merge:true})
         .then(function(){ return db.collection('users').doc(uid).get(); })
         .then(function(d){ if(d.exists && d.get('fcmToken')===tok) return db.collection('users').doc(uid).set({fcmToken: firebase.firestore.FieldValue.delete()}, {merge:true}); });
     });

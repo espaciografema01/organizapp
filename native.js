@@ -100,9 +100,48 @@
     billing: {
       available: function(){ return false; }
     },
-    push: {
-      available: function(){ return false; }
-    }
+    // Avisos push nativos (solo Capacitor): permiso, token FCM y aviso en primer plano.
+    push: (function(){
+      var token = null, waiters = [], bound = false;
+      function pl(){ return plugin('PushNotifications'); }
+      function norm(v){ return v === 'granted' ? 'granted' : (v === 'denied' ? 'denied' : 'default'); }
+      function bind(){
+        var p = pl(); if(!p || bound) return; bound = true;
+        p.addListener('registration', function(t){
+          token = t && t.value || null;
+          waiters.splice(0).forEach(function(w){ w.ok(token); });
+        });
+        p.addListener('registrationError', function(e){
+          waiters.splice(0).forEach(function(w){ w.fail(new Error((e && e.error) || 'registro de avisos')); });
+        });
+        p.addListener('pushNotificationReceived', function(n){
+          try{ if(typeof Platform.push.onForeground === 'function') Platform.push.onForeground(n); }catch(e){}
+        });
+        try{ p.createChannel({id:'gramifica', name:'Recordatorios', description:'Avisos de tareas y recordatorios', importance:4, visibility:1}).catch(function(){}); }catch(e){}
+      }
+      return {
+        onForeground: null,
+        available: function(){ return native && !!pl(); },
+        checkPermission: function(){
+          var p = pl(); if(!p) return Promise.resolve('unsupported');
+          return p.checkPermissions().then(function(r){ return norm(r && r.receive); });
+        },
+        requestPermission: function(){
+          var p = pl(); if(!p) return Promise.resolve('unsupported');
+          return p.requestPermissions().then(function(r){ return norm(r && r.receive); });
+        },
+        getToken: function(){
+          var p = pl(); if(!p) return Promise.reject(new Error('Avisos nativos no disponibles'));
+          bind();
+          if(token) return Promise.resolve(token);
+          return new Promise(function(ok, fail){
+            var w = {ok: ok, fail: fail}; waiters.push(w);
+            setTimeout(function(){ var i = waiters.indexOf(w); if(i >= 0){ waiters.splice(i,1); fail(new Error('Tiempo agotado al registrar avisos')); } }, 20000);
+            p.register().catch(function(e){ var i = waiters.indexOf(w); if(i >= 0) waiters.splice(i,1); fail(e); });
+          });
+        }
+      };
+    })()
   };
 
   window.Platform = Platform;
