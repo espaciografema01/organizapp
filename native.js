@@ -68,7 +68,11 @@
       CAL_SCOPE: 'https://www.googleapis.com/auth/calendar.events',
       signInWithGoogle: function(withCalendar){
         var P = plugin('FirebaseAuthentication');
-        if(!P) return Promise.reject(new Error('El inicio de sesión nativo no está disponible'));
+        if(!P){
+          var names = '';
+          try{ names = (C && C.PluginHeaders ? C.PluginHeaders.map(function(h){return h.name;}).join(',') : 'sin PluginHeaders'); }catch(e){ names = 'error'; }
+          return Promise.reject(new Error('El inicio de sesión nativo no está disponible. Plugins nativos: ['+names+']'));
+        }
         var opts = {skipNativeAuth: true};
         if(withCalendar) opts.scopes = [Platform.auth.CAL_SCOPE];
         return P.signInWithGoogle(opts).then(function(r){
