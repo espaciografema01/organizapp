@@ -69,9 +69,14 @@
       signInWithGoogle: function(withCalendar){
         var P = plugin('FirebaseAuthentication');
         if(!P){
-          var names = '';
-          try{ names = (C && C.PluginHeaders ? C.PluginHeaders.map(function(h){return h.name;}).join(',') : 'sin PluginHeaders'); }catch(e){ names = 'error'; }
-          return Promise.reject(new Error('El inicio de sesión nativo no está disponible. Plugins nativos: ['+names+']'));
+          var msg = 'Plugin de sesión no disponible. ';
+          try{
+            var list = (C && C.PluginHeaders ? C.PluginHeaders.map(function(h){return h.name;}) : []);
+            var want = ['FirebaseAuthentication','Filesystem','Share','Browser','Haptics','App'];
+            var missing = want.filter(function(n){ return list.indexOf(n) < 0; });
+            msg += 'Total: '+list.length+'. Faltan: '+(missing.join(',')||'ninguno')+'.';
+          }catch(e){ msg += 'No se pudo leer la lista.'; }
+          return Promise.reject(new Error(msg));
         }
         var opts = {skipNativeAuth: true};
         if(withCalendar) opts.scopes = [Platform.auth.CAL_SCOPE];
