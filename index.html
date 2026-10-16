@@ -26,6 +26,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="native.js"></script>
 <style>
 :root {
   --bg:#f7f7f7;
@@ -10393,37 +10394,52 @@ function doFactoryReset(){
 }
 
 // ── Exportar / Importar datos ────────────────────────────────────────────
+// Formato: objeto plano {"og6-...": "valor"} (compatible con respaldos antiguos)
+// más "_meta" (ignorado por versiones anteriores). No incluye claves del dispositivo
+// (token de avisos, sesión, última sync, modo pruebas).
 function exportData(){
   var data = {};
   for(var i=0; i<localStorage.length; i++){
     var key = localStorage.key(i);
-    if(key && key.startsWith('og6-')) data[key] = localStorage.getItem(key);
+    if(Platform.isBackupKey(key)) data[key] = localStorage.getItem(key);
   }
-  var blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = 'gramifica-backup-'+todayStr()+'.json';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast('✓ Datos exportados');
+  var n = Object.keys(data).length;
+  data._meta = {app:'gramifica', exportedAt:new Date().toISOString(), keys:n};
+  var name = 'gramifica-backup-'+todayStr()+'.json';
+  Platform.saveTextFile(name, JSON.stringify(data,null,2), 'application/json').then(function(r){
+    if(r.ok) toast('✓ Respaldo listo ('+n+' datos)');
+    else if(r.error==='cancelled') toast('Exportación cancelada');
+    else toast('No se pudo exportar el respaldo');
+  });
 }
 
 function importData(event){
-  var file = event.target.files[0];
+  var input = event.target;
+  var file = input.files && input.files[0];
   if(!file) return;
   var reader = new FileReader();
+  reader.onerror = function(){ toast('No se pudo leer el archivo'); input.value=''; };
   reader.onload = function(e){
-    try{
-      var data = JSON.parse(e.target.result);
-      var count = 0;
-      Object.keys(data).forEach(function(key){
-        if(key.startsWith('og6-')){ localStorage.setItem(key, data[key]); count++; }
-      });
-      loadState(); render();
-      toast('✓ '+count+' datos importados. Si algo no se ve, recarga la app.');
-    } catch(err){ toast('Error: archivo inválido'); }
+    var data;
+    try{ data = JSON.parse(e.target.result); }catch(err){ data = null; }
+    input.value = ''; // permite volver a elegir el mismo archivo
+    if(!data || typeof data!=='object' || Array.isArray(data)){ toast('Error: archivo inválido'); return; }
+    var keys = Object.keys(data).filter(function(k){ return Platform.isBackupKey(k) && typeof data[k]==='string'; });
+    if(!keys.length){ toast('Este archivo no contiene datos de Gramifica'); return; }
+    var hasLocal = false;
+    for(var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if(Platform.isBackupKey(k) && localStorage.getItem(k) && ['og6-tasks','og6-registries','og6-projects','og6-habits'].indexOf(k)>=0){ hasLocal = true; break; }
+    }
+    var when = data._meta && data._meta.exportedAt ? ' (respaldo del '+String(data._meta.exportedAt).slice(0,10)+')' : '';
+    var msg = hasLocal
+      ? 'Ya hay datos en este dispositivo. Importar'+when+' reemplazará los datos que coincidan ('+keys.length+' elementos). ¿Continuar?'
+      : 'Importar '+keys.length+' elementos'+when+'. ¿Continuar?';
+    if(!window.confirm(msg)){ toast('Importación cancelada'); return; }
+    var count = 0;
+    keys.forEach(function(k){ try{ localStorage.setItem(k, data[k]); count++; }catch(err){} });
+    try{ loadState(); render(); }catch(err){}
+    toast('✓ '+count+' datos importados. Si algo no se ve, recarga la app.');
   };
   reader.readAsText(file);
 }
