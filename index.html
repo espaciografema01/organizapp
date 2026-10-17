@@ -835,10 +835,13 @@ try {
           currentUser = user;
           var modal = document.getElementById('authModal');
           if(modal) modal.style.display='none';
-          if(typeof syncWithCloud === 'function'){ Promise.resolve(syncWithCloud()).catch(function(){}).then(function(){ return syncExtra(); }); }
-          try{ if(typeof schedulePushSync==='function') schedulePushSync(true); }catch(e){}
-          try{ if(Platform.isNative && typeof nativeRefreshSubscription==='function') nativeRefreshSubscription(); }catch(e){}
-          try{ if(typeof loadAdsState==='function') loadAdsState(); }catch(e){}
+          accountSwitchGuard(user).then(function(ok){
+            if(!ok || !currentUser) return;
+            if(typeof syncWithCloud === 'function'){ Promise.resolve(syncWithCloud()).catch(function(){}).then(function(){ return syncExtra(); }); }
+            try{ if(typeof schedulePushSync==='function') schedulePushSync(true); }catch(e){}
+            try{ if(Platform.isNative && typeof nativeRefreshSubscription==='function') nativeRefreshSubscription(); }catch(e){}
+            try{ if(typeof loadAdsState==='function') loadAdsState(); }catch(e){}
+          });
         } else {
           currentUser = null;
           try{ ADS_CFG = null; UNLOCKS = null; }catch(e){}
@@ -1308,7 +1311,7 @@ function canonSyncStr(v){
   try{ return JSON.stringify(c(v)); }catch(e){ return String(Math.random()); }
 }
 async function syncWithCloud(){
-  if(!currentUser || !db) return;
+  if(!currentUser || !db || _acctPending) return;
   try {
     var userRef = db.collection('users').doc(currentUser.uid);
     var doc = await userRef.get();
@@ -1559,6 +1562,62 @@ function sanitizeForFirestore(obj){
   return clean;
 }
 
+// ── Protección al cambiar de cuenta ──────────────────────────────────────────────────
+// Si en este dispositivo hay datos de una cuenta y entra OTRA, no se sincroniza nada hasta que el usuario
+// decida: conservar los datos aquí (se subirán a la cuenta nueva), empezar limpio, o cancelar.
+// La clave 'gr-last-uid' no empieza con "og6-", así que no entra en los respaldos.
+var _acctPending = false;
+function localHasUserData(){
+  try{
+    return !!((S.tasks && S.tasks.length) || (S.categories && S.categories.length) || (S.projects && S.projects.length) ||
+      (S.levelTracks && S.levelTracks.length) || (S.registries||[]).some(function(r){ return r && !r.del; }));
+  }catch(e){ return false; }
+}
+function wipeLocalForAccountSwitch(uid){
+  var keys = [];
+  for(var i=0;i<localStorage.length;i++){
+    var k = localStorage.key(i);
+    if(k && (k.indexOf('og6-')===0 || k.indexOf('gr-extra-last-')===0)) keys.push(k);
+  }
+  keys.forEach(function(k){ localStorage.removeItem(k); });
+  try{ localStorage.setItem('gr-last-uid', uid); }catch(e){}
+  _savePending = false; if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; }
+  location.reload();
+}
+function accountSwitchGuard(user){
+  return new Promise(function(done){
+    var last = null; try{ last = localStorage.getItem('gr-last-uid'); }catch(e){}
+    if(!last || last === user.uid || !localHasUserData()){
+      try{ localStorage.setItem('gr-last-uid', user.uid); }catch(e){}
+      done(true); return;
+    }
+    _acctPending = true;
+    var old = document.getElementById('acct-switch'); if(old) old.remove();
+    var box = document.createElement('div'); box.className = 'conf-box'; box.id = 'acct-switch';
+    box.innerHTML = '<div class="conf-inner">'+
+      '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;">Datos de otra cuenta</div>'+
+      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:10px;">Este dispositivo tiene datos de otra cuenta, y acabas de entrar con '+esc(user.email||'una cuenta distinta')+'. ¿Qué quieres hacer?</div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px;"><b>Conservarlos</b> los mezcla y los sube a esta cuenta. <b>Empezar limpio</b> borra lo de este dispositivo (incluido el registro de ciclo) y trae solo lo de esta cuenta.</div>'+
+      '<button class="sbtn" id="acct-keep" style="width:100%;margin-bottom:8px;">Conservarlos en esta cuenta</button>'+
+      '<button class="sbtn" id="acct-clean" style="width:100%;margin-bottom:8px;background:var(--bad);">Empezar limpio</button>'+
+      '<button class="sbtn" id="acct-cancel" style="width:100%;background:var(--bg);color:var(--ink-soft);border:1.5px solid var(--line);">Cancelar y cerrar sesión</button>'+
+      '<div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;" id="acct-export">Exportar un respaldo primero</div>'+
+    '</div>';
+    document.body.appendChild(box);
+    function close(){ var b = document.getElementById('acct-switch'); if(b) b.remove(); }
+    document.getElementById('acct-export').onclick = function(){ try{ exportData(); }catch(e){} };
+    document.getElementById('acct-keep').onclick = function(){
+      try{ localStorage.setItem('gr-last-uid', user.uid); }catch(e){}
+      _acctPending = false; close(); done(true);
+    };
+    document.getElementById('acct-clean').onclick = function(){ close(); wipeLocalForAccountSwitch(user.uid); };
+    document.getElementById('acct-cancel').onclick = function(){
+      _acctPending = false; close();
+      Promise.resolve(auth.signOut()).then(function(){ return Platform.isNative ? Platform.auth.signOut() : null; }).catch(function(){}).then(function(){ done(false); try{ render(); }catch(e){} });
+    };
+  });
+}
+
 // ── Sincronización "extra": datos que antes solo vivían en el dispositivo ────────────────
 // Va en un documento aparte (userExtra/{uid}) para no acercarse al límite de 1 MB del documento principal.
 // Regla de oro: nunca se pierde nada. Al iniciar sesión, si la nube cambió desde la última vez que ESTE
@@ -1630,7 +1689,7 @@ function mergeExtraInto(c){
   return changed;
 }
 async function pushExtra(force){
-  if(!currentUser || !db || _extraReadyUid !== currentUser.uid) return;
+  if(!currentUser || !db || _acctPending || _extraReadyUid !== currentUser.uid) return;
   var uid = currentUser.uid, payload = sanitizeForFirestore(extraSnapshot()), h = canonSyncStr(payload);
   if(!force && h === _extraHash) return;
   if(h.length > 900000){
@@ -1643,7 +1702,7 @@ async function pushExtra(force){
   try{ localStorage.setItem('gr-extra-last-'+uid, stamp); }catch(e){}
 }
 async function syncExtra(){
-  if(!currentUser || !db) return;
+  if(!currentUser || !db || _acctPending) return;
   var uid = currentUser.uid;
   try{
     var doc = await db.collection('userExtra').doc(uid).get();
@@ -1666,7 +1725,7 @@ async function syncExtra(){
 }
 
 function pushToCloud(){
-  if(!currentUser || !db) return;
+  if(!currentUser || !db || _acctPending) return;
   try{ pushExtra(false); }catch(e){}
   try {
     var sync = new Date().toISOString();
@@ -23375,7 +23434,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.17.119';
+var APP_VERSION = '2026.10.17.120';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
