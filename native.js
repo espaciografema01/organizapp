@@ -113,7 +113,13 @@
     openUrl: function(url){
       var B = plugin('Browser'), L = plugin('AppLauncher');
       if(native && /^https?:/i.test(url) && B){ return B.open({url: url}).catch(function(){ window.open(url, '_blank', 'noopener'); }); }
-      if(native && L){ return L.openUrl({url: url}).catch(function(){ try{ window.location.href = url; }catch(e){} }); }
+      if(native && L){
+        // AppLauncher no rechaza si ninguna app maneja el enlace: devuelve {completed:false}. En ese caso se
+        // intenta por navegación (el puente de Capacitor lanza un Intent para esquemas que no son del sitio).
+        return L.openUrl({url: url}).then(function(r){
+          if(r && r.completed === false){ try{ window.location.href = url; }catch(e){} }
+        }).catch(function(){ try{ window.location.href = url; }catch(e){} });
+      }
       try{ if(/^https?:/i.test(url)) window.open(url, '_blank', 'noopener'); else window.location.href = url; }catch(e){}
       return Promise.resolve();
     },
