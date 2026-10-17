@@ -29,17 +29,22 @@
     </div>
     <div>
       <h1>Gramifica</h1>
-      <p class="sub" style="margin:0;">Política de Privacidad · Última actualización: agosto 2026</p>
+      <p class="sub" style="margin:0;">Política de Privacidad · Última actualización: octubre 2026</p>
     </div>
   </div>
 
-  <p>Esta política describe cómo <strong>Gramifica</strong> recopila, usa y protege la información de sus usuarios. Nos tomamos la privacidad en serio: la app fue diseñada para funcionar principalmente en tu dispositivo, sin necesidad de compartir datos personales para usar sus funciones principales.</p>
+  <p>Esta política describe cómo <strong>Gramifica</strong> recopila, usa y protege la información de sus usuarios. La app fue diseñada para funcionar principalmente en tu dispositivo: puedes usarla sin cuenta, y la nube solo interviene si inicias sesión.</p>
 
   <h2>1. Qué información recopilamos</h2>
 
   <div class="card">
     <span class="tag">Datos que tú ingresas</span>
-    <p>Tareas, proyectos, metas, notas, categorías y configuraciones que creas dentro de la app. Estos datos se almacenan <strong>en tu dispositivo</strong> y, si inicias sesión, también en Firebase Firestore bajo tu cuenta.</p>
+    <p>Tareas, proyectos, metas, notas, categorías, registros, temporizadores y configuraciones que creas dentro de la app. Estos datos se almacenan <strong>en tu dispositivo</strong> y, si inicias sesión, también en Google Firebase (Firestore) bajo tu cuenta, para sincronizarlos entre dispositivos.</p>
+  </div>
+
+  <div class="card">
+    <span class="tag">Registro de ciclo (opcional)</span>
+    <p>Si activas el registro de ciclo, esos datos se guardan <strong>solo en tu dispositivo</strong> por defecto y no se envían a la nube. Solo se sincronizan con tu cuenta si tú activas expresamente esa opción dentro del registro, y puedes volver a desactivarla.</p>
   </div>
 
   <div class="card">
@@ -48,55 +53,71 @@
   </div>
 
   <div class="card">
-    <span class="tag">Datos técnicos automáticos</span>
-    <p>Para mejorar la estabilidad de la app, registramos errores técnicos (mensajes de error, tipo de dispositivo, versión del sistema operativo) de forma anónima. <strong>No incluyen contenido de tus tareas ni información personal identificable.</strong></p>
+    <span class="tag">Compras y suscripción</span>
+    <p>Los pagos los procesa <strong>Google Play</strong>; nosotros no recibimos ni guardamos datos de tu tarjeta. Para saber si tienes una suscripción activa, la app envía a nuestro servidor un código de la compra, que se verifica con Google Play. Guardamos en tu cuenta el estado de la suscripción (activa o no, y su fecha de vencimiento) y un vínculo que asocia esa compra a tu cuenta.</p>
   </div>
 
   <div class="card">
-    <span class="tag">Datos de uso</span>
-    <p>Firebase Analytics puede registrar eventos de uso generales (como qué funciones se utilizan con más frecuencia) de forma agregada y anónima. No vinculamos estos datos a personas identificables.</p>
+    <span class="tag">Anuncios</span>
+    <p>En la app para Android, el plan gratuito puede ofrecerte ver un anuncio, de forma opcional, a cambio de un beneficio temporal (por ejemplo, un cupo extra durante algunos días). Los anuncios los muestra <strong>Google AdMob</strong>, que puede recopilar y usar el <strong>ID de publicidad</strong> del dispositivo y otros datos del dispositivo para mostrar anuncios, medir su rendimiento y prevenir fraudes. No mostramos anuncios en la sección de ciclo. Puedes restablecer o eliminar el ID de publicidad en los ajustes de Android, y revisar tus opciones de consentimiento desde el aviso de anuncios dentro de la app («Privacidad de anuncios»).</p>
+  </div>
+
+  <div class="card">
+    <span class="tag">Datos técnicos automáticos</span>
+    <p>Para mejorar la estabilidad de la app, registramos errores técnicos (mensaje de error, archivo y línea donde ocurrió, fecha, y tipo de dispositivo y navegador). <strong>No incluyen el contenido de tus tareas y no se vinculan a tu cuenta.</strong></p>
+  </div>
+
+  <div class="card">
+    <span class="tag">Avisos</span>
+    <p>Si activas los recordatorios, guardamos en tu cuenta un identificador técnico de tu dispositivo (token de Firebase Cloud Messaging) para poder enviarte las notificaciones que tú configuras.</p>
   </div>
 
   <h2>2. Cómo usamos la información</h2>
   <ul>
     <li>Sincronizar tus datos entre dispositivos cuando estás conectado con tu cuenta.</li>
-    <li>Enviarte notificaciones de recordatorio de tareas que tú configuras.</li>
-    <li>Detectar y corregir errores técnicos para mejorar la experiencia.</li>
-    <li>Mejorar funciones de la app en base a patrones de uso anónimos.</li>
+    <li>Enviarte notificaciones de recordatorio de las tareas que tú configuras.</li>
+    <li>Verificar tu suscripción y aplicar los beneficios que desbloqueas.</li>
+    <li>Mostrar anuncios opcionales y aplicar su recompensa.</li>
+    <li>Detectar y corregir errores técnicos.</li>
   </ul>
-  <p><strong>No vendemos, alquilamos ni compartimos tu información personal con terceros con fines publicitarios.</strong></p>
+  <p><strong>No vendemos ni alquilamos tu información personal.</strong> Los datos que Google AdMob recibe para mostrar anuncios se rigen por la política de privacidad de Google.</p>
 
-  <h2>3. Almacenamiento y seguridad</h2>
-  <p>Los datos de tu cuenta se almacenan en <strong>Google Firebase</strong>, una plataforma de infraestructura en la nube de Google Inc. con servidores ubicados en Sudamérica (región southamerica-west1, Santiago). Firebase cumple con los estándares ISO 27001 y SOC 2/3.</p>
-  <p>Los datos almacenados localmente en tu dispositivo se protegen con los mecanismos de seguridad propios del sistema operativo Android.</p>
+  <h2>3. Almacenamiento, ubicación y conservación</h2>
+  <p>Los datos de tu cuenta se almacenan en <strong>Google Firebase</strong>, una plataforma de Google, con la base de datos en Sudamérica (región southamerica-west1, Santiago). Algunas funciones del servidor (verificación de compras, anuncios y borrado de cuenta) se ejecutan en Estados Unidos (región us-central1).</p>
+  <p>Conservamos tus datos en la nube mientras tu cuenta exista. Si eliminas tu cuenta, borramos tus datos de la nube (ver sección 6). Los datos almacenados localmente en tu dispositivo se protegen con los mecanismos de seguridad propios del sistema operativo.</p>
 
   <h2>4. Notificaciones push</h2>
   <p>Si activas los recordatorios, la app solicita permiso para enviar notificaciones. Estas notificaciones son generadas por tu propia configuración de horarios y tareas. Puedes desactivarlas en cualquier momento desde los ajustes de la app o del sistema operativo.</p>
 
-  <h2>5. Integraciones externas opcionales</h2>
-  <p>Si conectas tu cuenta de Google Calendar, la app accede a tus eventos del calendario únicamente para las funciones de sincronización que tú activas. No compartimos estos datos con nadie más.</p>
-  <p>El botón de agendar sesión dirige a <a href="https://psi.setmore.com/" target="_blank">psi.setmore.com</a>, un servicio externo de agendamiento. Al acceder a ese enlace, aplica la política de privacidad de ese servicio.</p>
+  <h2>5. Terceros y servicios externos</h2>
+  <ul>
+    <li><strong>Google (Firebase, inicio de sesión con Google, Google Play, Google AdMob):</strong> almacenamiento, cuenta, pagos y anuncios, como se describe arriba.</li>
+    <li><strong>Google Calendar (opcional):</strong> si conectas tu calendario, la app accede a tus eventos únicamente para las funciones de sincronización que tú activas. No compartimos estos datos con nadie más.</li>
+    <li><strong>Setmore (<a href="https://psi.setmore.com/" target="_blank" rel="noopener">psi.setmore.com</a>):</strong> el botón de agendar sesión dirige a este servicio externo; al acceder, aplica su propia política de privacidad.</li>
+  </ul>
 
-  <h2>6. Tus derechos</h2>
+  <h2>6. Tus derechos y cómo eliminar tus datos</h2>
   <ul>
     <li><strong>Acceso:</strong> puedes ver todos tus datos dentro de la app en todo momento.</li>
-    <li><strong>Exportación:</strong> desde Yo → Más ajustes → Exportar, puedes descargar todos tus datos en formato JSON.</li>
-    <li><strong>Eliminación:</strong> desde Yo → Más ajustes → Restablecer ajustes de fábrica, puedes borrar todos tus datos locales. Para eliminar los datos en la nube, contáctanos.</li>
-    <li><strong>Portabilidad:</strong> tus datos se exportan en formato JSON estándar, legible por cualquier sistema.</li>
+    <li><strong>Exportación:</strong> desde Yo → Datos y privacidad → Exportar, puedes descargar tus datos en formato JSON estándar.</li>
+    <li><strong>Borrar los datos de tu dispositivo:</strong> desde Yo → Datos y privacidad → Restablecer ajustes de fábrica.</li>
+    <li><strong>Eliminar tu cuenta y tus datos en la nube:</strong> dentro de la app, en Yo → Datos y privacidad → <em>Eliminar mi cuenta</em>. También puedes hacerlo <strong>sin abrir la app</strong> en <a href="delete-account.html">esta página de solicitud de eliminación</a>, o escribiéndonos a <a href="mailto:jferrer.psi@gmail.com">jferrer.psi@gmail.com</a>; atenderemos las solicitudes por correo en un plazo máximo de 30 días.</li>
+    <li><strong>Suscripción:</strong> eliminar tu cuenta no cancela la suscripción de Google Play. Cancélala antes en Google Play, en «Pagos y suscripciones».</li>
   </ul>
+  <p>Al eliminar tu cuenta borramos: tus datos sincronizados, el estado de tu suscripción, tus desbloqueos de anuncios, los vínculos de compra, los avisos pendientes, los reportes de error asociados a tu cuenta y tu cuenta de acceso. Los datos que solo están en tu dispositivo no se borran con este paso.</p>
 
   <h2>7. Menores de edad</h2>
   <p>Gramifica no está dirigida a menores de 13 años. No recopilamos conscientemente datos de menores. Si tienes conocimiento de que un menor nos ha proporcionado información personal, contáctanos.</p>
 
   <h2>8. Cambios a esta política</h2>
-  <p>Podemos actualizar esta política ocasionalmente. Cuando lo hagamos, actualizaremos la fecha de "última actualización" en esta página. Te notificaremos de cambios significativos mediante un aviso dentro de la app.</p>
+  <p>Podemos actualizar esta política ocasionalmente. Cuando lo hagamos, actualizaremos la fecha de «última actualización» en esta página. Te notificaremos de cambios significativos mediante un aviso dentro de la app.</p>
 
   <h2>9. Contacto</h2>
   <p>Para consultas sobre privacidad o solicitudes de eliminación de datos:</p>
-  <p><a href="jferrer.psi@gmail.com">jferrer.psi@gmail.com</a></p>
+  <p><a href="mailto:jferrer.psi@gmail.com">jferrer.psi@gmail.com</a></p>
 
   <footer>
-    Gramifica · Política de Privacidad · Versión 1.0 · Agosto 2026<br>
+    Gramifica · Política de Privacidad · Versión 1.1 · Octubre 2026<br>
     Desarrollado en Chile 🇨🇱
   </footer>
 </div>

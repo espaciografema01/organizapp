@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Eliminar cuenta — Gramifica</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Georgia',serif;background:#fafafa;color:#1a1a1a;line-height:1.75;}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 24px 80px;}
+  h1{font-size:28px;font-weight:700;color:#1a1f2e;margin-bottom:6px;letter-spacing:-.02em;}
+  .sub{font-size:13px;color:#888;}
+  h2{font-size:16px;font-weight:700;color:#1a1f2e;margin:30px 0 10px;text-transform:uppercase;letter-spacing:.06em;}
+  p{font-size:15px;color:#333;margin-bottom:14px;}
+  ul{margin:0 0 14px 20px;}
+  li{font-size:15px;color:#333;margin-bottom:6px;}
+  a{color:#c9954a;text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  .card{background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:20px 24px;margin-bottom:16px;}
+  button{font-family:inherit;font-size:15px;font-weight:700;border-radius:10px;padding:12px 20px;cursor:pointer;border:0;}
+  .btn-main{background:#1a1f2e;color:#fff;}
+  .btn-danger{background:#c0392b;color:#fff;}
+  .btn-danger[disabled]{opacity:.45;cursor:not-allowed;}
+  .msg{font-size:14px;margin-top:12px;padding:10px 14px;border-radius:10px;display:none;}
+  .msg.ok{display:block;background:#eaf6ee;color:#1e6b3a;}
+  .msg.err{display:block;background:#fdecea;color:#a1291d;}
+  label.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:#333;margin:12px 0 16px;cursor:pointer;}
+  footer{font-size:12px;color:#aaa;margin-top:48px;padding-top:20px;border-top:1px solid #e8e8e8;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Gramifica</h1>
+  <p class="sub" style="margin-bottom:32px;">Solicitud de eliminación de cuenta y datos</p>
+
+  <p>Desde esta página puedes eliminar tu cuenta de <strong>Gramifica</strong> y los datos asociados que guardamos en la nube, sin necesidad de abrir ni reinstalar la app.</p>
+
+  <h2>Qué se elimina</h2>
+  <ul>
+    <li>Tu cuenta de acceso.</li>
+    <li>Tus datos sincronizados (progreso, tareas, registros, configuración).</li>
+    <li>El estado de tu suscripción, tus desbloqueos de anuncios y los vínculos de compra.</li>
+    <li>Los avisos pendientes y los reportes de error asociados a tu cuenta.</li>
+  </ul>
+  <p>Los datos que están solo en tu dispositivo no se borran desde aquí. Puedes borrarlos en la app, en Yo → Datos y privacidad → Restablecer ajustes de fábrica, o desinstalando la app.</p>
+
+  <h2>Antes de continuar: suscripción</h2>
+  <p>Eliminar tu cuenta <strong>no cancela</strong> tu suscripción de Google Play. Si tienes una, cancélala antes en Google Play → Pagos y suscripciones. Si necesitas ayuda, escríbenos a <a href="mailto:jferrer.psi@gmail.com">jferrer.psi@gmail.com</a>.</p>
+
+  <h2>Eliminar mi cuenta</h2>
+  <div class="card" id="step-login">
+    <p>Para confirmar que la cuenta es tuya, inicia sesión con la misma cuenta de Google que usas en Gramifica.</p>
+    <button class="btn-main" id="btn-login">Iniciar sesión con Google</button>
+  </div>
+
+  <div class="card" id="step-delete" style="display:none;">
+    <p>Sesión iniciada como <strong id="who"></strong>.</p>
+    <p><strong>Esta acción no se puede deshacer.</strong></p>
+    <label class="chk"><input type="checkbox" id="chk"/> <span>Entiendo que se eliminarán mi cuenta y mis datos en la nube, y que mi suscripción de Google Play debo cancelarla por separado.</span></label>
+    <button class="btn-danger" id="btn-delete" disabled>Eliminar mi cuenta y mis datos</button>
+  </div>
+
+  <div class="msg" id="msg"></div>
+
+  <h2>También puedes pedirlo por correo</h2>
+  <p>Escribe a <a href="mailto:jferrer.psi@gmail.com">jferrer.psi@gmail.com</a> desde el correo de tu cuenta de Google, con el asunto «Eliminar cuenta Gramifica». Atenderemos tu solicitud en un plazo máximo de 30 días.</p>
+
+  <p style="margin-top:28px;"><a href="privacy-policy.html">Política de privacidad</a></p>
+
+  <footer>Gramifica · Desarrollado en Chile 🇨🇱</footer>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-functions-compat.js"></script>
+<script>
+// ── CONFIGURACIÓN ────────────────────────────────────────────────────────────
+// Copia aquí los mismos valores del objeto `firebaseConfig` que está en tu index.html
+// (búscalo con "const firebaseConfig"). No los escribas en ningún otro lugar.
+var firebaseConfig = {
+  apiKey: "AIzaSyBgjK88IjGHptNK4tLgmvLjrCosXBQgAaQ",
+  authDomain: "organizapp-e2afa.firebaseapp.com",
+  projectId: "organizapp-e2afa",
+  appId: "1:386488008309:web:d68b814a07a240d1a6823c"
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
+var msg = document.getElementById('msg');
+function show(text, ok){ msg.className = 'msg ' + (ok ? 'ok' : 'err'); msg.textContent = text; }
+
+var configured = !/PEGA_AQUI/.test(JSON.stringify(firebaseConfig));
+if(!configured){
+  show('Esta página aún no está configurada. Escribe a jferrer.psi@gmail.com para pedir la eliminación de tu cuenta.', false);
+  document.getElementById('btn-login').disabled = true;
+} else {
+  firebase.initializeApp(firebaseConfig);
+  var auth = firebase.auth();
+
+  auth.onAuthStateChanged(function(u){
+    if(u){
+      document.getElementById('who').textContent = u.email || u.displayName || 'tu cuenta';
+      document.getElementById('step-login').style.display = 'none';
+      document.getElementById('step-delete').style.display = 'block';
+    }
+  });
+
+  document.getElementById('btn-login').onclick = function(){
+    msg.className = 'msg';
+    // Siempre se pide iniciar sesión de nuevo: el borrado exige una sesión reciente.
+    auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+      .catch(function(e){ show('No se pudo iniciar sesión: ' + (e && e.message ? e.message : e), false); });
+  };
+
+  document.getElementById('chk').onchange = function(){
+    document.getElementById('btn-delete').disabled = !this.checked;
+  };
+
+  document.getElementById('btn-delete').onclick = function(){
+    var btn = this; btn.disabled = true; msg.className = 'msg';
+    firebase.app().functions('us-central1').httpsCallable('deleteMyAccount')({})
+      .then(function(){
+        document.getElementById('step-delete').style.display = 'none';
+        show('Listo: tu cuenta y tus datos en la nube fueron eliminados.', true);
+        auth.signOut().catch(function(){});
+      })
+      .catch(function(e){
+        var m = String((e && e.message) || e || '');
+        if(/reciente/i.test(m)){
+          show('Por seguridad, vuelve a iniciar sesión e inténtalo de nuevo.', false);
+          auth.signOut().then(function(){
+            document.getElementById('step-delete').style.display = 'none';
+            document.getElementById('step-login').style.display = 'block';
+          });
+        } else {
+          show('No se pudo eliminar la cuenta. Inténtalo de nuevo o escríbenos a jferrer.psi@gmail.com.', false);
+          btn.disabled = !document.getElementById('chk').checked;
+        }
+      });
+  };
+}
+</script>
+</body>
+</html>
