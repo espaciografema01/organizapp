@@ -2930,6 +2930,7 @@ function playSound(type){
 // si el navegador o dispositivo no soporta vibración simplemente no hace nada.
 function vibrate(pattern){
   if(S.soundOn===false) return;
+  if(Platform.isNative){ Platform.vibrate(pattern); return; }
   try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
 }
 function toggleSound(){
@@ -6161,6 +6162,10 @@ function exportRegCSV(regId){
     rows=es.map(function(e){ return [e.date, e.label||''].concat(ms.map(function(m){return e.values&&e.values[m.id]!=null?e.values[m.id]:'';})).concat([e.note||'', e.taskName||'']); });
   }
   var csv='\uFEFF'+[head].concat(rows).map(function(row){return row.map(q).join(',');}).join('\r\n');
+  if(Platform.isNative){
+    Platform.saveTextFile((r.name||'registro').replace(/[^\w\-]+/g,'_')+'_'+todayStr()+'.csv', csv, 'text/csv').then(function(x){ toast(x.ok ? 'CSV listo ('+rows.length+' filas)' : (x.error==='cancelled' ? 'Cancelado' : 'No se pudo guardar el archivo')); });
+    return;
+  }
   try{
     var blob=new Blob([csv],{type:'text/csv;charset=utf-8'}), a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=(r.name||'registro').replace(/[^\w\-]+/g,'_')+'_'+todayStr()+'.csv';
@@ -8435,6 +8440,7 @@ function cySetPrivate(p){ var reg=cyReg(); if(!reg) return; reg.private = p; reg
 function cyExport(){
   var reg=cyReg(); if(!reg) return; var q=function(v){ v=(v==null?'':String(v)); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   var rows=[['Fecha','Sangrado','Síntomas','Ánimo','Flujo','Temperatura','Nota']].concat(regEntries(reg).sort(function(a,b){return a.date<b.date?-1:1;}).map(function(e){ return [e.date,(CY_FLOW.find(function(f){return f[0]===e.flow;})||[0,''])[1],(e.symptoms||[]).join(' | '),(e.mood||[]).join(' | '),e.disch||'',e.temp||'',e.note||'']; }));
+  if(Platform.isNative){ Platform.saveTextFile('ciclo.csv', '\ufeff'+rows.map(function(r){return r.map(q).join(';');}).join('\n'), 'text/csv').then(function(x){ toast(x.ok ? 'CSV listo' : (x.error==='cancelled' ? 'Cancelado' : 'No se pudo guardar el archivo')); }); return; }
   var blob=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(';');}).join('\n')],{type:'text/csv'}), a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ciclo.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); },500);
 }
 function cyDelete(){ if(!confirm('¿Borrar todos los datos de tu ciclo? No se puede deshacer.')) return; var reg=cyReg(); if(!reg) return; reg.del=true; reg.entries=[]; reg.updatedAt=new Date().toISOString(); saveState(); removeOverlay('reg-view'); render(); toast('Registro de ciclo borrado'); }
@@ -12870,6 +12876,7 @@ document.addEventListener('visibilitychange', function(){
 });
 function timerRequestWakeLock(){
   if(!S.timerCfg || S.timerCfg.keepScreenOn===false) return;
+  if(Platform.isNative && Platform.keepAwake.available()){ Platform.keepAwake.on(); return; }
   if(!('wakeLock' in navigator)) return;
   try{
     navigator.wakeLock.request('screen').then(function(lock){
@@ -12878,6 +12885,7 @@ function timerRequestWakeLock(){
   }catch(e){}
 }
 function timerReleaseWakeLock(){
+  if(Platform.isNative && Platform.keepAwake.available()) Platform.keepAwake.off();
   if(TR && TR.wakeLock){ try{TR.wakeLock.release();}catch(e){} TR.wakeLock=null; }
 }
 function buildTimerAndStart(taskId, timer, taskName, isPreview){
@@ -18248,7 +18256,7 @@ function openBreathRun(b, name, tplId){
         reduce: !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)};
   if(b.bell) brBell(ctx, master, BR.t0, .8);
   ambStopPreview(); if(b.amb) BR.amb = ambStart(ctx, b.amb, b.ambVol==null?.4:b.ambVol, master);
-  try{ if('wakeLock' in navigator) navigator.wakeLock.request('screen').then(function(l){ if(BR) BR.wake=l; else l.release(); }).catch(function(){}); }catch(e){}
+  try{ if(Platform.isNative && Platform.keepAwake.available()) Platform.keepAwake.on(); else if('wakeLock' in navigator) navigator.wakeLock.request('screen').then(function(l){ if(BR) BR.wake=l; else l.release(); }).catch(function(){}); }catch(e){}
   removeOverlay('breath-run');
   var ov = document.createElement('div'); ov.id='breath-run';
   ov.style.cssText = 'position:fixed;inset:0;z-index:700;display:flex;flex-direction:column;align-items:center;color:#fff;font-family:Inter,sans-serif;background:'+BR_BG.prep+';transition:background 1s ease;';
@@ -18362,7 +18370,7 @@ function brFrame(){
     pos = brPhaseAt(t); lab = BR_NAME[pos.ph.t]; cnt = Math.max(1, Math.ceil(pos.ph.d*(1-pos.p)-1e-6)); col = BR_COL[pos.ph.t]; lvl = pos.lvl;
     var key = pos.cy+':'+pos.i;
     if(key !== BR.lastKey){ BR.lastKey = key; if(ov) ov.style.background = BR_BG[pos.ph.t];
-      if(BR.b.haptic && navigator.vibrate){ try{ navigator.vibrate(pos.ph.t==='in'?[30]:pos.ph.t==='out'?[60]:[15,50,15]); }catch(e){} } }
+      if(BR.b.haptic && (navigator.vibrate || Platform.isNative)){ try{ Platform.vibrate(pos.ph.t==='in'?[30]:pos.ph.t==='out'?[60]:[15,50,15]); }catch(e){} } }
   }
   if(BR.reduce) lvl = Math.round(lvl*4)/4;
   set('br-lab', function(e){ if(e.textContent!==lab.toUpperCase()&&e.tagName!=='text') e.textContent = lab.toUpperCase(); else if(e.tagName==='text') e.textContent = lab.toUpperCase(); e.style.color = col; if(e.tagName==='text') e.setAttribute('fill', col); });
@@ -18394,6 +18402,7 @@ function brLog(sec){
 function brCleanup(){
   if(!BR) return; try{ if(BR.amb) BR.amb.stop(.8); }catch(e){} clearInterval(BR.sched); cancelAnimationFrame(BR.raf);
   try{ if(BR.wake) BR.wake.release(); }catch(e){}
+  try{ if(Platform.isNative && Platform.keepAwake.available()) Platform.keepAwake.off(); }catch(e){}
   var c = BR.ctx; setTimeout(function(){ try{c.close();}catch(e){} }, 3500);
   BR = null;
 }
@@ -19111,6 +19120,7 @@ function taskAppChipHTML(t){
 }
 function appLaunch(a){
   var u = a && a.url; if(!u) return;
+  if(Platform.isNative){ Platform.openUrl(u); return; }
   try{ if(/^https?:/i.test(u)) window.open(u, '_blank', 'noopener'); else window.location.href = u; }catch(e){ toast('No se pudo abrir el enlace'); }
 }
 // Abrir un botón: lanza la app y, salvo que el usuario lo haya desactivado, marca el ítem o avanza la tarea.
@@ -20475,11 +20485,12 @@ function scToggle(id){ if(SC.off[id]) delete SC.off[id]; else SC.off[id] = true;
 function scFileName(){ return 'gramifica-'+SC.kind+'-'+todayStr()+'.png'; }
 function scDownload(){
   var cv = document.getElementById('sc-canvas'); if(!cv) return;
-  cv.toBlob(function(b){ var u = URL.createObjectURL(b), a = document.createElement('a'); a.href=u; a.download=scFileName(); document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Imagen descargada'); }, 'image/png');
+  cv.toBlob(function(b){ if(Platform.isNative){ Platform.saveBlobFile(scFileName(), b, 'image/png').then(function(x){ toast(x.ok ? 'Imagen lista' : (x.error==='cancelled' ? 'Cancelado' : 'No se pudo guardar la imagen')); }); return; } var u = URL.createObjectURL(b), a = document.createElement('a'); a.href=u; a.download=scFileName(); document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Imagen descargada'); }, 'image/png');
 }
 function scShare(){
   var cv = document.getElementById('sc-canvas'); if(!cv) return;
   cv.toBlob(function(b){
+    if(Platform.isNative){ Platform.saveBlobFile(scFileName(), b, 'image/png').then(function(x){ if(!x.ok && x.error!=='cancelled') toast('No se pudo compartir la imagen'); }); return; }
     var f = new File([b], scFileName(), {type:'image/png'});
     if(navigator.canShare && navigator.canShare({files:[f]})){ navigator.share({files:[f], title:'Gramifica'}).catch(function(){}); }
     else { toast('Tu dispositivo no permite compartir directo: se descarga la imagen'); scDownload(); }

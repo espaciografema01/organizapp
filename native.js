@@ -62,6 +62,62 @@
       }catch(e){ return Promise.resolve({ok:false, via:'download', error:String(e)}); }
     },
 
+    // Guarda/comparte un archivo binario (Blob), p. ej. una imagen PNG. En nativo abre el menú de compartir.
+    saveBlobFile: function(filename, blob, mime){
+      var FS = plugin('Filesystem'), Share = plugin('Share');
+      if(native && FS && Share){
+        return new Promise(function(ok, fail){
+          var fr = new FileReader();
+          fr.onerror = function(){ fail(new Error('No se pudo leer el archivo')); };
+          fr.onload = function(){ ok(String(fr.result).split(',')[1] || ''); };
+          fr.readAsDataURL(blob);
+        }).then(function(b64){
+          return FS.writeFile({ path: filename, data: b64, directory: 'CACHE' });
+        }).then(function(r){
+          return Share.share({ title: filename, url: r.uri, dialogTitle: 'Guardar o compartir' });
+        }).then(function(){ return {ok:true, via:'share'}; })
+          .catch(function(e){
+            var msg = String((e && e.message) || e || '');
+            return {ok:false, via:'share', error: /cancel/i.test(msg) ? 'cancelled' : msg};
+          });
+      }
+      try{
+        var url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+        return Promise.resolve({ok:true, via:'download'});
+      }catch(e){ return Promise.resolve({ok:false, via:'download', error:String(e)}); }
+    },
+
+    // Pantalla encendida (timer, respiración). En nativo usa el plugin KeepAwake si está.
+    keepAwake: {
+      available: function(){ return native && !!plugin('KeepAwake'); },
+      on: function(){ var P = plugin('KeepAwake'); return P ? P.keepAwake().catch(function(){}) : Promise.resolve(); },
+      off: function(){ var P = plugin('KeepAwake'); return P ? P.allowSleep().catch(function(){}) : Promise.resolve(); }
+    },
+
+    // Vibración. En nativo usa Haptics (un patrón [v,p,v,...] se reproduce por tramos).
+    vibrate: function(pattern){
+      var H = plugin('Haptics');
+      if(!(native && H)){ try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){} return; }
+      var seq = Array.isArray(pattern) ? pattern : [pattern];
+      var t = 0;
+      seq.forEach(function(ms, i){
+        ms = Math.max(1, +ms || 0);
+        if(i % 2 === 0){ setTimeout(function(){ try{ H.vibrate({duration: ms}); }catch(e){} }, t); }
+        t += ms;
+      });
+    },
+
+    // Abrir enlaces: https en el navegador del sistema; esquemas propios (strava://, shortcuts://…) con AppLauncher.
+    openUrl: function(url){
+      var B = plugin('Browser'), L = plugin('AppLauncher');
+      if(native && /^https?:/i.test(url) && B){ return B.open({url: url}).catch(function(){ window.open(url, '_blank', 'noopener'); }); }
+      if(native && L){ return L.openUrl({url: url}).catch(function(){ try{ window.location.href = url; }catch(e){} }); }
+      try{ if(/^https?:/i.test(url)) window.open(url, '_blank', 'noopener'); else window.location.href = url; }catch(e){}
+      return Promise.resolve();
+    },
+
     // Inicio de sesión nativo (solo Capacitor). Devuelve {idToken, accessToken|null}.
     // El inicio de sesión de Firebase lo completa la página con signInWithCredential.
     auth: {
