@@ -838,8 +838,10 @@ try {
           if(typeof syncWithCloud === 'function') syncWithCloud();
           try{ if(typeof schedulePushSync==='function') schedulePushSync(true); }catch(e){}
           try{ if(Platform.isNative && typeof nativeRefreshSubscription==='function') nativeRefreshSubscription(); }catch(e){}
+          try{ if(typeof loadAdsState==='function') loadAdsState(); }catch(e){}
         } else {
           currentUser = null;
+          try{ ADS_CFG = null; UNLOCKS = null; }catch(e){}
         }
         if(typeof render === 'function') render();
       } catch(e){
@@ -3006,7 +3008,7 @@ function maxLevelTrackSlots(){
   var base = 2;
   var lvlBonus = getLevel(S.xp||0) >= 8 ? 1 : 0;
   var medalBonus = S.bonusTrackSlots || 0;
-  return base + lvlBonus + medalBonus;
+  return base + lvlBonus + medalBonus + adSlots('track_slot');
 }
 function trackAddXP(track, pts, label){
   var oldLvl = getLevel(track.xp||0);
@@ -6055,6 +6057,100 @@ async function nativeRefreshSubscription(){
     return; // sin red o sin servidor: se conserva el estado anterior
   }
   try{ render(); }catch(e){}
+}
+
+// ── Anuncios con recompensa (solo app nativa) ───────────────────────────
+// Reglas y IDs viven en Firestore (config/ads), no aquí. Los desbloqueos (unlocks/{uid}) solo los escribe
+// el servidor cuando AdMob confirma que el anuncio se vio. Nunca se ofrecen en funciones de ciclo.
+var ADS_CFG = null, UNLOCKS = null, _adBusy = false;
+var AD_BLOCKED = /cycle|ciclo|menstru/i;
+async function loadAdsState(){
+  if(!db || !currentUser) return;
+  var uid = currentUser.uid;
+  try{
+    var r = await Promise.all([db.collection('config').doc('ads').get(), db.collection('unlocks').doc(uid).get()]);
+    if(!currentUser || currentUser.uid!==uid) return;
+    ADS_CFG = r[0].exists ? r[0].data() : null;
+    UNLOCKS = r[1].exists ? r[1].data() : {};
+  }catch(e){ console.warn('Anuncios: no se pudo leer el estado', e && e.message); return; }
+  try{ render(); }catch(e){}
+}
+function adFeatureCfg(f){ return (ADS_CFG && ADS_CFG.features && ADS_CFG.features[f]) || null; }
+function adActive(f){ var u = UNLOCKS && UNLOCKS[f]; var n = Date.now(); return ((u && u.active)||[]).filter(function(t){ return t>n; }); }
+// Cupos/beneficios activos por anuncios de esa función (se vencen solos).
+function adSlots(f){ return adActive(f).length; }
+function adProgress(f){ var u = UNLOCKS && UNLOCKS[f]; return (u && u.progress) || 0; }
+// ¿Se puede ofrecer un anuncio para esta función ahora mismo?
+function adOffered(f){
+  try{
+    if(AD_BLOCKED.test(f)) return false;
+    if(!Platform.isNative || !Platform.ads.available() || !currentUser || isPremium()) return false;
+    var cfg = adFeatureCfg(f);
+    if(!ADS_CFG || ADS_CFG.enabled===false || !ADS_CFG.rewardedUnitId || !cfg) return false;
+    if(adActive(f).length >= (cfg.maxActive||1)) return false;
+    var u = UNLOCKS && UNLOCKS[f], mk = new Date().toISOString().slice(0,7);
+    if(u && u.month===mk && (u.monthCount||0) >= (cfg.maxPerMonth||4)) return false;
+    return true;
+  }catch(e){ return false; }
+}
+function showAdOfferModal(f, title, body){
+  var cfg = adFeatureCfg(f) || {}, n = cfg.adsRequired||1, d = cfg.days||30, p = adProgress(f);
+  var extra = 'También puedes ver '+n+' anuncio'+(n===1?'':'s')+' y obtener 1 cupo extra durante '+d+' días'+(p>0?' (llevas '+p+'/'+n+')':'')+'.';
+  var old = document.getElementById('info-modal'); if(old) old.remove();
+  var box = document.createElement('div'); box.className='conf-box'; box.id='info-modal';
+  box.innerHTML='<div class="conf-inner">'+
+    '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;">'+esc(title)+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:8px;">'+esc(body)+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:16px;">'+esc(extra)+'</div>'+
+    '<button class="sbtn" style="width:100%;margin-bottom:8px;" onclick="document.getElementById(\'info-modal\').remove();desbloquearConAnuncio(\''+f+'\','+d+')">Ver anuncio</button>'+
+    '<button class="sbtn" style="width:100%;background:var(--bg);color:var(--ink-soft);border:1.5px solid var(--line);" onclick="document.getElementById(\'info-modal\').remove()">Ahora no</button>'+
+    '<div style="text-align:center;margin-top:10px;font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;" onclick="Platform.ads.privacyOptions().then(function(ok){ if(!ok) toast(\'No hay opciones de privacidad que cambiar\'); })">Privacidad de anuncios</div>'+
+  '</div>';
+  document.body.appendChild(box);
+}
+// Sistema genérico: ve un anuncio y el servidor concede el desbloqueo de la función `idFuncion`.
+// `dias` solo se usa para el texto; los días reales los define el servidor (config/ads).
+async function desbloquearConAnuncio(idFuncion, dias){
+  if(_adBusy) return;
+  if(!adOffered(idFuncion)){ toast('Por ahora no hay anuncios disponibles para esto'); return; }
+  _adBusy = true;
+  try{
+    var before = JSON.stringify((UNLOCKS && UNLOCKS[idFuncion]) || {});
+    var res = await Platform.ads.showRewarded({
+      adId: ADS_CFG.rewardedUnitId, testing: ADS_CFG.testMode===true,
+      userId: currentUser.uid, customData: idFuncion
+    });
+    if(!res.ok){
+      console.warn('Anuncio:', res.reason, res.error||'');
+      toast(res.reason==='consent' ? 'Necesitamos tu consentimiento para mostrar anuncios' : 'No se pudo mostrar el anuncio. Inténtalo más tarde.');
+      return;
+    }
+    // Modo de prueba: con anuncios de prueba de Google no llega la verificación del servidor, así que se simula.
+    if(ADS_CFG.testMode===true){
+      try{ await _loadFunctionsSDK(); await firebase.app().functions('us-central1').httpsCallable('claimTestAdReward')({feature:idFuncion}); }
+      catch(e){ console.warn('claimTestAdReward:', e && e.message); }
+    }
+    toast('Confirmando el anuncio…');
+    var ok = false;
+    for(var i=0;i<14 && !ok;i++){
+      await new Promise(function(r){ setTimeout(r, 1500); });
+      try{
+        var d = await db.collection('unlocks').doc(currentUser.uid).get();
+        var data = d.exists ? d.data() : {};
+        if(JSON.stringify(data[idFuncion]||{}) !== before){ UNLOCKS = data; ok = true; }
+      }catch(e){}
+    }
+    if(!ok){ toast('El anuncio terminó, pero la confirmación aún no llega. Revisa en un momento.'); setTimeout(loadAdsState, 20000); return; }
+    var cfg = adFeatureCfg(idFuncion) || {};
+    var n = cfg.adsRequired||1, p = adProgress(idFuncion);
+    toast(p>0 && p<n ? ('✓ Anuncio '+p+'/'+n+'. Falta '+(n-p)+' más.') : ('✓ ¡Desbloqueado por '+(cfg.days||dias||30)+' días!'));
+  }catch(e){
+    console.warn('desbloquearConAnuncio:', e && e.message);
+    toast('No se pudo completar. Inténtalo más tarde.');
+  }finally{
+    _adBusy = false;
+    try{ render(); }catch(x){}
+  }
 }
 
 async function refreshSubscription(){
@@ -12252,7 +12348,8 @@ function trackLevelTip(id, lvl){
 function openTrackEditor(trackId){
   var isNew = !trackId;
   if(isNew && (S.levelTracks||[]).length >= maxLevelTrackSlots()){
-    showInfoModal('Límite de seguimientos', trackLimitMessage(), 'Entendido');
+    if(adOffered('track_slot')) showAdOfferModal('track_slot', 'Límite de seguimientos', trackLimitMessage());
+    else showInfoModal('Límite de seguimientos', trackLimitMessage(), 'Entendido');
     return;
   }
   var firstCat = (S.categories||[])[0];

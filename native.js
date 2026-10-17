@@ -154,11 +154,52 @@
       }
     },
 
-    // Stubs seguros: en navegador/TWA nunca hacen nada ni fallan.
-    ads: {
-      available: function(){ return false; },
-      showRewarded: function(){ return Promise.resolve({ok:false, reason:'unsupported'}); }
-    },
+    // Anuncios con recompensa (AdMob) con @capacitor-community/admob. En navegador/TWA nunca hacen nada.
+    // Los IDs de anuncio NO están aquí: la página los lee de Firestore (config/ads) y los pasa a showRewarded.
+    ads: (function(){
+      var ready = null;
+      function pl(){ return plugin('AdMob'); }
+      // Inicializa el SDK y pide el consentimiento (UMP) si hace falta. Devuelve true si se pueden pedir anuncios.
+      function init(){
+        if(ready) return ready;
+        var P = pl();
+        if(!P) return Promise.resolve(false);
+        ready = P.initialize({}).then(function(){
+          return P.requestConsentInfo({}).then(function(info){
+            if(info && info.canRequestAds === false && info.isConsentFormAvailable){
+              return P.showConsentForm().then(function(i2){ return !(i2 && i2.canRequestAds === false); });
+            }
+            return !(info && info.canRequestAds === false);
+          }, function(){ return true; }); // si el consentimiento falla (p. ej. sin red), el propio SDK decidirá
+        }).catch(function(){ ready = null; return false; });
+        return ready;
+      }
+      return {
+        available: function(){ return native && !!pl(); },
+        // opts: {adId, testing, userId, customData}. Resuelve {ok:true} cuando el anuncio terminó de mostrarse
+        // (la recompensa real la confirma el servidor) o {ok:false, reason}.
+        showRewarded: function(opts){
+          var P = pl();
+          if(!P) return Promise.resolve({ok:false, reason:'unsupported'});
+          if(!opts || !opts.adId) return Promise.resolve({ok:false, reason:'no-config'});
+          return init().then(function(can){
+            if(!can) return {ok:false, reason:'consent'};
+            var o = {adId: opts.adId, isTesting: !!opts.testing, ssv: {userId: opts.userId, customData: opts.customData}};
+            return P.prepareRewardVideoAd(o).then(function(){
+              return P.showRewardVideoAd();
+            }).then(function(){ return {ok:true}; });
+          }).catch(function(e){
+            return {ok:false, reason:'error', error:String((e && (e.message || e.code)) || e || '')};
+          });
+        },
+        // Pantalla de opciones de privacidad de anuncios (UMP), si el usuario la tiene disponible.
+        privacyOptions: function(){
+          var P = pl();
+          if(!P) return Promise.resolve(false);
+          return init().then(function(){ return P.showPrivacyOptionsForm(); }).then(function(){ return true; }).catch(function(){ return false; });
+        }
+      };
+    })(),
     // Compras nativas (Google Play Billing) con el plugin @capgo/native-purchases.
     billing: {
       available: function(){ return native && !!plugin('NativePurchases'); },
