@@ -153,8 +153,35 @@
       available: function(){ return false; },
       showRewarded: function(){ return Promise.resolve({ok:false, reason:'unsupported'}); }
     },
+    // Compras nativas (Google Play Billing) con el plugin @capgo/native-purchases.
     billing: {
-      available: function(){ return false; }
+      available: function(){ return native && !!plugin('NativePurchases'); },
+      // Compra el producto. Suscripción: elige la primera oferta/plan base disponible.
+      // Devuelve la transacción (con purchaseToken) o null si el producto no existe en Play.
+      buy: function(sku, oneTime){
+        var P = plugin('NativePurchases');
+        if(!P) return Promise.reject(new Error('Compras no disponibles'));
+        var type = oneTime ? 'inapp' : 'subs';
+        return P.getProducts({productIdentifiers: [sku], productType: type}).then(function(r){
+          var list = (r && r.products) || [];
+          var prod = oneTime ? list[0] : (list.filter(function(x){ return x.offerToken; })[0] || list[0]);
+          if(!prod) return null;
+          var opts = {productIdentifier: sku, productType: type, quantity: 1, autoAcknowledgePurchases: true};
+          if(!oneTime){
+            opts.planIdentifier = prod.planIdentifier || prod.identifier;
+            if(prod.offerToken) opts.offerToken = prod.offerToken;
+          } else {
+            opts.isConsumable = true; // una donación se puede repetir
+          }
+          return P.purchaseProduct(opts);
+        });
+      },
+      // Compras de suscripción del usuario en Google Play (para renovar el estado al abrir la app).
+      subscriptions: function(){
+        var P = plugin('NativePurchases');
+        if(!P) return Promise.resolve([]);
+        return P.getPurchases({productType: 'subs'}).then(function(r){ return (r && r.purchases) || []; });
+      }
     },
     // Avisos push nativos (solo Capacitor): permiso, token FCM y aviso en primer plano.
     push: (function(){

@@ -837,6 +837,7 @@ try {
           if(modal) modal.style.display='none';
           if(typeof syncWithCloud === 'function') syncWithCloud();
           try{ if(typeof schedulePushSync==='function') schedulePushSync(true); }catch(e){}
+          try{ if(Platform.isNative && typeof nativeRefreshSubscription==='function') nativeRefreshSubscription(); }catch(e){}
         } else {
           currentUser = null;
         }
@@ -5962,6 +5963,7 @@ async function triggerGooglePlayPurchase(sku){
     try{ showAuthModal('login'); }catch(e){}
     return;
   }
+  if(Platform.isNative){ return nativePurchase(sku); }
   var service = await _getPlayService();
   if(!service || typeof PaymentRequest==='undefined'){
     showInfoModal('Pago via Google Play','Las compras solo funcionan con la app instalada desde Google Play. SKU: '+sku,'Entendido');
@@ -5998,7 +6000,65 @@ async function triggerGooglePlayPurchase(sku){
 // NOTA de seguridad: esto confía en el cliente. Para verificar de verdad, envía
 // el purchaseToken a una Cloud Function que lo valide con la Google Play
 // Developer API (purchases.subscriptionsv2.get) y guarde el estado en Firestore.
+// ── Compras en la app nativa (Capacitor) ─────────────────────────────────
+// La compra se hace con Google Play Billing; la suscripción se valida en el servidor
+// (Cloud Function verifyPlayPurchase) y de ahí sale el estado que lee getPlan().
+function _loadFunctionsSDK(){
+  return new Promise(function(ok, fail){
+    if(firebase.functions){ ok(); return; }
+    var sc = document.createElement('script');
+    sc.src = 'https://www.gstatic.com/firebasejs/10.7.0/firebase-functions-compat.js';
+    sc.onload = function(){ ok(); }; sc.onerror = function(){ fail(new Error('No se pudo cargar el servicio de verificación')); };
+    document.head.appendChild(sc);
+  });
+}
+async function nativeVerifySubscription(purchaseToken){
+  await _loadFunctionsSDK();
+  var call = firebase.app().functions('us-central1').httpsCallable('verifyPlayPurchase');
+  var res = await call({purchaseToken: purchaseToken});
+  var d = (res && res.data) || {};
+  window.userSubscription = (d.status==='active') ? {status:'active', expiryDate:d.expiryDate||null} : {status:'none'};
+  return d;
+}
+async function nativePurchase(sku){
+  if(_purchaseBusy) return;
+  _purchaseBusy = true;
+  try{
+    if(!Platform.billing.available()){ toast('Las compras no están disponibles en este dispositivo'); return; }
+    var isDon = (sku===SKU_DONATION);
+    var tx = await Platform.billing.buy(sku, isDon);
+    if(!tx){ toast('Producto no encontrado en Google Play'); return; }
+    if(!isDon){
+      if(!tx.purchaseToken){ toast('No se recibió confirmación de la compra'); return; }
+      await nativeVerifySubscription(tx.purchaseToken);
+    }
+    toast('✓ ¡Gracias por tu apoyo!');
+  }catch(e){
+    var m = String((e && (e.message||e.code)) || e || '');
+    console.warn('Compra nativa:', m);
+    toast(/cancel/i.test(m) ? 'Compra cancelada' : 'No se pudo completar la compra');
+  }finally{
+    _purchaseBusy = false;
+    try{ render(); }catch(x){}
+  }
+}
+// Al iniciar sesión / abrir la app: revisa en Play si hay suscripción y la valida en el servidor.
+async function nativeRefreshSubscription(){
+  if(!Platform.isNative || !currentUser || !Platform.billing.available()) return;
+  try{
+    var list = await Platform.billing.subscriptions();
+    var mine = list.filter(function(t){ return t.productIdentifier===SKU_SUBSCRIPTION && t.purchaseToken; })[0];
+    if(!mine){ window.userSubscription = {status:'none'}; }
+    else { await nativeVerifySubscription(mine.purchaseToken); }
+  }catch(e){
+    console.warn('No se pudo verificar la suscripción nativa:', e && e.message);
+    return; // sin red o sin servidor: se conserva el estado anterior
+  }
+  try{ render(); }catch(e){}
+}
+
 async function refreshSubscription(){
+  if(Platform.isNative){ return nativeRefreshSubscription(); }
   var service = await _getPlayService();
   if(!service) return;
   try{
