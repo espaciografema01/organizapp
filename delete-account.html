@@ -49,8 +49,13 @@
 
   <h2>Eliminar mi cuenta</h2>
   <div class="card" id="step-login">
-    <p>Para confirmar que la cuenta es tuya, inicia sesión con la misma cuenta de Google que usas en Gramifica.</p>
+    <p>Para confirmar que la cuenta es tuya, inicia sesión de la misma forma en que lo haces en Gramifica.</p>
     <button class="btn-main" id="btn-login">Iniciar sesión con Google</button>
+    <p style="margin:18px 0 8px;font-size:13px;color:#888;">o con tu correo y contraseña:</p>
+    <input type="email" id="em" placeholder="Correo electrónico" autocomplete="username" style="width:100%;font-family:inherit;font-size:15px;padding:11px 12px;border:1px solid #d6d6d6;border-radius:10px;margin-bottom:8px;"/>
+    <input type="password" id="pw" placeholder="Contraseña" autocomplete="current-password" style="width:100%;font-family:inherit;font-size:15px;padding:11px 12px;border:1px solid #d6d6d6;border-radius:10px;margin-bottom:12px;"/>
+    <button class="btn-main" id="btn-login-email">Iniciar sesión con correo</button>
+    <p style="margin:12px 0 0;font-size:13px;"><a href="#" id="lnk-reset">¿Olvidaste tu contraseña?</a></p>
   </div>
 
   <div class="card" id="step-delete" style="display:none;">
@@ -109,6 +114,22 @@ if(!configured){
     // Siempre se pide iniciar sesión de nuevo: el borrado exige una sesión reciente.
     auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
       .catch(function(e){ show('No se pudo iniciar sesión: ' + (e && e.message ? e.message : e), false); });
+  };
+
+  document.getElementById('btn-login-email').onclick = function(){
+    msg.className = 'msg';
+    var em = document.getElementById('em').value.trim(), pw = document.getElementById('pw').value;
+    if(!em || !pw){ show('Escribe tu correo y tu contraseña.', false); return; }
+    auth.signInWithEmailAndPassword(em, pw)
+      .catch(function(e){ show('No se pudo iniciar sesión. Revisa tu correo y contraseña.', false); });
+  };
+  document.getElementById('lnk-reset').onclick = function(ev){
+    ev.preventDefault(); msg.className = 'msg';
+    var em = document.getElementById('em').value.trim();
+    if(!em){ show('Escribe tu correo arriba y vuelve a pulsar el enlace.', false); return; }
+    auth.sendPasswordResetEmail(em)
+      .then(function(){ show('Te enviamos un correo para restablecer tu contraseña.', true); })
+      .catch(function(){ show('No se pudo enviar el correo. Revisa la dirección.', false); });
   };
 
   document.getElementById('chk').onchange = function(){
