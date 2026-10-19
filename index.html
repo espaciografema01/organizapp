@@ -13357,6 +13357,67 @@ function deleteTrack(id){
 //   el setInterval de refresco se atrase.
 var TR = null; // estado de la sesión de temporizador en curso (null = ninguna)
 var _timerCtx = null;
+// ── Modo nativo (app Android): el sonido y la vibración los reproduce un servicio nativo ──
+// (Platform.timer), así siguen con la pantalla bloqueada. El reloj deja de ser el del AudioContext
+// (que el sistema suspende) y pasa a ser la hora real menos lo pausado. En web/TWA nada cambia.
+var _tnShift = 0, _tnFrozen = null, _tnGen = 0, _tnSent = {};
+function timerNative(){ try{ return !!(Platform.isNative && Platform.timer && Platform.timer.available()); }catch(e){ return false; } }
+function timerNow(){
+  if(timerNative()) return _tnFrozen!=null ? _tnFrozen : Date.now()/1000 - _tnShift;
+  var c = _timerCtx; return c ? c.currentTime : 0;
+}
+function timerHold(ctx){ // pausar
+  if(timerNative()){ if(_tnFrozen==null) _tnFrozen = Date.now()/1000 - _tnShift; try{ Platform.timer.cancel(true); }catch(e){} _tnGen++; return; }
+  if(ctx) ctx.suspend();
+}
+function timerUnhold(ctx){ // reanudar
+  if(timerNative()){ if(_tnFrozen!=null){ _tnShift = Date.now()/1000 - _tnFrozen; _tnFrozen = null; } return; }
+  if(ctx) ctx.resume();
+}
+function timerVib(p){ if(timerNative()) return; vibrate(p); } // en nativo vibra el servicio
+// Renderiza (sin conexión) cada sonido a WAV y lo entrega al servicio nativo; luego envía los eventos.
+function _timerWavB64(buf){
+  var n = buf.length, ch0 = buf.getChannelData(0), ch1 = buf.numberOfChannels>1 ? buf.getChannelData(1) : null, sr = buf.sampleRate;
+  var ab = new ArrayBuffer(44+n*2), dv = new DataView(ab), w = function(o,t){ for(var i=0;i<t.length;i++) dv.setUint8(o+i,t.charCodeAt(i)); };
+  w(0,'RIFF'); dv.setUint32(4,36+n*2,true); w(8,'WAVE'); w(12,'fmt '); dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true); w(36,'data'); dv.setUint32(40,n*2,true);
+  for(var i=0;i<n;i++){ var v = ch1 ? (ch0[i]+ch1[i])/2 : ch0[i]; v = Math.max(-1,Math.min(1,v)); dv.setInt16(44+i*2, v<0?v*0x8000:v*0x7FFF, true); }
+  var bytes = new Uint8Array(ab), bin = '', CH = 0x8000;
+  for(var j=0;j<bytes.length;j+=CH) bin += String.fromCharCode.apply(null, bytes.subarray(j,j+CH));
+  return btoa(bin);
+}
+function _timerRenderSound(id, vol){
+  var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if(!OAC) return Promise.reject(new Error('sin OfflineAudioContext'));
+  var snd = TIMER_SOUNDS[id] || TIMER_SOUNDS.beep, sr = 32000, end = 0;
+  snd.v.forEach(function(v){ end = Math.max(end, (v.t||0)+(v.d||0.3)+0.1); });
+  var secs = Math.min(5, end+1.9), oc = new OAC(2, Math.ceil(sr*secs), sr);
+  playTimerSound(oc, id, 0, vol, 1);
+  var p = oc.startRendering();
+  return (p && p.then ? p : new Promise(function(ok){ oc.oncomplete = function(e){ ok(e.renderedBuffer); }; })).then(_timerWavB64);
+}
+function timerNativeEnsure(){
+  var cfg = timerCfgNorm(), vol = cfg.volume, need = {};
+  TIMER_EVENTS.forEach(function(e){ if(timerEvOn(cfg,e[0])) need[timerEvSound(cfg,e[0])] = 1; });
+  need.tick = 1;
+  var jobs = [];
+  Object.keys(need).forEach(function(id){
+    var key = id+'@'+Math.round(vol*100);
+    if(_tnSent[key]) return;
+    jobs.push(_timerRenderSound(id, vol).then(function(b64){ var o = {}; o[key] = b64; return Platform.timer.prepare(o).then(function(){ _tnSent[key] = 1; }); }));
+  });
+  return Promise.all(jobs).then(function(){ return Math.round(vol*100); });
+}
+function timerNativeFlush(){
+  if(!TR || !TR._nq || !TR._nq.length) return;
+  var q = TR._nq; TR._nq = []; var gen = _tnGen;
+  if(_tnFrozen!=null) return; // en pausa: al reanudar se reprograma desde el tramo actual
+  timerNativeEnsure().then(function(volPct){
+    if(gen!==_tnGen || !TR || TR.finished) return;
+    var evs = q.map(function(e){ return {at:e.at, sound:e.sound?(e.sound+'@'+volPct):null, vib:e.vib||null}; });
+    return Platform.timer.schedule(evs);
+  }).catch(function(){});
+}
 function _timerGetCtx(){
   if(_timerCtx) return _timerCtx;
   try{
@@ -13511,7 +13572,14 @@ function previewTimerSound(id){
 function previewTimerVolume(){ previewTimerSound('bell'); }
 function timerPlayEv(key, at, opts){
   var ctx=_timerGetCtx(); if(!ctx||!TR) return;
-  var cfg=timerCfgNorm(); if(!timerEvOn(cfg,key)) return;
+  var cfg=timerCfgNorm();
+  if(timerNative()){
+    var tn = Math.max(at, timerNow()+0.01), vp = !cfg.vibrate ? null : (key==='work'?[30,40,30]:key==='rest'?[18]:key==='finish'?[60,60,60]:null);
+    var snd = timerEvOn(cfg,key) ? timerEvSound(cfg,key) : null;
+    if(snd || vp){ (TR._nq = TR._nq||[]).push({at: Date.now() + (tn - timerNow())*1000, sound:snd, vib:vp}); }
+    return;
+  }
+  if(!timerEvOn(cfg,key)) return;
   var t = Math.max(at, ctx.currentTime+0.01);
   TR.scheduledOscillators = TR.scheduledOscillators.concat(playTimerSound(ctx, timerEvSound(cfg,key), t, cfg.volume, opts));
 }
@@ -13568,9 +13636,10 @@ function timerStepIndexAt(elapsed){
   }
   return steps.length-1;
 }
-function timerElapsed(){ var ctx=_timerGetCtx(); return (ctx&&TR) ? Math.max(0, ctx.currentTime - TR.audioStartCtxTime) : 0; }
+function timerElapsed(){ var ctx=_timerGetCtx(); return ((ctx||timerNative())&&TR) ? Math.max(0, timerNow() - TR.audioStartCtxTime) : 0; }
 function cancelScheduledTimerAudio(){
   if(!TR) return;
+  if(timerNative()){ TR._nq = []; _tnGen++; try{ Platform.timer.cancel(false); }catch(e){} return; }
   (TR.scheduledOscillators||[]).forEach(function(osc){ try{osc.stop(0);}catch(e){} });
   TR.scheduledOscillators = [];
 }
@@ -13580,7 +13649,7 @@ function scheduleTimerAudioFrom(fromIdx, opts){
   opts = opts||{};
   var ctx = _timerGetCtx();
   if(!ctx || !TR) return;
-  var cfg = timerCfgNorm(), steps = TR.steps, base = TR.audioStartCtxTime, now = ctx.currentTime;
+  var cfg = timerCfgNorm(), steps = TR.steps, base = TR.audioStartCtxTime, now = timerNow();
   if(fromIdx===0 && !opts.noStart) timerPlayEv('start', base-0.05);
   var openAhead = false;
   for(var idx=fromIdx; idx<steps.length; idx++){
@@ -13607,8 +13676,10 @@ function scheduleTimerAudioFrom(fromIdx, opts){
     var finAt = base + TR.totalSec;
     if(finAt>=now-0.05) timerPlayEv('finish', finAt);
   }
+  if(timerNative()) timerNativeFlush();
 }
 function timerOnCtxState(){
+  if(timerNative()) return;
   if(!TR || TR.finished || TR.paused || !_timerCtx) return;
   if(_timerCtx.state==='suspended' || _timerCtx.state==='interrupted'){
     TR.paused = true;
@@ -13619,7 +13690,7 @@ function timerOnCtxState(){
   }
 }
 document.addEventListener('visibilitychange', function(){
-  if(!document.hidden && TR && !TR.paused && !TR.finished && _timerCtx && _timerCtx.state!=='running') timerOnCtxState();
+  if(!document.hidden && TR && !TR.paused && !TR.finished && _timerCtx && _timerCtx.state!=='running' && !timerNative()) timerOnCtxState();
 });
 function timerRequestWakeLock(){
   if(!S.timerCfg || S.timerCfg.keepScreenOn===false) return;
@@ -13646,7 +13717,12 @@ function buildTimerAndStart(taskId, timer, taskName, isPreview){
     pack: timer.soundPack||null, amb: timer.ambient||null
   };
   var ctx = _timerGetCtx();
-  if(ctx){
+  _tnFrozen = null; _tnShift = 0; _tnGen++;
+  if(timerNative()){
+    TR.audioStartCtxTime = timerNow() + 0.8; // margen para renderizar los sonidos y entregarlos al servicio
+    scheduleTimerAudioFrom(0);
+    timerAmbStart();
+  } else if(ctx){
     if(ctx.state==='suspended') ctx.resume();
     TR.audioStartCtxTime = ctx.currentTime + 0.15;
     scheduleTimerAudioFrom(0);
@@ -13805,7 +13881,7 @@ function timerTick(){
     TR._lastIdx = idx;
     timerSweepBests(idx);
     var cfg = timerCfgNorm(), st = TR.steps[idx];
-    if(!first && cfg.vibrate) vibrate(st.type==='work'?[30,40,30]:18);
+    if(!first && cfg.vibrate) timerVib(st.type==='work'?[30,40,30]:18);
   }
   timerRenderFrame();
 }
@@ -13828,7 +13904,8 @@ function timerFinish(){
   if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
   timerReleaseWakeLock();
   timerSweepBests(TR.steps.length, true);
-  vibrate(timerCfgNorm().vibrate?[60,60,60]:50);
+  timerVib(timerCfgNorm().vibrate?[60,60,60]:50);
+  try{ if(timerNative()) Platform.timer.stop(); }catch(e){}
   try{ timerLogHistory(); }catch(e){}
   if(!TR.preview && TR.taskId && TR.itemId){ try{ timerMarkItem(); }catch(e){} }
   else if(!TR.preview && TR.taskId){ try{ timerMarkTask(); }catch(e){} timerClearSession(TR.taskId); }
@@ -13850,12 +13927,13 @@ function timerTogglePause(){
   if(!TR || TR.finished) return;
   var ctx = _timerGetCtx();
   if(TR.paused){
-    if(ctx) ctx.resume();
+    timerUnhold(ctx);
     TR.paused = false;
+    if(timerNative() && !TR.ending) scheduleTimerAudioFrom(timerStepIndexAt(timerElapsed()), {noStart:true});
     timerRequestWakeLock();
     if(!TR.tickHandle) TR.tickHandle = setInterval(timerTick, 200);
   } else {
-    if(ctx) ctx.suspend();
+    timerHold(ctx);
     TR.paused = true;
     if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
     timerReleaseWakeLock();
@@ -13873,7 +13951,7 @@ function timerCompleteStep(){
   if(st.res==null && st.kind==='reps') st.res = st.n;
   st.sec = Math.max(1, el - st.startAt); st.open = false;
   timerReflow();
-  timerPlayEv('exerciseEnd', ctx.currentTime);
+  timerPlayEv('exerciseEnd', timerNow());
   scheduleTimerAudioFrom(idx+1<TR.steps.length ? idx+1 : idx, {noStart:true});
   timerRenderFrame(true);
 }
@@ -13926,11 +14004,12 @@ function timerSkip(delta){
   var newIdx = Math.max(0, Math.min(TR.steps.length-1, curIdx+delta));
   var ns = TR.steps[newIdx];
   if(ns.kind==='reps' && !ns.open){ ns.open=true; ns.sec=TIMER_OPEN_SEC; ns.n=0; ns.recorded=false; timerReflow(); }
-  TR.audioStartCtxTime = ctx.currentTime - ns.startAt;
+  TR.audioStartCtxTime = timerNow() - ns.startAt;
   scheduleTimerAudioFrom(newIdx);
   timerRenderFrame(true);
 }
 function closeTimerRun(){
+  try{ if(timerNative()) Platform.timer.stop(); }catch(e){}
   if(TR){
     timerAmbStop(.8);
     cancelScheduledTimerAudio();
@@ -13994,7 +14073,8 @@ function resumeTimerSession(taskId){
   var sn = (S.timerSessions||{})[taskId]; if(!sn) return;
   TR = {taskId:taskId, preview:false, taskName:sn.taskName, steps:sn.steps, totalSec:sn.totalSec, scheduledOscillators:[], wakeLock:null, paused:false, finished:false, tickHandle:null, results:sn.results||[], _lastIdx:-1, _frameKey:null};
   var ctx = _timerGetCtx();
-  if(ctx){ if(ctx.state==='suspended') ctx.resume(); TR.audioStartCtxTime = ctx.currentTime - sn.elapsed; scheduleTimerAudioFrom(timerStepIndexAt(sn.elapsed), {noStart:true}); }
+  _tnFrozen = null; _tnShift = 0; _tnGen++;
+  if(ctx){ if(ctx.state==='suspended') ctx.resume(); TR.audioStartCtxTime = timerNow() - sn.elapsed; scheduleTimerAudioFrom(timerStepIndexAt(sn.elapsed), {noStart:true}); }
   else TR.audioStartCtxTime = 0;
   timerRequestWakeLock(); showTimerRunOverlay();
   TR.tickHandle = setInterval(timerTick, 200);
@@ -14077,9 +14157,10 @@ function timerQuickAddPick(key){
   removeOverlay('tqa');
   if(TR.ending){ TR.ending = false; TR._finShown = false; if(!TR.tickHandle) TR.tickHandle = setInterval(timerTick, 200); }
   cancelScheduledTimerAudio();
-  var wasPaused = TR.paused; if(wasPaused){ TR.paused=false; ctx.resume(); if(!TR.tickHandle) TR.tickHandle = setInterval(timerTick, 200); timerRequestWakeLock(); }
+  var wasPaused = TR.paused; if(wasPaused){ TR.paused=false; timerUnhold(ctx); if(!TR.tickHandle) TR.tickHandle = setInterval(timerTick, 200); timerRequestWakeLock(); }
+  else if(timerNative()) timerUnhold(ctx);
   else if(ctx.state==='suspended') ctx.resume();
-  TR.audioStartCtxTime = ctx.currentTime - timerElapsed2(idx, el);
+  TR.audioStartCtxTime = timerNow() - timerElapsed2(idx, el);
   scheduleTimerAudioFrom(Math.min(idx, TR.steps.length-1), {noStart:true});
   timerRenderFrame(true);
   toast('Ejercicio agregado');
@@ -14090,9 +14171,9 @@ function timerEnding(){
   if(TR.preview){ timerFinish(); return; }
   TR.ending = true;
   if(TR.tickHandle){ clearInterval(TR.tickHandle); TR.tickHandle=null; }
-  var ctx=_timerGetCtx(); if(ctx) ctx.suspend();
+  var ctx=_timerGetCtx(); timerHold(ctx);
   timerReleaseWakeLock();
-  vibrate(timerCfgNorm().vibrate?[60,60,60]:50);
+  timerVib(timerCfgNorm().vibrate?[60,60,60]:50);
   timerRenderFrame(true);
 }
 function timerFmt(sec){
@@ -23434,7 +23515,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.17.120';
+var APP_VERSION = '2026.10.17.121';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })

@@ -96,6 +96,16 @@
       off: function(){ var P = plugin('KeepAwake'); return P ? P.allowSleep().catch(function(){}) : Promise.resolve(); }
     },
 
+    // Temporizador con pantalla bloqueada: servicio nativo (plugin propio GrTimer) que reproduce
+    // sonidos WAV y vibra a horas programadas. Solo existe en la app nativa con el plugin instalado.
+    timer: {
+      available: function(){ return native && !!plugin('GrTimer'); },
+      prepare: function(sounds){ var P = plugin('GrTimer'); return P ? P.prepare({sounds: sounds}) : Promise.resolve(); },   // {clave: base64 WAV}
+      schedule: function(events){ var P = plugin('GrTimer'); return P ? P.schedule({events: events}) : Promise.resolve(); }, // [{at: epochMs, sound: clave|null, vib: [ms]|null}]
+      cancel: function(keepAlive){ var P = plugin('GrTimer'); return P ? P.cancel({keepAlive: !!keepAlive}).catch(function(){}) : Promise.resolve(); },
+      stop: function(){ var P = plugin('GrTimer'); return P ? P.stop().catch(function(){}) : Promise.resolve(); }
+    },
+
     // Vibración. En nativo usa Haptics (un patrón [v,p,v,...] se reproduce por tramos).
     vibrate: function(pattern){
       var H = plugin('Haptics');
