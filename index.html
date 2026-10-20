@@ -1452,6 +1452,7 @@ function applySyncResult(cloud, useCloud){
       if(cloud.streak) S.streak = cloud.streak;
       if(cloud.theme) S.theme = cloud.theme;
       if(Array.isArray(cloud.tasks)) S.tasks = cloud.tasks;
+      if(Array.isArray(cloud.tasks) && cloud.tasks.length){ S.welcomeDone = true; try{ removeOverlay('welcome-ov'); }catch(e){} }
       if(cloud.rewardedTaskIds) S.rewardedTaskIds = cloud.rewardedTaskIds;
       if(cloud.bajaEnergia) S.bajaEnergia = cloud.bajaEnergia;
       if(Array.isArray(cloud.modes)) S.modes = cloud.modes;
@@ -2169,6 +2170,8 @@ var S = {
   taskSize:'medium', // fijo, no editable por el usuario
   // Personalizaciones visuales avanzadas
   bgColorOverride:'default',
+  themeAuto:false,
+  fontScale:1,
   showModeTips:true, // consejos y tareas sugeridas de los modos predeterminados
   hoyProgressBar:true, hoySort:'manual', hideDone:false, hoyNextHint:true, wkPromptWeeks:[],
   showWeeklyMessage:true, // franja de "recordatorio/intención de la semana" en Hoy
@@ -2184,6 +2187,7 @@ var S = {
   categories:[],
   // Si el usuario ya vio el tutorial inicial
   tutorialSeen:false,
+  welcomeDone:false,
   // Programación de plantillas por semana: {weekKey: templateId}
   // weekKey = ISO semana (YYYY-Www) — usar getWeekKey()
   weekSchedule:{},
@@ -2548,11 +2552,7 @@ function isDone(t){
 // contaba como 0 aunque ya llevara la mitad. clItemQty se usa antes de estar
 // declarada más abajo en el archivo, pero como es function declaration
 // (hoisted) ya existe para cuando esto realmente se ejecuta.
-function clItemRatio(item){
-  var q = clItemQty(item);
-  if(q>1) return Math.min((Number(item.prog)||0)/q, 1);
-  return item.done ? 1 : 0;
-}
+function clItemRatio(i){ if(i.done) return 1; var q=clItemQty(i); return q>1 ? Math.max(0,Math.min(1,(i.prog||0)/q)) : 0; }
 function tRatio(t){
   if(t.checklist&&t.checklist.length){
     if(t.clRule && t.clRule.mode==='kofn'){
@@ -2587,6 +2587,8 @@ function loadState(){
     try{var pas=localStorage.getItem('og6-periodautoseen');if(pas)S.periodAutoSeen=JSON.parse(pas)||{};}catch(e){}
     try{var pru=localStorage.getItem('og6-periodresetused');if(pru)S.periodResetUsed=JSON.parse(pru)||{};}catch(e){}
     var th=localStorage.getItem('og6-theme');if(th)S.theme=th;
+    var tau=localStorage.getItem('og6-themeauto');if(tau!==null)S.themeAuto=tau==='1';
+    var fsc=parseFloat(localStorage.getItem('og6-fontscale'));if(fsc>=0.8&&fsc<=1.5)S.fontScale=fsc;
     var tc=localStorage.getItem('og6-bgcolor');if(tc)S.bgColorOverride=tc;
     var smt=localStorage.getItem('og6-showmodetips');if(smt!==null)S.showModeTips=smt==='1';
     var swm=localStorage.getItem('og6-showweeklymessage');if(swm!==null)S.showWeeklyMessage=swm==='1';
@@ -2607,6 +2609,9 @@ function loadState(){
     var mt=localStorage.getItem('og6-templates');if(mt)S.templates=JSON.parse(mt);
     var cg=localStorage.getItem('og6-categories');if(cg)S.categories=JSON.parse(cg);
     var ts2=localStorage.getItem('og6-tutorialseen');if(ts2)S.tutorialSeen=ts2==='1';
+    var wd=localStorage.getItem('og6-welcomedone');if(wd)S.welcomeDone=wd==='1';
+    var lrw=localStorage.getItem('og6-lastreviewweek');if(lrw)S.lastReviewWeek=lrw;
+    var rsd=localStorage.getItem('og6-reviewstripdismissed');if(rsd)S.reviewStripDismissed=rsd;
     var ws=localStorage.getItem('og6-weekschedule');if(ws)S.weekSchedule=JSON.parse(ws);
     var pj=localStorage.getItem('og6-projects');if(pj)S.projects=JSON.parse(pj);
     var wm=localStorage.getItem('og6-weeklymsg');if(wm)S.weeklyMessages=JSON.parse(wm);
@@ -2686,6 +2691,7 @@ function loadState(){
     if(!S.xp||S.xp<0)S.xp=0;
     S.prevLvl=getLevel(S.xp);
     document.body.className='theme-'+S.theme+' task-size-medium';applyVisualCustomizations();
+    try{ applyAutoTheme(true); }catch(e){}
   }catch(e){S.xp=0;S.prevLvl=1;}
 }
 // Guardado: cada cambio llama a saveState(), pero lo que se escribe se agrupa (cada ~250 ms) y solo se
@@ -2702,11 +2708,41 @@ function saveState(){
   if(_saveTimer) return;
   _saveTimer = setTimeout(function(){ _saveTimer = null; flushSaveState(); }, 250);
 }
+// ── Widget de Android: envía a la app nativa un resumen de "Hoy" ─────────────
+// Requiere el plugin nativo "GramificaWidget" (ver carpeta android-widget/).
+// Si no existe (web o versión sin widget) no hace nada.
+var _widgetLast = '';
+function widgetSnapshot(){
+  var key = todayStr();
+  var list = [];
+  try{ list = tasksForDateKey(key); }catch(e){}
+  var items = list.map(function(t){
+    return {text:String(t.text||'').slice(0,60), done:!!isDone(t), hora:t.hora||'', crucial:!!t.crucial};
+  });
+  var done = items.filter(function(x){return x.done;}).length;
+  var pending = items.filter(function(x){return !x.done;}).sort(function(a,b){
+    if(a.crucial!==b.crucial) return a.crucial?-1:1;
+    if(a.hora && b.hora) return a.hora<b.hora?-1:1;
+    return a.hora?-1:(b.hora?1:0);
+  }).slice(0,5);
+  return {date:key, total:items.length, done:done, pending:pending};
+}
+function pushWidgetData(){
+  try{
+    var cap = window.Capacitor, pl = cap && cap.Plugins && cap.Plugins.GramificaWidget;
+    if(!pl) return;
+    var snap = JSON.stringify(widgetSnapshot());
+    if(snap === _widgetLast) return;
+    _widgetLast = snap;
+    pl.update({json:snap});
+  }catch(e){}
+}
 function flushSaveState(){
   if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; }
   if(!_savePending) return;
   _savePending = false;
   _saveStateNow();
+  pushWidgetData();
 }
 document.addEventListener('visibilitychange', function(){ if(document.hidden) flushSaveState(); });
 window.addEventListener('pagehide', flushSaveState);
@@ -2724,6 +2760,8 @@ function _saveStateNow(){
     _lsSet('og6-rewarded',JSON.stringify(S.rewardedTaskIds));
     _lsSet('og6-blocks',JSON.stringify(S.taskBlocks));
     _lsSet('og6-theme',S.theme);
+    _lsSet('og6-themeauto',S.themeAuto?'1':'0');
+    _lsSet('og6-fontscale',String(S.fontScale||1));
     _lsSet('og6-bgcolor',S.bgColorOverride||'default');
     _lsSet('og6-showmodetips',S.showModeTips===false?'0':'1');
     _lsSet('og6-showweeklymessage',S.showWeeklyMessage===false?'0':'1');
@@ -2739,6 +2777,9 @@ function _saveStateNow(){
     _lsSet('og6-templates',JSON.stringify(S.templates||[]));
     _lsSet('og6-categories',JSON.stringify(S.categories||[]));
     _lsSet('og6-tutorialseen',S.tutorialSeen?'1':'0');
+    _lsSet('og6-welcomedone',S.welcomeDone?'1':'0');
+    _lsSet('og6-lastreviewweek',S.lastReviewWeek||'');
+    _lsSet('og6-reviewstripdismissed',S.reviewStripDismissed||'');
     _lsSet('og6-weekschedule',JSON.stringify(S.weekSchedule||{}));
     _lsSet('og6-projects',JSON.stringify(S.projects||[]));
     _lsSet('og6-weeklymsg',JSON.stringify(S.weeklyMessages||{}));
@@ -4021,7 +4062,6 @@ function render(){
   if(SEL.active){
     if(bottomNav) bottomNav.style.display = 'none';
     if(fabWrap) fabWrap.style.display = 'none';
-    if(fabWrapLeft) fabWrapLeft.style.display = 'none';
   }
 
   // BUGFIX CRÍTICO: antes, si renderProyectosTab()/renderEnergiaV2()/renderYo()
@@ -4070,7 +4110,7 @@ function render(){
 function renderRecoveryScreen(tab, err){
   var msg = (err && err.message) ? err.message : 'Error desconocido';
   return '<div style="padding:32px 20px;text-align:center;">'+
-    '<div style="font-size:40px;margin-bottom:12px;">⚠️</div>'+
+    '<div style="margin-bottom:12px;display:flex;justify-content:center;color:var(--bad);">'+ico('warn',40,1.6)+'</div>'+
     '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:10px;">Esta pantalla tuvo un problema</div>'+
     '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px;">No se pudo mostrar "'+esc(tab)+'" por un error interno. El resto de la app debería seguir funcionando — prueba con otra pestaña.</div>'+
     '<div style="font-size:10px;color:var(--muted-soft);font-family:monospace;background:var(--bg);border-radius:8px;padding:8px;margin:14px 0;word-break:break-word;">'+esc(msg)+'</div>'+
@@ -4088,7 +4128,6 @@ function renderRecoveryScreen(tab, err){
 function modeChipInfo(){
   var am = getActiveMode();
   if(isHiperfocoActive()) return {icon:'target',name:'Hiperproductividad',on:true};
-  if(isVacacionesActive()) return {icon:'sun',name:'Vacaciones',on:true};
   if(am) return {icon:am.icon||(am.type==='baja'?'battery':'bolt'),name:am.name||'Modo',on:true};
   return {icon:'sun',name:'Normal',on:false};
 }
@@ -4416,7 +4455,7 @@ function renderHoy(){
   '</div>'+
   '<button onclick="openHoyMenu(event)" aria-label="Opciones de la lista" title="Opciones de la lista" style="flex-shrink:0;margin:6px 12px 0 4px;width:40px;height:40px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg></button>'+
   '</div>';
-  html += '</div>'+hoyPendStripHTML(); // cierra #hoy-sticky (día + progreso + categorías)
+  html += '</div>'+weeklyReviewStripHTML()+hoyPendStripHTML(); // cierra #hoy-sticky (día + progreso + categorías)
 
   // Pedido: al tocar una categoría de la barra (sobre todo una que quedó
   // más a la derecha, medio escondida al hacer scroll horizontal), que NO
@@ -4443,12 +4482,6 @@ function renderHoy(){
       html += '<div class="card" style="margin-bottom:10px;"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">'+ICON_HEART+' Apoyo</div><div style="font-size:13px;color:var(--ink);line-height:1.6;margin-bottom:10px;">'+esc(be.emergencyMessage)+'</div><div style="display:flex;gap:8px;">'+(be.emergencyPhone?'<a href="tel:'+esc(be.emergencyPhone)+'" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);color:white;border-radius:10px;padding:10px;font-size:12px;font-weight:600;text-align:center;text-decoration:none;">'+ICON_PHONE+' Llamar</a>':'')+' <a href="https://psi.setmore.com/" target="_blank" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--paper);border:1.5px solid var(--accent);color:var(--accent-text);border-radius:10px;padding:10px;font-size:12px;font-weight:600;text-align:center;text-decoration:none;">'+ICON_CAL+' Agendar</a></div></div>';
     }
     html += '</div>';
-  }
-  // Apoyo Vacaciones
-  if(S.activeMode && S.activeMode.type==='vacaciones' && S.vacaciones.supportMessage){
-    html += '<div style="padding:0 16px 12px;">'+
-      '<div class="card"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">'+ICON_BELL+' Recordatorio</div><div style="font-size:13px;color:var(--ink);line-height:1.6;">'+esc(S.vacaciones.supportMessage)+'</div></div>'+
-    '</div>';
   }
   return html;
 }
@@ -4909,18 +4942,16 @@ function renderEnergySimple(){
   var html = '';
   var am = getActiveMode();
   var hiperfoco = isHiperfocoActive();
-  var vacaciones = isVacacionesActive();
 
   // ── Estado actual ─────────────────────────────────────────────────────────
   var modeName = 'Normal', modeDesc = 'Sin modo activo. Rindo a mi ritmo habitual.', modeIcon = 'sun', modeColor = 'var(--accent)';
   if(hiperfoco){ modeName='Hiperproductividad'; modeDesc='Hasta 50 tareas visibles por período · meta diaria '+Math.round(((S.hiperfoco&&S.hiperfoco.thresh)||0.9)*100)+'%'+(isIlimitado()?'':' · '+hiperfocoRemainingDays()+' días restantes')+'.'; modeIcon='🎯'; }
-  else if(vacaciones){ modeName='Vacaciones'; modeDesc='Modo descanso activo. Solo tareas cruciales.'; modeIcon='🌴'; }
   else if(am && am.type==='baja'){ modeName='Baja Energía'; modeDesc='Ritmo bajo, pero a buen ritmo. Solo '+S.bajaEnergia.maxTasks+' tareas/día'+(S.bajaEnergia.onlyCrucial?', solo cruciales':'')+'. '+bajaRemainingDays()+' días restantes.'; modeIcon=S.bajaEnergia.icon||'🌙'; modeColor=S.bajaEnergia.color||'var(--accent)'; }
   else if(am && am.type==='custom'){
     var cm = (S.modes||[]).find(function(m){return m.id===am.id;});
     if(cm){ modeName=cm.name; modeDesc='Modo personalizado activo.'; modeIcon=cm.icon||'bolt'; modeColor=cm.color||'var(--accent)'; }
   }
-  var hayModoActivo = hiperfoco||vacaciones||(!!am);
+  var hayModoActivo = hiperfoco||(!!am);
 
   html += '<div class="card" style="text-align:center;padding:22px 16px 18px;margin-bottom:16px;">'+
     '<div style="margin-bottom:10px;display:flex;justify-content:center;color:var(--accent-text);">'+modeIco(modeIcon,36,1.5)+'</div>'+
@@ -5039,10 +5070,8 @@ function openEnergySheet(){
   var userModes = S.modes||[];
   var canHF = hiperfocoCanActivate();
   var canBaja = bajaCanActivate();
-  var canVac = vacacionesCanActivate();
   var userModes = S.modes||[];
   var hiperfoco = isHiperfocoActive();
-  var vacaciones = isVacacionesActive();
   var canCreateMode = isPremium() || userModes.length < FREE_LIMITS.customModes;
   var isNormalAct = !S.activeMode && !hiperfoco;
   var isBajaAct = !!(S.activeMode && S.activeMode.type==='baja');
@@ -5112,7 +5141,6 @@ function deactivateAllModes(){
   if(S.activeMode && S.activeMode.type==='baja') deactivateBaja();
   else if(S.activeMode && S.activeMode.type==='custom') deactivateCurMode();
   if(isHiperfocoActive()) deactivateHiperfoco();
-  if(isVacacionesActive()) deactivateVacaciones();
 }
 
 // ── V2 Tab: YO ───────────────────────────────────────────────────────────
@@ -5233,7 +5261,7 @@ function renderYoMain(){
 
   var prefSub = S.simpleMode ? 'Modo simplificado activo' : 'Modo de uso, sonidos y sugerencias';
   var THEME_NAMES = {light:'Blanco',dark:'Oscuro',bosque:'Bosque',terracota:'Terracota',sepia:'Sepia',oceano:'Océano',atardecer:'Atardecer',galaxia:'Galaxia',cereza:'Cereza'};
-  var currentThemeName = THEME_NAMES[S.theme] || 'Blanco';
+  var currentThemeName = S.themeAuto ? 'Automático (sistema)' : (THEME_NAMES[S.theme] || 'Blanco');
   var CAT_MODE_NAMES = {'always-collapsed':'Siempre plegadas','smart':'Plegar las completas','remember':'Recordar tu elección','always-expanded':'Siempre desplegadas'};
   var catModeSub = CAT_MODE_NAMES[S.catCollapseMode||'remember'];
   var disabledPeriodsList = ['semana','mes','semestre','año'].filter(function(p){return S.disabledPeriods && S.disabledPeriods[p];});
@@ -5251,6 +5279,10 @@ function renderYoMain(){
   html += yoSectionHTML('Herramientas',
     yoRowHTML('modos','battery','Modos de energía', (function(){ var m=modeChipInfo(); return m.on ? esc(m.name)+' activo' : 'Baja energía, Hiperproductividad…'; })(), false, 'modos energia baja hiperfoco hiperproductividad vacaciones personalizado ritmo descanso')+
     yoRowHTML('temporizador','target','Enfoque y temporizadores', timerCfgSummary(), false, 'enfoque temporizador timer sonidos vibrar pantalla ejercicios rutinas estudio entrenamiento pestaña ubicacion seguimiento barra respiracion')+
+    '<button data-yo-row="1" data-kw="revision semanal resumen semana balance atrasado pendiente" onclick="openWeeklyReview()" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line-soft);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:Inter,sans-serif;">'+
+      '<span style="flex-shrink:0;width:22px;display:inline-flex;justify-content:center;color:var(--ink-soft);">'+ico('bars',20,1.6)+'</span>'+
+      '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Revisión semanal</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Cómo te fue y qué mover a la próxima semana</div></div>'+
+      '<span style="font-size:17px;color:var(--muted-soft);flex-shrink:0;">›</span></button>'+
     yoRowHTML('plantillas','layers','Plantillas de semana', (S.templates||[]).length ? (S.templates.length+' guardada'+(S.templates.length===1?'':'s')) : 'Guarda una semana tipo y reutilízala', false, 'plantillas semana tipo guardar aplicar reutilizar horario')+
     yoRowHTML('periodos','calgrid','Períodos de objetivos', periodsSub, false, 'periodos semana mes semestre año objetivos desactivar')+
     yoRowHTML('compartir','share','Tarjetas para compartir', 'Racha, récords y resúmenes', true, 'compartir tarjetas imagen redes instagram logro racha record resumen meta privacidad')
@@ -5514,7 +5546,7 @@ function renderYoTemaScreenBase(){
   ];
   var userIsDonante = isPremium();
   var LOCK_ICON = '<svg width="11" height="13" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="12" height="8" rx="2"/><path d="M4 7V5a3 3 0 0 1 6 0v2"/></svg>';
-  return '<div class="card">'+
+  return displayPrefsCardHTML()+'<div class="card">'+
     '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">'+
       '<div style="font-weight:700;font-size:14px;color:var(--ink);">Tema visual</div>'+
       (userIsDonante?'':
@@ -7984,6 +8016,97 @@ function regPendingHTML(reg){
 function pendTotals(list){
   var inn=0, out=0; list.forEach(function(x){ if(x.e.dir==='in') inn+=x.e.amount; else out+=x.e.amount; });
   return {inn:inn, out:out};
+}
+// ── Revisión semanal: resumen de los últimos 7 días + qué hacer con lo atrasado ──
+function weeklyReviewData(){
+  var DAYN = ['dom','lun','mar','mié','jue','vie','sáb'];
+  var days = [], sumRatio=0, cnt=0, reached=0, done=0, total=0, best=null;
+  for(var i=6;i>=0;i--){
+    var d = addDaysLocal(new Date(), -i), key = localDateStr(d);
+    var h = S.dailyHistory ? S.dailyHistory[key] : null;
+    var has = !!(h && h.total>0);
+    if(has){ cnt++; sumRatio += h.ratio; if(h.streakReached) reached++; done += h.completed||0; total += h.total||0;
+      if(!best || h.ratio>best.ratio) best = {ratio:h.ratio, label:DAYN[d.getDay()]}; }
+    days.push({label:DAYN[d.getDay()], ratio:has?h.ratio:0, has:has, reached:has&&!!h.streakReached, today:i===0});
+  }
+  var today = todayStr();
+  var overdue = S.tasks.filter(function(t){ return t.period==='dia' && t.date && t.date<today && !t.repeatEveryDays && !isDone(t); });
+  var overdueItems = 0;
+  S.tasks.forEach(function(t){ (t.checklist||[]).forEach(function(it){ if(it.due && it.due<today && !it.done) overdueItems++; }); });
+  return {days:days, avg:cnt?sumRatio/cnt:null, reached:reached, daysWithTasks:cnt, done:done, total:total, best:best, overdue:overdue, overdueItems:overdueItems};
+}
+function weeklyReviewStripHTML(){
+  if(S.day!==todayIdx()) return '';
+  var dow = new Date().getDay();
+  if(dow!==0 && dow!==1) return ''; // domingo o lunes
+  var wk = getWeekKey();
+  if(S.lastReviewWeek===wk || S.reviewStripDismissed===wk) return '';
+  return '<div style="width:calc(100% - 32px);margin:0 16px 8px;display:flex;align-items:center;gap:8px;background:var(--accent-bg);border:1px solid var(--accent-soft,var(--line));border-radius:12px;padding:9px 12px;">'+
+    '<button onclick="openWeeklyReview()" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;background:none;border:none;cursor:pointer;font-family:Inter,sans-serif;padding:0;">'+
+      '<span style="color:var(--accent-text);display:flex;">'+ico('bars',16,1.8)+'</span>'+
+      '<span style="flex:1;font-size:12.5px;color:var(--ink-soft);"><b style="color:var(--ink);">Revisa tu semana</b> · cómo te fue y qué mover</span>'+
+      '<span style="color:var(--muted-soft);font-size:18px;">›</span></button>'+
+    '<button onclick="dismissReviewStrip()" aria-label="Ocultar" style="background:none;border:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 2px;">×</button>'+
+  '</div>';
+}
+function dismissReviewStrip(){ S.reviewStripDismissed = getWeekKey(); saveState(); render(); }
+function openWeeklyReview(){
+  removeOverlay('wreview-ov');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='wreview-ov';
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeWeeklyReview(); });
+  ov.innerHTML = '<div class="sheet" id="wreview-body"></div>';
+  document.body.appendChild(ov);
+  weeklyReviewRender();
+}
+function closeWeeklyReview(){
+  S.lastReviewWeek = getWeekKey(); saveState();
+  removeOverlay('wreview-ov'); render();
+}
+function weeklyReviewRender(){
+  var box = document.getElementById('wreview-body'); if(!box) return;
+  var r = weeklyReviewData();
+  var maxH = 56;
+  var bars = r.days.map(function(d){
+    var h = Math.max(3, Math.round(d.ratio*maxH));
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'+
+      '<div style="height:'+maxH+'px;display:flex;align-items:flex-end;width:100%;justify-content:center;"><div style="width:70%;height:'+(d.has?h:3)+'px;border-radius:5px;background:'+(d.has?(d.reached?'var(--accent)':'var(--muted-soft)'):'var(--line)')+';"></div></div>'+
+      '<div style="font-size:10px;font-weight:'+(d.today?'800':'600')+';color:'+(d.today?'var(--ink)':'var(--muted)')+';">'+d.label+'</div></div>';
+  }).join('');
+  var pct = r.avg!==null ? Math.round(r.avg*100)+'%' : '—';
+  var stat = function(v,l){ return '<div style="flex:1;text-align:center;"><div class="serif" style="font-size:22px;font-weight:800;color:var(--ink);">'+v+'</div><div style="font-size:10.5px;color:var(--muted);margin-top:1px;">'+l+'</div></div>'; };
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:20px;">Tu semana</span>'+
+    '<button onclick="closeWeeklyReview()" aria-label="Cerrar" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;width:38px;height:38px;">×</button></div>'+
+    '<div class="card" style="margin-bottom:12px;"><div style="display:flex;gap:6px;margin-bottom:14px;">'+stat(pct,'cumplimiento medio')+stat(r.reached+'/'+r.daysWithTasks,'días con meta')+stat(r.done+'/'+r.total,'tareas hechas')+'</div>'+
+    '<div style="display:flex;gap:4px;">'+bars+'</div>'+
+    (r.best?'<div style="font-size:11.5px;color:var(--muted);margin-top:10px;text-align:center;">Tu mejor día fue el <b style="color:var(--ink);">'+r.best.label+'</b> ('+Math.round(r.best.ratio*100)+'%).</div>':'')+
+    '</div>';
+  if(r.overdue.length || r.overdueItems){
+    html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 8px;">Quedó pendiente</div>';
+    html += r.overdue.map(function(t){
+      return '<div class="card" style="margin-bottom:8px;padding:12px 14px;"><div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">'+esc(t.text)+' <span style="font-weight:500;color:var(--muted);font-size:11.5px;">· '+esc(humanDateParts(t.date).main)+'</span></div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+          '<button class="cbtn" style="font-size:12px;padding:7px 12px;" onclick="wrMove(\''+t.id+'\',0)">Pasar a hoy</button>'+
+          '<button class="cbtn" style="font-size:12px;padding:7px 12px;" onclick="wrMove(\''+t.id+'\',7)">Próxima semana</button>'+
+          '<button class="cbtn" style="font-size:12px;padding:7px 12px;color:var(--bad);" onclick="wrDrop(\''+t.id+'\')">Descartar</button>'+
+        '</div></div>';
+    }).join('');
+    if(r.overdueItems) html += '<div style="font-size:12.5px;color:var(--ink-soft);margin:4px 0 8px;line-height:1.5;">También hay <b style="color:var(--bad);">'+r.overdueItems+' subtarea'+(r.overdueItems===1?'':'s')+'</b> con fecha vencida dentro de tus checklists.</div>';
+  } else {
+    html += '<div class="card" style="text-align:center;font-size:13px;color:var(--ink-soft);margin-bottom:12px;">No te quedó nada atrasado. ¡Buen cierre de semana!</div>';
+  }
+  html += '<button class="sbtn" style="margin-top:8px;" onclick="closeWeeklyReview();openWeeklyMessageEditor()">Escribir mi intención para la próxima semana</button>'+
+    '<button class="cbtn" style="margin-top:8px;width:100%;" onclick="closeWeeklyReview()">Listo</button>';
+  box.innerHTML = html;
+}
+function wrMove(id, plusDays){
+  var t = S.tasks.find(function(x){return x.id===id;}); if(!t) return;
+  var d = addDaysLocal(new Date(), plusDays);
+  S.tasks = S.tasks.map(function(x){ return x.id===id ? Object.assign({},x,{date:localDateStr(d), day:dayIdxFromDate(d)}) : x; });
+  saveState(); weeklyReviewRender(); render();
+}
+function wrDrop(id){
+  S.tasks = S.tasks.filter(function(x){return x.id!==id;});
+  saveState(); weeklyReviewRender(); render();
 }
 function hoyPendStripHTML(){
   if(S.day!==todayIdx()) return '';
@@ -10835,6 +10958,9 @@ function applyVisualCustomizations(){
     css += '#app, #content { background-color:#000000 !important; }';
   }
 
+  // Tamaño de letra: como la app usa tamaños fijos en px, se escala toda la interfaz.
+  if(S.fontScale && Math.abs(S.fontScale-1)>0.01){ css += 'body { zoom:'+S.fontScale+'; }'; }
+
   if(css){
     var style = document.createElement('style');
     style.id = 'custom-visual-style';
@@ -11052,12 +11178,60 @@ function fillGenericTask(){
   input.value = pick;
 }
 
+// ── Tema automático (según el sistema) y tamaño de letra ───────────────────
+var _autoThemeMQ = null;
+function applyAutoTheme(silent){
+  if(!S.themeAuto) return;
+  var dark = false;
+  try{ dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; }catch(e){}
+  var t = dark ? 'dark' : 'light';
+  if(S.theme !== t){
+    S.theme = t;
+    document.body.className = 'theme-'+t+' task-size-medium';
+    if(!silent){ saveState(); try{ render(); }catch(e){} }
+  }
+}
+function initAutoThemeListener(){
+  if(_autoThemeMQ || !window.matchMedia) return;
+  try{
+    _autoThemeMQ = window.matchMedia('(prefers-color-scheme: dark)');
+    var h = function(){ applyAutoTheme(false); };
+    if(_autoThemeMQ.addEventListener) _autoThemeMQ.addEventListener('change', h);
+    else if(_autoThemeMQ.addListener) _autoThemeMQ.addListener(h);
+  }catch(e){}
+}
+function setThemeAuto(on){
+  S.themeAuto = !!on;
+  if(on) applyAutoTheme(true);
+  saveState(); render(); playSound('toggle');
+}
+var FONT_SCALES = [['Pequeña',0.9],['Normal',1],['Grande',1.12],['Muy grande',1.25]];
+function setFontScale(v){
+  S.fontScale = v;
+  applyVisualCustomizations();
+  saveState(); render();
+}
+function displayPrefsCardHTML(){
+  var auto = !!S.themeAuto, fs = S.fontScale||1;
+  return '<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line-soft);">'+
+      '<div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Seguir el tema del sistema</div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.5;">Cambia solo entre Blanco y Oscuro según tu teléfono.</div></div>'+
+      '<button class="tog" onclick="setThemeAuto('+(!auto)+')" style="background:'+(auto?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(auto?22:2)+'px;"></span></button>'+
+    '</div>'+
+    '<div style="padding-top:12px;"><div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:8px;">Tamaño de letra</div>'+
+    '<div style="display:flex;gap:6px;">'+
+      FONT_SCALES.map(function(o){ var on=Math.abs(fs-o[1])<0.01; return '<button onclick="setFontScale('+o[1]+')" style="flex:1;padding:9px 4px;border-radius:10px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+o[0]+'</button>'; }).join('')+
+    '</div><div style="font-size:11px;color:var(--muted);margin-top:8px;">Agranda o achica toda la app.</div></div>'+
+  '</div>';
+}
 function setTheme(t){
   var FREE_THEMES = ['light','dark','bosque'];
   if(!isPremium() && FREE_THEMES.indexOf(t)===-1){
     openDonationInfo();
     return;
   }
+  S.themeAuto = false;
   S.theme=t;
   document.body.className='theme-'+t+' task-size-medium';
   if(!S.themesUsed) S.themesUsed = [];
@@ -11080,7 +11254,7 @@ function confirmFactoryReset(){
   box.innerHTML =
     '<div class="conf-inner">'+
       '<div style="text-align:center;margin-bottom:16px;">'+
-        '<div style="font-size:44px;margin-bottom:8px;">⚠️</div>'+
+        '<div style="margin-bottom:8px;display:flex;justify-content:center;color:var(--bad);">'+ico('warn',44,1.6)+'</div>'+
         '<div class="serif" style="font-weight:800;font-size:20px;color:var(--bad);">¡Acción irreversible!</div>'+
       '</div>'+
       '<div style="font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:14px;">'+
@@ -11319,7 +11493,6 @@ function openCategoryManager(){
 function chkSVG(){return '<svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
 function miniChkSVG(){return '<svg width="9" height="7" viewBox="0 0 9 7" fill="none"><path d="M1 3.5L3.5 6L8 1" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
 // Avance de un ítem de checklist (0..1): hecho = 1; con cantidad = prog/meta.
-function clItemRatio(i){ if(i.done) return 1; var q=clItemQty(i); return q>1 ? Math.max(0,Math.min(1,(i.prog||0)/q)) : 0; }
 // Una barrita por ítem, cada una cargando según SU porcentaje (más de 10 ítems: barra única).
 function clSegBarHTML(t, r){
   var cl=t.checklist||[]; if(cl.length<2 || cl.length>10) return mpHTML(r);
@@ -12226,29 +12399,6 @@ function startInlineEdit(id){
   });
 }
 
-function weeklyMessageBannerHTML(){
-  var wk = getWeekKey();
-  var msg = S.weeklyMessages ? S.weeklyMessages[wk] : null;
-  if(msg && msg.text){
-    var emoji = msg.emoji || '💬';
-    return '<div style="background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:16px;">'+
-      '<div style="display:flex;align-items:flex-start;gap:10px;">'+
-        '<div style="font-size:22px;flex-shrink:0;margin-top:1px;">'+emoji+'</div>'+
-        '<div style="flex:1;">'+
-          '<div style="font-size:10px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Esta semana</div>'+
-          '<div style="font-size:13px;color:var(--ink);line-height:1.6;white-space:pre-wrap;word-wrap:break-word;">'+esc(msg.text)+'</div>'+
-        '</div>'+
-        '<button onclick="openWeeklyMessageEditor()" style="background:none;border:none;color:var(--muted);font-size:13px;padding:0 4px;cursor:pointer;flex-shrink:0;" title="Editar">✎</button>'+
-      '</div>'+
-    '</div>';
-  }
-  return '<div style="margin-bottom:14px;">'+
-    '<button onclick="openWeeklyMessageEditor()" style="width:100%;background:transparent;border:1.5px dashed var(--line);border-radius:10px;padding:9px 14px;color:var(--muted);font-size:12px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;display:flex;align-items:center;gap:8px;">'+
-      '<span style="font-size:16px;">💬</span>'+
-      '<span>Agregar mensaje / recordatorio de esta semana</span>'+
-    '</button>'+
-  '</div>';
-}
 
 function openWeeklyMessageEditor(){
   var wk = getWeekKey();
@@ -12487,16 +12637,6 @@ function doTypeReset(type){
   }
 }
 
-function confirmReset(){
-  if(!isWeekend()||resetUsedThisWeekend()){
-    var whenText = resetUsedThisWeekend()
-      ? 'Ya reiniciaste esta semana'
-      : 'Disponible el sábado o domingo';
-    showResetInfo('semana', whenText);
-    return;
-  }
-  tapResetButton('semana');
-}
 
 function doPeriodReset(period){
   resetTasksOfPeriod(period);
@@ -14964,7 +15104,7 @@ function calTaskRowHTML(t, canTicket, opts){
   var meta = [];
   if(cat && opts.showCat) meta.push('<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:6px;height:6px;border-radius:50%;background:'+cat.color+';"></span>'+esc(cat.name)+'</span>');
   if(!t.date) meta.push('<span title="Se repite cada semana">↻</span>');
-  else if(t.repeatEveryDays) meta.push('<span title="Se repite">↻ cada '+t.repeatEveryDays+' d</span>');
+  else if(t.repeatEveryDays) meta.push('<span title="Se repite">↻ '+(t.repeatMonths>0?(t.repeatMonths===1?'cada mes':'cada '+t.repeatMonths+' meses'):(t.repeatEveryDays===1?'cada día':(t.repeatEveryDays%7===0?(t.repeatEveryDays===7?'cada semana':'cada '+(t.repeatEveryDays/7)+' sem'):'cada '+t.repeatEveryDays+' d')))+'</span>');
   if(prog) meta.push('<span style="font-weight:700;color:var(--ink-soft);">'+prog+'</span>');
   if(t.hasTimer) meta.push('<span>'+ico('clock',11,2)+'</span>');
   if(t.registryId) meta.push('<span>'+ico('book',11,2)+'</span>');
@@ -15724,68 +15864,6 @@ function deactivateBaja(){
   S.activeMode=null;S.showHidden=false;saveState();render();
 }
 
-// ── Modo Vacaciones ────────────────────────────────────────────────────────
-function isVacacionesActive(){ return false; }
-function vacacionesCanActivate(){
-  // Donante: sin cooldown
-  if(isPremium())return{ok:true};
-  var vc=S.vacaciones;
-  if(!vc.activeSince)return{ok:true};
-  var since=new Date(vc.activeSince);
-  var until=new Date(since.getTime()+FREE_MODE_COOLDOWN_DAYS*86400000);
-  if(new Date()<until){
-    var daysLeft=Math.ceil((until-new Date())/86400000);
-    return{ok:false,daysLeft:daysLeft};
-  }
-  return{ok:true};
-}
-function activateVacaciones(){
-  if(S.activeMode){toast('Desactiva primero el modo activo');return;}
-  var info=vacacionesCanActivate();
-  if(!info.ok){toast('Disponible en '+info.daysLeft+' días');return;}
-  // Aviso explicativo antes de activar — mismo patrón que Baja Energía.
-  showVacacionesWarning();
-}
-function showVacacionesWarning(){
-  var vc = S.vacaciones;
-  var box=document.createElement('div');box.className='conf-box';
-  box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
-    '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🌴</div>'+
-    '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Vacaciones'+infoBtn('modebaja')+'</div>'+
-    
-    '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
-      '<div>· Solo verás <b>'+vc.maxTasks+' tareas/día</b></div>'+
-      '<div>· Umbral de racha baja a <b>'+Math.round((vc.lowThresh||0.3)*100)+'%</b></div>'+
-      '<div style="margin-top:6px;color:var(--accent-text);font-weight:600;">Una vez usado, queda inhabilitado por '+FREE_MODE_COOLDOWN_DAYS+' días.</div>'+
-    ''+infoBtn('modebaja2')+'</div>'+
-    
-    '<div style="display:flex;flex-direction:column;gap:8px;">'+
-      '<button class="sbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();doActivateVacaciones();">Sí, activar Vacaciones</button>'+
-      '<button class="cbtn" style="font-size:13px;" onclick="this.closest(\'.conf-box\').remove();">Cancelar</button>'+
-    '</div></div>';
-  document.body.appendChild(box);
-}
-function doActivateVacaciones(){
-  S.vacaciones.activeSince = todayStr();
-  S.activeMode = {type:'vacaciones'};
-  S.vacacionesUsedCount = (S.vacacionesUsedCount||0) + 1;
-  // Aplicar plantilla si está asociada
-  if(S.vacaciones.templateId){
-    var tpl=(S.templates||[]).find(function(t){return t.id===S.vacaciones.templateId;});
-    if(tpl) _applyTemplate(S.vacaciones.templateId);
-  }
-  saveState();
-  checkMedals();
-  render();
-  toast('🌴 Modo Vacaciones activado');
-}
-function deactivateVacaciones(){
-  if(S.modeTaskBackup){S.tasks=S.modeTaskBackup;S.modeTaskBackup=null;}
-  S.activeMode = null;
-  S.vacaciones.activeSince = null;
-  S.showHidden = false;
-  saveState();render();
-}
 function toggleCustomMode(id){
   if(S.activeMode&&S.activeMode.type==='custom'&&S.activeMode.id===id){
     // Desactivar: restaurar backup si hay
@@ -15860,9 +15938,6 @@ function delMode(id){
 function openEditBajaTemplate(){
   openBuiltinModeTemplateSelector('baja','Baja Energía',S.bajaEnergia.templateId||null);
 }
-function openEditVacacTemplate(){
-  openBuiltinModeTemplateSelector('vacaciones','Vacaciones',S.vacaciones.templateId||null);
-}
 function openBuiltinModeTemplateSelector(modeKey, modeName, currentTplId){
   var box=document.createElement('div');box.className='conf-box';box.id='builtin-tpl-modal';
   var tpls = S.templates||[];
@@ -15900,59 +15975,6 @@ function saveBuiltinModeTpl(modeKey){
   toast(tplId?'✓ Plantilla asociada':'Plantilla quitada');
 }
 
-function openEditVacaciones(){
-  var vc=S.vacaciones;
-  removeOverlay('mode-modal');
-  var overlay=document.createElement('div');overlay.className='overlay';overlay.id='mode-modal';
-  overlay.addEventListener('click',function(e){if(e.target===overlay)removeOverlay('mode-modal');});
-  overlay.innerHTML='<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">'+
-      '<span class="serif" style="font-weight:700;font-size:20px;">Editar Vacaciones 🌴</span>'+
-      '<button onclick="removeOverlay(\'mode-modal\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
-    '</div>'+
-    '<label class="flbl">Umbral de racha durante vacaciones</label>'+
-    '<div style="display:flex;gap:8px;margin-bottom:16px;" id="vc-thresh-btns">'+
-      [20,30,40,50].map(function(v){var on=Math.round((vc.lowThresh||0.3)*100)===v;return '<button onclick="vcSetThresh('+v+')" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';font-size:13px;font-family:Inter,sans-serif;">'+v+'%</button>';}).join('')+
-    '</div>'+
-    // BUGFIX / pedido: "Máximo de tareas por día" se sacó de acá — Baja
-    // Energía ya no lo dejaba editar (es un valor fijo del modo), así que
-    // Vacaciones ahora es consistente con eso en vez de ser la única
-    // excepción editable.
-    '<div class="fsec" style="background:var(--accent-bg);margin-top:12px;">'+
-      '<div style="margin-bottom:8px;"><span style="font-size:13px;font-weight:600;color:var(--ink);">💛 Mensaje de apoyo</span></div>'+
-      '<div style="font-size:12px;color:var(--ink-soft);line-height:1.6;">'+esc(vc.supportMessage||'')+'</div>'+
-    ''+infoBtn('hidehelp')+'</div>'+
-    
-    // BUGFIX: mismo caso que Baja Energía — openEditVacacTemplate() ya
-    // existía completo pero no tenía ningún botón que lo abriera.
-    '<div class="fsec" style="margin-bottom:16px;">'+
-      '<div class="frow">'+
-        '<div>'+
-          '<div style="font-size:13px;font-weight:600;color:var(--ink);">'+ico('list',16,1.8)+' Plantilla asociada</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(vc.templateId?(function(){var tp=(S.templates||[]).find(function(t){return t.id===vc.templateId;});return esc(tp?tp.name:'(eliminada)');})():'Ninguna — se usan tus tareas normales')+'</div>'+
-        '</div>'+
-        '<button class="cbtn" style="font-size:11px;padding:7px 12px;flex-shrink:0;" onclick="removeOverlay(\'mode-modal\');openEditVacacTemplate();">Cambiar</button>'+
-      '</div>'+
-    '</div>'+
-    '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="saveVacaciones()">Guardar</button><button class="cbtn" onclick="removeOverlay(\'mode-modal\')">Cancelar</button></div>'+
-  '</div>';
-  document.body.appendChild(overlay);
-}
-function vcSetThresh(v){
-  S.vacaciones.lowThresh=v/100;
-  document.querySelectorAll('#vc-thresh-btns button').forEach(function(b,i){
-    var vals=[20,30,40,50],on=vals[i]===v;
-    b.style.border='1.5px solid '+(on?'var(--accent)':'var(--line)');
-    b.style.background=on?'var(--accent-bg)':'var(--paper)';
-    b.style.color=on?'var(--accent)':'var(--ink-soft)';
-  });
-}
-function saveVacaciones(){
-  // BUGFIX: "vc-max" ya no existe en el formulario (ver openEditVacaciones),
-  // así que esto ya no debe leerlo ni sobrescribir S.vacaciones.maxTasks.
-  if(S.vacaciones.suggestions)S.vacaciones.suggestions = S.vacaciones.suggestions.filter(function(s){return s&&s.trim();});
-  removeOverlay('mode-modal');saveState();render();
-}
 
 function openEditBaja(){
   var be=S.bajaEnergia;
@@ -16871,6 +16893,7 @@ function expCL(id){
 // porque esas funciones llaman a render() y eso no toca este overlay
 // (vive fuera de #content, igual que project-view o task-modal).
 function openCLSheet(taskId){
+  _clSheetTaskId = taskId;
   removeOverlay('cl-sheet');
   var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
   var overlay=document.createElement('div');overlay.className='overlay';overlay.id='cl-sheet';
@@ -16908,7 +16931,7 @@ function clSheetItemsHTML(t){
       '</div>') : '';
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);">'+
       leftHTML+
-      '<span style="flex:1;min-width:0;font-size:15px;color:'+(item.done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(item.done&&!isQtyItem?'line-through':'none')+';word-break:break-word;">'+esc(item.text)+'</span>'+itemTmPlayHTML(t,item)+stepHTML+
+      '<span style="flex:1;min-width:0;font-size:15px;color:'+(item.done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(item.done&&!isQtyItem?'line-through':'none')+';word-break:break-word;">'+esc(item.text)+'</span>'+itemTmPlayHTML(t,item)+clDueChipHTML(item.due,item.done,'sheetCLDuePick(\''+t.id+'\',\''+item.id+'\')')+stepHTML+
       '<button onclick="sheetRemoveCLItem(\''+t.id+'\',\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:20px;line-height:1;flex-shrink:0;">×</button>'+
     '</div>';
   }).join('');
@@ -17166,7 +17189,7 @@ function resetChecklistForCycle(t){
   // check estuviera apagado, y al volver a completar las tareas hijas el
   // avance seguía sumando desde el valor viejo en vez de desde cero.
   return {
-    checklist: cl.map(function(i){return Object.assign({},i,{done:false,prog:0});}),
+    checklist: cl.map(function(i){var n=Object.assign({},i,{done:false,prog:0}); delete n.due; return n;}),
     lastChecklist: t.lastChecklist||null
   };
 }
@@ -17189,11 +17212,28 @@ function advanceRecurringEvents(){
     if(t.period!=='dia' || !t.date || !t.repeatEveryDays || t.repeatEveryDays<1) return t;
     if(t.date >= today) return t;
     var d = parseLocalDate(t.date);
-    var diffDays = Math.round((parseLocalDate(today) - d) / 86400000);
-    var steps = Math.ceil(diffDays / t.repeatEveryDays);
-    var next = new Date(d.getTime());
-    next.setDate(next.getDate() + steps*t.repeatEveryDays);
+    var next;
+    if(t.repeatMonths>0){
+      // Repetición mensual: mismo día del mes (si el mes no lo tiene, el último día).
+      var dom = d.getDate(), k = 0;
+      do{
+        k += t.repeatMonths;
+        next = new Date(d.getFullYear(), d.getMonth()+k, 1);
+        var last = new Date(next.getFullYear(), next.getMonth()+1, 0).getDate();
+        next.setDate(Math.min(dom,last));
+      } while(localDateStr(next) < today && k < 1200);
+    } else {
+      var diffDays = Math.round((parseLocalDate(today) - d) / 86400000);
+      var steps = Math.ceil(diffDays / t.repeatEveryDays);
+      next = new Date(d.getTime());
+      next.setDate(next.getDate() + steps*t.repeatEveryDays);
+    }
     var newDate = localDateStr(next);
+    // Con fecha de término: si la próxima ocurrencia se pasa, deja de repetirse.
+    if(t.repeatUntil && newDate > t.repeatUntil){
+      changed = true;
+      return Object.assign({},t,{repeatEveryDays:null, repeatMonths:null, repeatUntil:null});
+    }
     var clr = resetChecklistForCycle(t);
     changed = true;
     try{ forgetTaskRewards(t.id); }catch(e){}
@@ -17394,6 +17434,161 @@ function _fabMenuOutside(e){
   if(m && (m.contains(e.target) || (f && f.contains(e.target)))) return;
   closeFabMenu();
 }
+// ── Captura rápida: escribe una frase y la app entiende día, hora y repetición ──
+// Ej.: "Llamar al dentista mañana a las 10", "Pagar cuenta el viernes importante",
+// "Regar plantas cada 3 días", "Reunión lunes 15:30". Todo es opcional.
+var _QC_WD = {lunes:0,martes:1,miercoles:2,jueves:3,viernes:4,sabado:5,domingo:6};
+var _QC_MONTHS = {enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,septiembre:8,setiembre:8,octubre:9,noviembre:10,diciembre:11};
+function _qcNorm(t){ return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function qcParse(raw){
+  var text = String(raw||'').trim();
+  var out = {text:'', date:null, hora:null, repeat:null, crucial:false, weekdayOnly:null};
+  if(!text) return out;
+  var t = text;
+  var cut = function(re, fn){
+    var n = _qcNorm(t), m = re.exec(n);
+    if(!m) return false;
+    // n y t tienen el mismo largo (NFD+strip puede acortar: se usa el índice sobre n y se recorta ambos con el mismo largo)
+    var ok = fn(m);
+    if(ok!==false){ t = (t.slice(0,m.index)+' '+t.slice(m.index+m[0].length)); }
+    return ok!==false;
+  };
+  // Para que los índices coincidan, se trabaja con texto sin tildes en el original.
+  t = t.normalize('NFD').replace(/[̀-ͯ]/g,function(){return '';});
+  var keepAccents = text; // para recuperar tildes del título si hace falta (se recompone abajo)
+  // importante
+  cut(/\b(importante|urgente|crucial|prioridad)\b|!+/, function(){ out.crucial=true; });
+  // repetición
+  cut(/\b(?:cada|todos los|todas las)\s+(\d+)\s*(dias?|semanas?|meses|mes)\b/, function(m){
+    var n=parseInt(m[1],10), u=m[2].charAt(0);
+    out.repeat = u==='d' ? {days:n} : (u==='s' ? {days:n*7} : {months:n});
+  }) ||
+  cut(/\b(?:cada dia|todos los dias|diari[oa]mente|diario)\b/, function(){ out.repeat={days:1}; }) ||
+  cut(/\b(?:cada semana|todas las semanas|semanalmente|semanal)\b/, function(){ out.repeat={days:7}; }) ||
+  cut(/\b(?:cada mes|todos los meses|mensualmente|mensual)\b/, function(){ out.repeat={months:1}; });
+  // hora
+  var pm = /\b(?:de la )?(tarde|noche)\b/.test(_qcNorm(t));
+  var amw = /\bde la manana\b/.test(_qcNorm(t));
+  var hh=null, mm=0;
+  var mHora = null;
+  if(cut(/\b(?:a las?|a la)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|hrs?|h)?\b/, function(m){ mHora=m; })
+     || cut(/\b(\d{1,2}):(\d{2})\s*(am|pm|hrs?|h)?\b/, function(m){ mHora=m; })
+     || cut(/\b(\d{1,2})\s*(am|pm)\b/, function(m){ mHora=[m[0],m[1],null,m[2]]; })){
+    hh = parseInt(mHora[1],10); mm = mHora[2] ? parseInt(mHora[2],10) : 0;
+    var ap = mHora[3];
+    if(ap==='pm' && hh<12) hh+=12; else if(ap==='am' && hh===12) hh=0;
+    else if(!ap && pm && hh<12) hh+=12;
+    if(hh>23||mm>59) hh=null;
+    cut(/\b(?:de la )?(tarde|noche)\b/, function(){}); cut(/\bde la manana\b/, function(){});
+  }
+  if(hh!==null) out.hora = (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+  // fecha
+  var today = new Date(); today.setHours(12,0,0,0);
+  var setD = function(d){ out.date = localDateStr(d); };
+  if(cut(/\bpasado manana\b/, function(){ var d=new Date(today); d.setDate(d.getDate()+2); setD(d); })){}
+  else if(cut(/\b(?:para )?manana\b/, function(){ var d=new Date(today); d.setDate(d.getDate()+1); setD(d); })){}
+  else if(cut(/\bhoy\b/, function(){ setD(today); })){}
+  else if(cut(/\ben\s+(\d+)\s*(dias?|semanas?)\b/, function(m){ var d=new Date(today); d.setDate(d.getDate()+parseInt(m[1],10)*(m[2].charAt(0)==='s'?7:1)); setD(d); })){}
+  else if(cut(/\b(?:el\s+)?(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/, function(m){
+    var d=new Date(today.getFullYear(), _QC_MONTHS[m[2]], parseInt(m[1],10), 12);
+    if(d < new Date(today.getFullYear(),today.getMonth(),today.getDate(),0)) d.setFullYear(d.getFullYear()+1);
+    setD(d);
+  })){}
+  else if(cut(/\b(\d{1,2})[\/\-](\d{1,2})\b/, function(m){
+    var dd=parseInt(m[1],10), mo=parseInt(m[2],10)-1; if(mo<0||mo>11||dd<1||dd>31) return false;
+    var d=new Date(today.getFullYear(), mo, dd, 12);
+    if(d < new Date(today.getFullYear(),today.getMonth(),today.getDate(),0)) d.setFullYear(d.getFullYear()+1);
+    setD(d);
+  })){}
+  else if(cut(/\b(?:el\s+|este\s+|proximo\s+|el proximo\s+)?(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/, function(m){
+    var target=_QC_WD[m[1]], cur=dayIdxFromDate(today);
+    var diff=(target-cur+7)%7; if(diff===0) diff=7;
+    var d=new Date(today); d.setDate(d.getDate()+diff); setD(d); out.weekdayOnly=target;
+  })){}
+  else if(cut(/\b(?:el\s+)?(\d{1,2})\b(?=\s*$)/, function(m){
+    // "el 25" al final: día del mes
+    var dd=parseInt(m[1],10); if(dd<1||dd>31) return false;
+    var d=new Date(today.getFullYear(), today.getMonth(), dd, 12);
+    if(d < new Date(today.getFullYear(),today.getMonth(),today.getDate(),0)) d=new Date(today.getFullYear(), today.getMonth()+1, dd, 12);
+    setD(d);
+  })){}
+  // título limpio: se reconstruye desde el texto original quitando lo mismo.
+  var title = t.replace(/\b(el|para|a las?|de|a la|en|los|las)\s*$/i,'').replace(/\s+/g,' ').replace(/^[\s,.\-–]+|[\s,.\-–]+$/g,'');
+  // recuperar tildes: si el título (sin tildes) aparece en el original sin tildes, usar el original en ese tramo
+  var normOrig = _qcNorm(text), idx = normOrig.indexOf(_qcNorm(title));
+  if(title && idx>=0) title = text.substr(idx, title.length);
+  out.text = title ? title.charAt(0).toUpperCase()+title.slice(1) : '';
+  return out;
+}
+function qcDescribe(r){
+  var parts = [];
+  if(r.date){ var h=humanDateParts(r.date); parts.push((h.rel?h.rel+' · ':'')+h.main); }
+  if(r.hora) parts.push(mHoraTo12(r.hora));
+  if(r.repeat){ parts.push('↻ '+(r.repeat.months?('cada '+(r.repeat.months===1?'mes':r.repeat.months+' meses')):(r.repeat.days===1?'cada día':(r.repeat.days%7===0?(r.repeat.days===7?'cada semana':'cada '+(r.repeat.days/7)+' semanas'):'cada '+r.repeat.days+' días')))); }
+  if(r.crucial) parts.push('Crucial');
+  return parts;
+}
+function openQuickCapture(){
+  removeOverlay('qc-ov');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='qc-ov';
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('qc-ov'); });
+  ov.innerHTML = '<div class="sheet" style="padding-top:18px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+      '<span class="serif" style="font-weight:700;font-size:20px;">Captura rápida</span>'+
+      '<button onclick="removeOverlay(\'qc-ov\')" aria-label="Cerrar" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;width:38px;height:38px;">×</button>'+
+    '</div>'+
+    '<input id="qc-input" class="finp" placeholder="Ej. Llamar al dentista mañana a las 10" autocomplete="off" maxlength="140" oninput="qcPreview()" onkeydown="if(event.key===\'Enter\')qcCreate()" style="font-size:16px;"/>'+
+    '<div id="qc-preview" style="min-height:30px;display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px;"></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin-bottom:16px;">Entiendo: <i>hoy, mañana, el viernes, el 25 de noviembre</i> · <i>a las 10, 15:30, 5 pm</i> · <i>cada día, cada semana, cada 3 días, cada mes</i> · <i>importante</i>.</div>'+
+    '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="qcCreate()">Crear tarea</button><button class="cbtn" onclick="qcToEditor()">Editar detalles</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ var el=document.getElementById('qc-input'); if(el) el.focus(); }, 150);
+}
+function qcPreview(){
+  var el=document.getElementById('qc-input'), box=document.getElementById('qc-preview'); if(!el||!box) return;
+  var r=qcParse(el.value);
+  var chips = qcDescribe(r).map(function(x){ return '<span style="padding:4px 10px;border-radius:14px;background:var(--accent-bg);color:var(--accent-text);font-size:12px;font-weight:600;">'+esc(x)+'</span>'; }).join('');
+  box.innerHTML = chips;
+}
+function qcBuildTask(r){
+  var today=new Date();
+  var date = r.date;
+  var weeklyNoDate = false;
+  if(r.repeat && r.repeat.days===7 && r.weekdayOnly!=null){ weeklyNoDate = true; date = null; }
+  if(r.repeat && !date && !weeklyNoDate) date = localDateStr(today);
+  if(!date && !weeklyNoDate) date = localDateStr(today); // sin fecha: una vez, hoy
+  var dayIdx = weeklyNoDate ? r.weekdayOnly : dayIdxFromDate(parseLocalDate(date));
+  var task = {id:uid(),text:r.text,done:false,period:'dia',day:dayIdx,qty:1,prog:0,checklist:[],links:{},crucial:!!r.crucial,linkMode:'unit',categoryId:null,hora:r.hora||null,duracion:60,notif:null};
+  if(date) task.date = date;
+  if(r.repeat && date){
+    task.repeatEveryDays = r.repeat.months ? r.repeat.months*30 : r.repeat.days;
+    if(r.repeat.months) task.repeatMonths = r.repeat.months;
+  }
+  return task;
+}
+function qcCreate(){
+  var el=document.getElementById('qc-input'); if(!el) return;
+  var r=qcParse(el.value);
+  if(!r.text){ el.style.borderBottomColor='var(--bad)'; el.focus(); return; }
+  var task = qcBuildTask(r);
+  var count = S.tasks.filter(function(x){return x.period==='dia' && x.day===task.day;}).length;
+  var limit = (currentTaskLimits()||{}).dia || 999;
+  if(count>=limit){ showInfoModal(TEXTS.tasksLimitTitle,TEXTS.tasksLimitBody,TEXTS.tasksLimitButton); return; }
+  S.tasks.push(task);
+  removeOverlay('qc-ov');
+  saveState(); try{ checkMedals(); }catch(e){}
+  render(); playSound('add');
+  var d = qcDescribe(r);
+  toast('✓ Tarea creada'+(d.length?' · '+esc(d[0]):''));
+}
+function qcToEditor(){
+  var el=document.getElementById('qc-input');
+  var r=qcParse(el?el.value:'');
+  removeOverlay('qc-ov');
+  if(r.date){ openNewDatedTask(r.date,{text:r.text}); }
+  else { openNew('dia'); setTimeout(function(){ var n=document.getElementById('m-name'); if(n) n.value=r.text||''; },60); }
+}
 function fabAddTap(){
   if(S.tab==='proyectos'){ openQuickAdd(); return; }
   var hasRegs = regList().length>0, tOn = S.timerPlacement==='seguimiento';
@@ -17413,6 +17608,7 @@ function fabAddTap(){
   m.id = 'fab-menu';
   m.style.cssText = 'position:fixed;right:'+Math.max(8,window.innerWidth-r.right)+'px;bottom:'+(window.innerHeight-r.top+10)+'px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:800;min-width:230px;overflow:hidden;';
   m.innerHTML = item(I('<path d="M12 5v14M5 12h14"/>'),'Nueva tarea','Para este día','openNew(\'dia\')')+
+    div+item(I('<path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/>'),'Captura rápida','Escribe: «Dentista mañana 10:00»','openQuickCapture()')+
     (hasRegs ? div+item(I('<path d="M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM6 3v18M10 8h5M10 12h5"/>'),'Anotar movimiento','Gasto, ingreso o marca','openQuickAdd()') : '')+
     (tOn ? div+item(I('<path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/>'),'Iniciar enfoque','Cuenta regresiva o rutina','setTab(\'timer\')') : '');
   document.body.appendChild(m);
@@ -17602,6 +17798,7 @@ function openEdit(id){
   // editor en vez de esperar a que mSave() lo resuelva en silencio — así
   // se ve de entrada cuál de los dos quedó activo. Gana el checklist.
   if(M.hasQty && M.hasCL) M.hasQty=false;
+  mRepeatLoad(t);
   M.duracion = t.duracion||60; M.moreOpen = M.hasQty || M.hasCL || !!M.hora || M.hasDate;
   showTaskModal();
 }
@@ -17630,7 +17827,7 @@ var INFO_TIPS = {
   plannotify:'Cuando avanzas una tarea de Hoy que está vinculada a un objetivo del Plan, aparece un aviso breve arriba con el avance (y más largo si lo completas). Se cierra solo; con "Ver" vas a Objetivos.',
   cltimer:'Toca el reloj de un ítem para darle su propio temporizador (por ejemplo 25 min). En Hoy verás un botón de play junto al ítem; al terminar la cuenta, el ítem se marca solo. Puedes ponerlo en uno o en varios ítems. Es independiente del temporizador general de la tarea.',
   timeradd:'Agrega una cuenta regresiva con ejercicios y descansos a la tarea. Con un checklist, la tarea se completa cuando terminas el temporizador Y los ítems. (No se combina con "Cantidad".)',
-  when:'Cada semana: se repite el mismo día todas las semanas. Solo esta semana: aparece este día y desaparece al reiniciar la semana. Fecha(s) puntual(es): un día concreto, con repetición opcional cada N días.',
+  when:'Cada semana: se repite el mismo día todas las semanas. Solo esta semana: aparece este día y desaparece al reiniciar la semana. Con fecha: un día concreto, que puede repetirse cada día, semana, mes o cada cierto intervalo, con fecha de término opcional.',
   repeat:'Al pasar la fecha, la tarea salta sola a la próxima que le toque (con su checklist reiniciado si es "único cada vez"). Sin repetición es solo para ese día.',
   clfresh:'Al reiniciarse la tarea, el checklist empieza vacío en vez de repetir los mismos ítems (útil para listas que cambian, como "qué comprar"). Queda el botón para recordar el último.',
   clrule:'"Con algunos alcanza": la tarea se completa al marcar K ítems cualquiera de los N, no todos. Con K=1 basta uno ("este o este o este").',
@@ -17747,13 +17944,28 @@ function mSetWhen(mode){
 }
 function taskModalDayHTML(showFreshCL){
   var t = M.task;
+  // Editor mínimo: nombre + cuándo siempre a la vista; lo demás en "Más opciones"
+  // (se abre solo si la tarea ya usa alguna de esas opciones).
+  if(M._dayMoreOpen===undefined) M._dayMoreOpen = !!(!M.isNew && (M.categoryId || M.hasQty || M.hasCL || M.hora || M.hasTimer || (M.notif&&M.notif.on) || appsOf(M.task).length || M.registryId));
   var when = M.hasDate ? 'date' : (M.oneShot ? 'week' : 'weekly');
   return ''+
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">'+
       '<input id="m-name" class="finp" value="'+esc(t.text)+'" placeholder="Nombre de la tarea..." style="flex:1;min-width:0;margin:0;font-size:16px;padding:6px 0;"/>'+
       '<button type="button" id="m-crucial-btn" onclick="mToggleCrucial()" title="Tarea crucial" aria-label="Tarea crucial" style="'+crucialBtnStyle()+'">'+(M.crucial?ico('star',19,1.6):ico('star0',19,1.8))+'</button>'+
+      (M.isNew?'<button type="button" onclick="removeOverlay(\'task-modal\');setTimeout(openQuickCapture,200)" title="Captura rápida: escribe una frase" aria-label="Captura rápida" style="width:38px;height:38px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);color:var(--accent-text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ico('bolt',18,1.8)+'</button>':'')+
       (M.isNew?'<button type="button" onclick="fillGenericTask()" title="Sugerir una tarea genérica" aria-label="Sugerir una tarea genérica" style="width:38px;height:38px;border-radius:12px;border:1.5px dashed var(--line);background:transparent;font-size:17px;line-height:1;cursor:pointer;flex-shrink:0;padding:0;color:var(--muted);display:flex;align-items:center;justify-content:center;">'+ico('dice',19,1.7)+'</button>':'')+
     '</div>'+
+    mSecLabel('Cuándo','when')+
+    mSegHTML('m-when-seg',[['weekly','Cada semana'],['week','Solo esta semana'],['date','Con fecha']], when, 'mSetWhen')+
+    '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';margin-top:12px;">'+
+      dateFieldHTML('m-date-input', M.task.date||'', true, true)+
+      mRepeatAreaHTML()+
+    '</div>'+
+    '<button type="button" onclick="mToggleDayMore()" aria-expanded="'+!!M._dayMoreOpen+'" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:18px 0 6px;">'+
+      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Más opciones<span style="font-weight:500;color:var(--muted);font-size:11.5px;"> · categoría, meta, horario, avanzado</span></span>'+
+      '<span id="m-daymore-chev" style="display:inline-flex;transition:transform .2s;transform:'+(M._dayMoreOpen?'rotate(180deg)':'none')+';color:var(--accent-text);">'+ico('chev',16,2)+'</span>'+
+    '</button>'+
+    '<div id="m-day-more" style="display:'+(M._dayMoreOpen?'block':'none')+';padding-top:12px;">'+
     mSecLabel('Categoría')+
     '<div id="m-cat-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;">'+mCatChipsInnerHTML()+'</div>'+
     mSecLabel('Tipo de meta','goal')+
@@ -17773,12 +17985,6 @@ function taskModalDayHTML(showFreshCL){
       (showFreshCL?clFreshAreaExtrasHTML():'')+
       '<div id="m-cl-items">'+clItemsHTML()+'</div>'+
       '<div id="m-cl-addrow">'+clAddButtonHTML()+'</div>'+
-    '</div>'+
-    mSecLabel('Cuándo','when')+
-    mSegHTML('m-when-seg',[['weekly','Cada semana'],['week','Solo esta semana'],['date','Fecha(s) puntual(es)']], when, 'mSetWhen')+
-    '<div id="m-date-area" style="display:'+(M.hasDate?'block':'none')+';margin-top:12px;">'+
-      dateFieldHTML('m-date-input', M.task.date||'', true, true)+
-      mRepeatAreaHTML()+
     '</div>'+
     '<div class="fsec" style="margin-top:14px;">'+
       '<div class="frow" style="margin-bottom:'+(M.hora?10:0)+'px;">'+
@@ -17841,7 +18047,14 @@ function taskModalDayHTML(showFreshCL){
     '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Abrir una app o enlace</div><span id="m-app-wrap">'+taskAppBtnHTML()+'</span></div>'+
       '<div style="height:18px;"></div>'+
       mRegistrySectionHTML()+
+    '</div>'+
     '</div>';
+}
+function mToggleDayMore(){
+  M._dayMoreOpen = !M._dayMoreOpen;
+  var a=document.getElementById('m-day-more'), c=document.getElementById('m-daymore-chev');
+  if(a) a.style.display = M._dayMoreOpen ? 'block' : 'none';
+  if(c) c.style.transform = M._dayMoreOpen ? 'rotate(180deg)' : 'none';
 }
 function mToggleAdv(){
   M._advOpen = !M._advOpen;
@@ -17995,45 +18208,66 @@ function mToggleDate(){
 // (mismo done/checklist propios, sin compartir estado con ocurrencias
 // pasadas o futuras), sin tener que tocar la agenda semanal ni el
 // calendario para "buscar" ocurrencias repetidas.
-function mRepeatChipHTML(label,val){
-  var active = M.repeatEvery===val;
-  return '<button type="button" onclick="mSetRepeat('+val+')" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(active?'var(--accent)':'var(--line)')+';background:'+(active?'var(--accent)':'var(--paper)')+';color:'+(active?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+label+'</button>';
+var REPEAT_UNITS = [['d','día(s)'],['w','semana(s)'],['m','mes(es)']];
+function mRepeatPreset(){
+  // 0 = no; 'd1' / 'w1' / 'm1' = presets; 'c' = personalizado
+  var n = M.repeatEvery|0, u = M.repeatUnit||'d';
+  if(!(n>0)) return 0;
+  if(n===1 && !M._repeatCustomOpen) return u+'1';
+  return 'c';
+}
+function mRepeatChipHTML(label,key){
+  var active = mRepeatPreset()===key;
+  return '<button type="button" onclick="mSetRepeat(\''+key+'\')" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(active?'var(--accent)':'var(--line)')+';background:'+(active?'var(--accent)':'var(--paper)')+';color:'+(active?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+label+'</button>';
+}
+function mRepeatSyncUntil(){
+  var el=document.getElementById('m-repeat-until');
+  if(el) M.repeatUntil = el.value || null;
 }
 function mRepeatAreaHTML(){
-  var isCustom = M.repeatEvery>0 && M.repeatEvery!==1 && M.repeatEvery!==7;
-  var showCustomInput = isCustom || M._repeatCustomOpen;
+  var preset = mRepeatPreset();
+  var on = preset!==0;
+  var u = M.repeatUnit||'d';
   var html = '<div id="m-repeat-area" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-soft);">'+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;align-items:center;">¿Se repite?'+infoBtn('repeat')+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
       mRepeatChipHTML('No se repite',0)+
-      mRepeatChipHTML('Cada día',1)+
-      mRepeatChipHTML('Cada semana',7)+
-      '<button type="button" onclick="mToggleRepeatCustom()" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(isCustom?'var(--accent)':'var(--line)')+';background:'+(isCustom?'var(--accent)':'var(--paper)')+';color:'+(isCustom?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">Personalizado</button>'+
+      mRepeatChipHTML('Cada día','d1')+
+      mRepeatChipHTML('Cada semana','w1')+
+      mRepeatChipHTML('Cada mes','m1')+
+      mRepeatChipHTML('Personalizado','c')+
     '</div>'+
-    (showCustomInput?(
-      '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">'+
+    (preset==='c'?(
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">'+
         '<span style="font-size:12.5px;color:var(--ink-soft);">Cada</span>'+
-        '<input id="m-repeat-n" type="number" inputmode="numeric" min="1" max="365" value="'+(M.repeatEvery>0?M.repeatEvery:2)+'" onchange="mSetRepeatCustomVal(this.value)" style="width:56px;text-align:center;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:14px;font-weight:700;color:var(--ink);font-family:Inter,sans-serif;padding:4px 0;"/>'+
-        '<span style="font-size:12.5px;color:var(--ink-soft);">día(s)</span>'+
+        '<input id="m-repeat-n" type="number" inputmode="numeric" min="1" max="365" value="'+(M.repeatEvery>0?M.repeatEvery:2)+'" onchange="mSetRepeatCustomVal(this.value)" style="width:56px;text-align:center;border:none;border-bottom:1.5px solid var(--accent);background:transparent;font-size:16px;font-weight:700;color:var(--ink);font-family:Inter,sans-serif;outline:none;"/>'+
+        REPEAT_UNITS.map(function(x){ var act=u===x[0]; return '<button type="button" onclick="mSetRepeatUnit(\''+x[0]+'\')" style="padding:6px 11px;border-radius:16px;border:1.5px solid '+(act?'var(--accent)':'var(--line)')+';background:'+(act?'var(--accent-bg)':'var(--paper)')+';color:'+(act?'var(--accent-text)':'var(--ink-soft)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+x[1]+'</button>'; }).join('')+
       '</div>'
     ):'')+
-    ''+
+    (on?(
+      '<div style="margin-top:12px;">'+
+        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Termina (opcional)</div>'+
+        dateFieldHTML('m-repeat-until', M.repeatUntil||'', true, false, true)+
+        '<div style="font-size:11px;color:var(--muted);margin-top:6px;">Sin fecha, se repite para siempre.</div>'+
+      '</div>'
+    ):'')+
   '</div>';
   return html;
 }
 function mRerenderRepeatArea(){
+  mRepeatSyncUntil();
   var box=document.getElementById('m-repeat-area');
   if(box) box.outerHTML = mRepeatAreaHTML();
 }
-function mSetRepeat(n){
-  M.repeatEvery = n;
-  M._repeatCustomOpen = false;
+function mSetRepeat(key){
+  if(key===0||key==='0'){ M.repeatEvery=0; M._repeatCustomOpen=false; M.repeatUntil=null; }
+  else if(key==='c'){ M._repeatCustomOpen=true; if(!(M.repeatEvery>0)) M.repeatEvery=2; }
+  else { M.repeatUnit=key.charAt(0); M.repeatEvery=1; M._repeatCustomOpen=false; }
   mRerenderRepeatArea();
   playSound('toggle');
 }
-function mToggleRepeatCustom(){
-  M._repeatCustomOpen = true;
-  if(!(M.repeatEvery>0)) M.repeatEvery = 2;
+function mSetRepeatUnit(u){
+  M.repeatUnit=u; M._repeatCustomOpen=true;
   mRerenderRepeatArea();
 }
 function mSetRepeatCustomVal(v){
@@ -18041,7 +18275,28 @@ function mSetRepeatCustomVal(v){
   if(!n || n<1) n=1;
   if(n>365) n=365;
   M.repeatEvery = n;
+  M._repeatCustomOpen = true;
   mRerenderRepeatArea();
+}
+// Convierte la repetición del editor a los campos que guarda la tarea.
+function mRepeatSave(){
+  mRepeatSyncUntil();
+  var n=M.repeatEvery|0, u=M.repeatUnit||'d';
+  if(!(n>0)) return {repeatEveryDays:null, repeatMonths:null, repeatUntil:null};
+  return {
+    repeatEveryDays: u==='w' ? n*7 : (u==='m' ? n*30 : n),
+    repeatMonths: u==='m' ? n : null,
+    repeatUntil: M.repeatUntil||null
+  };
+}
+// Carga la repetición guardada de una tarea en el estado del editor.
+function mRepeatLoad(t){
+  if(t.repeatMonths>0){ M.repeatEvery=t.repeatMonths; M.repeatUnit='m'; }
+  else if(t.repeatEveryDays>=14 && t.repeatEveryDays%7===0){ M.repeatEvery=t.repeatEveryDays/7; M.repeatUnit='w'; }
+  else if(t.repeatEveryDays===7){ M.repeatEvery=1; M.repeatUnit='w'; }
+  else { M.repeatEvery=t.repeatEveryDays||0; M.repeatUnit='d'; }
+  M.repeatUntil=t.repeatUntil||null;
+  M._repeatCustomOpen = M.repeatEvery>1;
 }
 // ── Time picker helpers (desde / hasta) ──────────────────────────────────────────────────────────────
 function mHoraTo12(hora24){
@@ -20262,6 +20517,66 @@ function timerMarkItem(){
   var q=clItemQty(it);
   if(q>1) setCLProg(t.id,it.id,q); else tapCL(t.id,it.id);
 }
+// ── Fecha límite por ítem de checklist (subtareas con fecha) ───────────────
+// item.due = 'YYYY-MM-DD' (opcional). Se elige con el selector de fechas de la
+// app, se muestra como una etiqueta (roja si venció, de acento si es hoy) y
+// no cambia cómo se completa la tarea ni el XP.
+var _clSheetTaskId = null;
+function clDueInfo(iso, done){
+  if(!iso) return null;
+  var d = new Date(iso+'T12:00:00'); if(isNaN(d)) return null;
+  var t = new Date(); t.setHours(12,0,0,0);
+  var diff = Math.round((d-t)/86400000);
+  var label = diff===0?'Hoy':diff===1?'Mañana':diff===-1?'Ayer':(d.getDate()+' '+MONTHS_LONG[d.getMonth()].slice(0,3).toLowerCase());
+  var cls = done ? 'muted' : (diff<0 ? 'bad' : (diff===0 ? 'accent' : 'muted'));
+  return {label:label, cls:cls, diff:diff};
+}
+function clDueChipHTML(iso, done, onclickJs){
+  var i = clDueInfo(iso, done);
+  var col = !i ? 'var(--muted)' : (i.cls==='bad' ? 'var(--bad)' : (i.cls==='accent' ? 'var(--accent-text)' : 'var(--muted)'));
+  var txt = i ? i.label : '+ fecha';
+  return '<button type="button" onclick="'+onclickJs+'" style="background:'+(i&&i.cls!=='muted'?'var(--accent-bg)':'transparent')+';border:'+(i?'1.5px solid '+col:'1.5px dashed var(--line)')+';color:'+col+';border-radius:12px;padding:2px 9px;font-size:11px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;flex-shrink:0;">'+(i?ico('calendar',11,2)+' ':'')+txt+'</button>';
+}
+function mCLDuePick(id){
+  var host = document.getElementById('cl-due-host');
+  if(!host){ host = document.createElement('div'); host.id='cl-due-host'; host.style.display='none'; document.body.appendChild(host); }
+  var cur = '';
+  for(var k=0;k<M.checklist.length;k++){ if(M.checklist[k].id===id){ cur = M.checklist[k].due||''; break; } }
+  host.innerHTML = '<input type="hidden" id="cl-due-'+id+'" value="'+cur+'"/>';
+  openCustomDatePicker('cl-due-'+id, false);
+}
+function mCLDueClear(id){
+  for(var k=0;k<M.checklist.length;k++){ if(M.checklist[k].id===id){ delete M.checklist[k].due; break; } }
+  mRerenderCL();
+}
+function sheetCLDuePick(taskId, itemId){
+  _clSheetTaskId = taskId;
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  var it = (t.checklist||[]).find(function(i){return i.id===itemId;});
+  var host = document.getElementById('cl-due-host');
+  if(!host){ host = document.createElement('div'); host.id='cl-due-host'; host.style.display='none'; document.body.appendChild(host); }
+  host.innerHTML = '<input type="hidden" id="shdue-'+itemId+'" value="'+((it&&it.due)||'')+'"/>';
+  openCustomDatePicker('shdue-'+itemId, false);
+}
+function sheetCLDueSet(taskId, itemId, iso){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  var updated = Object.assign({},t,{checklist:(t.checklist||[]).map(function(i){
+    if(i.id!==itemId) return i;
+    var n = Object.assign({},i); if(iso) n.due = iso; else delete n.due; return n;
+  })});
+  S.tasks = S.tasks.map(function(x){return x.id===taskId?updated:x;});
+  saveState(); render(); _refreshCLSheet(taskId);
+}
+document.addEventListener('change', function(e){
+  var el = e.target; if(!el || !el.id) return;
+  if(el.id.indexOf('cl-due-')===0 && typeof M!=='undefined' && M && M.checklist){
+    var id = el.id.slice(7);
+    for(var k=0;k<M.checklist.length;k++){ if(M.checklist[k].id===id){ if(el.value) M.checklist[k].due = el.value; else delete M.checklist[k].due; break; } }
+    mRerenderCL();
+  } else if(el.id.indexOf('shdue-')===0 && _clSheetTaskId){
+    sheetCLDueSet(_clSheetTaskId, el.id.slice(6), el.value||null);
+  }
+});
 function clItemsHTML(){
   return M.checklist.map(function(item){
     var q = clItemQty(item);
@@ -20312,6 +20627,7 @@ function clItemsHTML(){
         qtyBtn+itemAppBtnHTML(item)+itemTmBtnHTML(item)+
         '<button onclick="mRemoveCL(\''+item.id+'\')" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:20px;line-height:1;flex-shrink:0;padding:0;">×</button>'+
       '</div>'+
+      '<div style="display:flex;align-items:center;gap:6px;margin:3px 0 4px 38px;">'+clDueChipHTML(item.due,false,'mCLDuePick(\''+item.id+'\')')+(item.due?'<button type="button" onclick="mCLDueClear(\''+item.id+'\')" title="Quitar fecha" aria-label="Quitar fecha" style="background:none;border:none;color:var(--muted-soft);cursor:pointer;font-size:15px;line-height:1;padding:0;">×</button>':'')+'</div>'+
       qtyEditorHTML+barHTML+
     '</div>';
   }).join('');
@@ -20663,7 +20979,8 @@ function mSave(){
   // Pedido: la tarea COMPLETA puede estar vinculada (clLinkUp) aunque tenga
   // checklist propio — antes se borraba el vínculo acá apenas el checklist
   // tenía algún ítem; ahora se conserva siempre tal cual estaba.
-  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,registryId:(M.registryId&&regById(M.registryId))?M.registryId:null,regPerItem:!!(M.hasCL&&M.registryId&&M.regPerItem),regDue:(M.registryId&&M.regDue&&M.regDue.mode&&M.regDue.mode!=='now')?M.regDue:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:(isDay&&specificDate&&M.repeatEvery>0)?M.repeatEvery:null});
+  var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,registryId:(M.registryId&&regById(M.registryId))?M.registryId:null,regPerItem:!!(M.hasCL&&M.registryId&&M.regPerItem),regDue:(M.registryId&&M.regDue&&M.regDue.mode&&M.regDue.mode!=='now')?M.regDue:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:null,repeatMonths:null,repeatUntil:null});
+  if(isDay&&specificDate&&M.repeatEvery>0) Object.assign(saved,mRepeatSave());
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
@@ -22235,6 +22552,77 @@ function showFirstLevelUpTip(){
   }, 800);
 }
 
+// ── Bienvenida (primera vez): crea tu primera tarea en 2 pasos ─────────────
+// Solo aparece si la app está vacía (sin tareas ni historial). Quien ya usa la
+// app queda marcado como "ya vio la bienvenida" sin mostrarle nada.
+var _WEL = {step:1, text:''};
+function maybeShowWelcome(){
+  if(S.welcomeDone) return;
+  if(typeof currentUser!=='undefined' && currentUser) return; // cuenta ya iniciada: sus datos pueden estar llegando de la nube
+  var empty = !(S.tasks||[]).length && !Object.keys(S.dailyHistory||{}).length && !(S.xp>0);
+  if(!empty){ S.welcomeDone = true; try{ saveState(); }catch(e){} return; }
+  if(document.getElementById('welcome-ov')) return;
+  _WEL = {step:1, text:''};
+  welcomeRender();
+}
+function welcomeClose(){
+  S.welcomeDone = true; try{ saveState(); }catch(e){}
+  removeOverlay('welcome-ov');
+  render();
+}
+function welcomeSuggest(t){
+  var el = document.getElementById('wel-input'); if(el){ el.value = t; el.focus(); }
+  _WEL.text = t;
+}
+function welcomeNext(){
+  var el = document.getElementById('wel-input');
+  var name = el ? el.value.trim() : '';
+  if(!name){ if(el){ el.style.borderBottomColor='var(--bad)'; el.focus(); } return; }
+  _WEL.text = name; _WEL.step = 2; welcomeRender();
+}
+function welcomeFinish(){
+  var name = (_WEL.text||'').trim();
+  if(name){
+    S.tasks.push({id:uid(),text:name,done:false,period:'dia',day:dayIdxFromDate(new Date()),qty:1,prog:0,checklist:[],links:{},crucial:false,linkMode:'unit',categoryId:null,hora:null,duracion:60,notif:null});
+  }
+  welcomeClose();
+  toast('✓ ¡Listo! Toca el círculo cuando la completes');
+}
+function welcomePickLook(mode){
+  if(mode==='auto'){ S.themeAuto = true; applyAutoTheme(true); }
+  else { S.themeAuto = false; S.theme = mode; document.body.className='theme-'+mode+' task-size-medium'; }
+  saveState(); welcomeRender();
+}
+function welcomeRender(){
+  removeOverlay('welcome-ov');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='welcome-ov';
+  var dots = '<div style="display:flex;justify-content:center;gap:6px;margin-bottom:18px;">'+[1,2].map(function(n){ return '<span style="width:'+(n===_WEL.step?18:6)+'px;height:6px;border-radius:3px;background:'+(n===_WEL.step?'var(--accent)':'var(--line)')+';transition:width .2s;"></span>'; }).join('')+'</div>';
+  var body;
+  if(_WEL.step===1){
+    var ex = ['Tomar agua','Caminar 20 minutos','Leer 10 páginas','Ordenar mi escritorio'];
+    body = '<div class="serif" style="font-weight:700;font-size:24px;margin-bottom:6px;color:var(--ink);">Bienvenida/o a Gramifica</div>'+
+      '<div style="font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px;">Empecemos por lo simple: ¿qué te gustaría hacer hoy? Después puedes agregar horarios, metas, repeticiones y mucho más.</div>'+
+      '<input id="wel-input" class="finp" value="'+esc(_WEL.text)+'" placeholder="Ej. Caminar 20 minutos" maxlength="80" style="font-size:16px;" onkeydown="if(event.key===\'Enter\')welcomeNext()"/>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 20px;">'+ex.map(function(t){ return '<button type="button" onclick="welcomeSuggest(\''+t+'\')" style="padding:6px 11px;border-radius:16px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+t+'</button>'; }).join('')+'</div>'+
+      '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="welcomeNext()">Continuar</button><button class="cbtn" onclick="welcomeClose()">Explorar solo</button></div>';
+  } else {
+    var look = S.themeAuto ? 'auto' : (S.theme==='dark'?'dark':'light');
+    var opt = function(id,label){ var on = look===id; return '<button type="button" onclick="welcomePickLook(\''+id+'\')" style="flex:1;padding:11px 4px;border-radius:12px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+label+'</button>'; };
+    body = '<div class="serif" style="font-weight:700;font-size:22px;margin-bottom:10px;color:var(--ink);">Así funciona</div>'+
+      '<div style="font-size:14px;color:var(--ink-soft);line-height:1.7;margin-bottom:18px;">'+
+        '<div style="margin-bottom:8px;"><b style="color:var(--ink);">1.</b> Tu tarea aparece en <b>Hoy</b>. Toca el círculo para marcarla como hecha.</div>'+
+        '<div style="margin-bottom:8px;"><b style="color:var(--ink);">2.</b> Cada tarea suma <b>XP</b> y mantiene tu <b>racha</b> de días cumplidos.</div>'+
+        '<div><b style="color:var(--ink);">3.</b> El botón <b>+</b> agrega más tareas; en <b>Yo</b> ajustas todo lo demás.</div>'+
+      '</div>'+
+      '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Apariencia</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:20px;">'+opt('auto','Automática')+opt('light','Clara')+opt('dark','Oscura')+'</div>'+
+      '<button class="sbtn" onclick="welcomeFinish()">Empezar</button>';
+  }
+  ov.innerHTML = '<div class="sheet" style="padding-top:22px;">'+dots+body+'</div>';
+  document.body.appendChild(ov);
+  var el = document.getElementById('wel-input'); if(el && _WEL.step===1) setTimeout(function(){ try{ el.focus(); }catch(e){} }, 150);
+}
+
 function maybeShowTutorial(){
   // Pedido: el tutorial ya no aparece solo al abrir la app (sigue disponible en Yo → Tutorial).
   if(!S.tutorialSeen){ S.tutorialSeen = true; try{ saveState(); }catch(e){} }
@@ -22725,7 +23113,7 @@ function saveReminder(){
   saveState();
   scheduleNotifications();
   removeOverlay('reminder-modal');
-  toast('🔔 Recordatorio guardado');
+  toast('Recordatorio guardado');
   RM=null;
   render();
 }
@@ -23515,7 +23903,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.17.121';
+var APP_VERSION = '2026.10.20.122';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
@@ -23570,7 +23958,9 @@ setTimeout(function(){
   var sp=document.getElementById('splash');
   if(sp){sp.classList.add('hide');setTimeout(function(){sp.remove();},600);}
   // Tutorial inicial (si no se ha visto)
+  initAutoThemeListener();
   setTimeout(maybeShowTutorial, 600);
+  setTimeout(maybeShowWelcome, 900);
   // Show reset notification on weekend (after splash)
   setTimeout(checkResetNotification, 400);
   // Preguntar permiso de notificaciones (de forma muy poco insistente)
