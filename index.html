@@ -3201,18 +3201,78 @@ function trackAddXP(track, pts, label){
     }, 700);
   }
 }
+// ── Dificultad extra (modificadores) ───────────────────────────────────────
+// Cada registro de Marcas puede tener modificadores (con lastre, más inclinación…). Una entrada
+// que los usa suma un poco más de XP (con tope) y, si el modificador cambia las condiciones,
+// no cuenta para las marcas estándar de una habilidad («solo condiciones estándar»).
+var MOD_CAP = 30; // tope total de XP extra, en %
+var MOD_PRESETS = [
+  {id:'lastre',  name:'Con lastre',                kind:'amount', unit:'kg', pct:1, max:15, std:false},
+  {id:'inclin',  name:'Más inclinación o desnivel', kind:'toggle', pct:8,  std:false},
+  {id:'terreno', name:'Terreno difícil',            kind:'toggle', pct:8,  std:false},
+  {id:'borde',   name:'Borde o agarre más pequeño', kind:'toggle', pct:8,  std:false},
+  {id:'unilat',  name:'A una mano o una pierna',    kind:'toggle', pct:10, std:false},
+  {id:'tempo',   name:'Tempo lento o con pausas',   kind:'toggle', pct:5,  std:false},
+  {id:'fatiga',  name:'Con fatiga previa',          kind:'toggle', pct:6,  std:true},
+  {id:'extra',   name:'Dificultad extra',           kind:'toggle', pct:10, std:false}
+];
+function regModDefs(reg){ return (reg && reg.mods) || []; }
+function regModPct(reg, e){
+  var m = e && e.mods; if(!m) return 0; var t = 0;
+  regModDefs(reg).forEach(function(d){
+    var v = m[d.id]; if(!v) return;
+    if(d.kind==='amount'){ var amt = +v||0; if(amt>0) t += Math.min(d.max||15, amt*(d.pct||1)); else t += 0; }
+    else t += d.pct||0;
+  });
+  return Math.min(MOD_CAP, t);
+}
+function regModBonus(reg, e, base){
+  var pct = regModPct(reg, e);
+  if(pct<=0 || !(base>0)) return 0;
+  return Math.max(1, Math.round(base*pct/100));
+}
+// ── Una sesión, un XP ──────────────────────────────────────────────────────
+// En un seguimiento, lo que sale de la TAREA de un día y lo que sale de las ANOTACIONES de ese
+// día no se suman: cuenta el mayor de los dos (la sesión es una sola). Se puede volver al modo
+// antiguo (sumar todo) con tr.xpMode='sum'.
+function trkSingle(tr){ return tr.xpMode!=='sum'; }
+function trkDayAdd(tr, date, kind, pts, label){
+  if(!pts) return;
+  if(!trkSingle(tr)){
+    if(pts>0) trackAddXP(tr, pts, label);
+    else { tr.xp = Math.max(0,(tr.xp||0)+pts); tr.log = (tr.log||[]).concat([{d:todayStr(), x:pts, n:label||''}]).slice(-150); }
+    return;
+  }
+  date = date || todayStr();
+  var L = tr.dayXp || (tr.dayXp = {});
+  var d = L[date] || (L[date] = {task:0, reg:0, applied:0});
+  d[kind] = Math.max(0, (d[kind]||0) + pts);
+  var target = Math.max(d.task, d.reg), delta = target - d.applied, both = d.task>0 && d.reg>0;
+  var note = both ? ' · una sola sesión (tarea '+d.task+', registros '+d.reg+')' : '';
+  if(delta>0){ d.applied = target; trackAddXP(tr, delta, (label||'')+note); }
+  else if(delta<0){ d.applied = target; tr.xp = Math.max(0,(tr.xp||0)+delta); tr.log = (tr.log||[]).concat([{d:todayStr(), x:delta, n:(label||'')+note+' (ajuste)'}]).slice(-150); }
+  else if(pts>0 && both){ tr.log = (tr.log||[]).concat([{d:todayStr(), x:0, n:(label||'')+' · ya contado en esta sesión'+note}]).slice(-150); }
+  // el libro solo necesita los últimos días
+  var keys = Object.keys(L); if(keys.length>120){ keys.sort(); keys.slice(0, keys.length-90).forEach(function(k){ delete L[k]; }); }
+}
+function regKeyDate(reg, key){
+  if(String(key).indexOf('h:')===0) return String(key).slice(2);
+  var e = reg ? (reg.entries||[]).find(function(x){return x.id===key;}) : null;
+  return e ? e.date : todayStr();
+}
 // XP por registros: cada entrada real (no "esperada") de un registro enlazado suma los XP
 // elegidos, una sola vez por entrada. Si la entrada se borra o deja de contar, se quitan.
 // XP que da una entrada: fija por anotación, o según la cantidad anotada (ej. 1 XP por bloque, con tope opcional).
 function regXpAmount(rs, reg, entry){
+  var base;
   if(rs.mode==='metric' && rs.metricId){
     var v = entry && entry.values ? entry.values[rs.metricId] : null;
     if(!(v>0)) return 0;
-    var x = Math.round(v*rs.xp);
-    if(rs.cap>0) x = Math.min(x, rs.cap);
-    return Math.max(0,x);
-  }
-  return rs.xp;
+    base = Math.round(v*rs.xp);
+    if(rs.cap>0) base = Math.min(base, rs.cap);
+    base = Math.max(0,base);
+  } else base = rs.xp;
+  return base + regModBonus(reg, entry, base);
 }
 // Suma, ajusta o quita la XP de una entrada (si la editas, la XP se corrige: no se duplica).
 function syncRegXP(reg, entry){
@@ -3221,11 +3281,10 @@ function syncRegXP(reg, entry){
     var rs = (tr.regSources||[]).find(function(x){return x.regId===reg.id;}); if(!rs) return;
     if(!tr.regAwarded) tr.regAwarded = {};
     var nw = entry.status==='expected' ? 0 : regXpAmount(rs, reg, entry), old = tr.regAwarded[entry.id], lbl = (entry.label||reg.name);
-    if(old==null){ if(nw>0){ tr.regAwarded[entry.id] = nw; trackAddXP(tr, nw, lbl); } return; }
+    if(old==null){ if(nw>0){ tr.regAwarded[entry.id] = nw; trkDayAdd(tr, entry.date, 'reg', nw, lbl); } return; }
     var diff = nw-old; if(diff===0) return;
     if(nw>0) tr.regAwarded[entry.id] = nw; else delete tr.regAwarded[entry.id];
-    if(diff>0) trackAddXP(tr, diff, lbl+' (ajuste)');
-    else { tr.xp = Math.max(0,(tr.xp||0)+diff); tr.log = (tr.log||[]).concat([{d:todayStr(), x:diff, n:lbl+' (ajuste)'}]).slice(-150); }
+    trkDayAdd(tr, entry.date, 'reg', diff, lbl+' (ajuste)');
   });
 }
 function awardRegXP(reg, key){
@@ -3235,15 +3294,14 @@ function awardRegXP(reg, key){
     if(!tr.regAwarded) tr.regAwarded = {};
     if(tr.regAwarded[key]!=null) return;
     tr.regAwarded[key] = rs.xp;
-    trackAddXP(tr, rs.xp, reg.name);
+    trkDayAdd(tr, regKeyDate(reg, key), 'reg', rs.xp, reg.name);
   });
 }
 function revokeRegXP(reg, key){
   (S.levelTracks||[]).forEach(function(tr){
     if(!tr.regAwarded || tr.regAwarded[key]==null) return;
     var x = tr.regAwarded[key]; delete tr.regAwarded[key];
-    tr.xp = Math.max(0,(tr.xp||0)-x);
-    tr.log = (tr.log||[]).concat([{d:todayStr(), x:-x, n:(reg?reg.name:'Registro')+' (quitado)'}]).slice(-150);
+    trkDayAdd(tr, regKeyDate(reg, key), 'reg', -x, (reg?reg.name:'Registro')+' (quitado)');
   });
 }
 function taskQualifiesForTrack(task, track){
@@ -3305,7 +3363,7 @@ function trackSyncTask(task, oldTask){
       if(i.done && !mi.done){ if(IC>0) notes.push({x:IC, n:(i.text||'ítem')+' · completado'}); mi.done = 1; }
     });
     notes.forEach(function(nt){
-      trackAddXP(tr, nt.x, nt.n);
+      trkDayAdd(tr, taskEntryDate(task), 'task', nt.x, nt.n);
       try{ logTrackToRegs(tr, task, nt.x); }catch(e){}
     });
   });
@@ -3343,17 +3401,8 @@ function awardTrackXP(task, pts){
     if(!taskQualifiesForTrack(task, track)) return;
     var ptsT = tkCompleteXP(track, task, pts);
     if(!(ptsT>0)) return;
-    var oldLvl = getLevel(track.xp||0);
-    track.xp = (track.xp||0) + ptsT;
-    track.log = (track.log||[]).concat([{d:todayStr(), x:ptsT, n:(task.text||'')+' · completada'}]).slice(-150);
+    trkDayAdd(track, taskEntryDate(task), 'task', ptsT, (task.text||'')+' · completada');
     try{ logTrackToRegs(track, task, ptsT); }catch(e){}
-    var newLvl = getLevel(track.xp);
-    if(newLvl > oldLvl){
-      setTimeout(function(){
-        playSound('achievement');
-        showRewardToast('✦ '+esc(track.name)+' — ¡Nivel '+newLvl+'!', trackLevelName(track,newLvl));
-      }, 700);
-    }
   });
 }
 function playLevelUpAnimation(){
@@ -6843,6 +6892,7 @@ function regEditorBodyHTML(){
           [['high','↑ Más alto es mejor'],['low','↓ Más bajo es mejor'],['none','— Sin récord']].map(function(o){return '<option value="'+o[0]+'"'+((m.better||'high')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>';
       }).join('')+'<div style="height:12px;"></div>';
     }
+    if(r.kind==='metrics') html += mSecLabel('Dificultad extra')+'<div id="re-mods">'+reModsHTML()+'</div><div style="height:14px;"></div>';
     html += mSecLabel('Metas')+'<div id="re-goals">'+reGoalsHTML()+'</div><div style="height:14px;"></div>';
     if(isFin){
       html += mSecLabel('Movimientos recurrentes','regrec')+'<div id="re-rec">'+reRecHTML()+'</div><div style="height:14px;"></div>'+
@@ -6965,8 +7015,32 @@ function reApplyTemplate(key){
   if(!RE.reg.name) RE.reg.name = t.label==='Libre' ? '' : t.label;
   reRerender();
 }
+
+// ── Dificultad extra: editor de modificadores del registro ──
+function reModsHTML(){
+  var defs = regModDefs(RE.reg);
+  var h = '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:8px;">Opciones que se marcan al anotar (con lastre, inclinación…). Suman un poco de XP y, si cambian las condiciones, no cuentan como marca estándar.</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">';
+  h += MOD_PRESETS.map(function(p){ var on = defs.some(function(d){return d.id===p.id;}); return '<button type="button" onclick="reModTogglePreset(\''+p.id+'\')" style="padding:6px 11px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';color:'+(on?'var(--ink)':'var(--muted)')+';background:transparent;">'+(on?'✓ ':'+ ')+esc(p.name)+'</button>'; }).join('')+'</div>';
+  h += defs.map(function(d){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;"><input class="finp" value="'+esc(d.name)+'" onchange="reModSet(\''+d.id+'\',\'name\',this.value)" style="flex:1;margin:0;min-width:0;"/>'+
+      '<input class="finp" type="number" inputmode="numeric" min="0" max="'+MOD_CAP+'" value="'+(d.pct||0)+'" onchange="reModSet(\''+d.id+'\',\'pct\',this.value)" style="width:54px;margin:0;text-align:right;" aria-label="Porcentaje de XP extra"/><span style="color:var(--muted);width:'+(d.kind==='amount'?'58':'14')+'px;font-size:11px;">%'+(d.kind==='amount'?'/'+esc(d.unit||'u'):'')+'</span>'+
+      '<button type="button" onclick="reModSet(\''+d.id+'\',\'std\','+(!d.std)+')" title="¿Cuenta como marca estándar?" style="background:none;border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:10.5px;cursor:pointer;color:var(--muted);">'+(d.std?'estándar':'no estándar')+'</button>'+
+      '<button type="button" onclick="reModRemove(\''+d.id+'\')" aria-label="Quitar" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;">×</button></div>';
+  }).join('');
+  if(defs.length<10) h += '<button type="button" class="cat-tab-btn" onclick="reModAddCustom()" style="padding:6px 12px;font-size:12.5px;">+ Otra dificultad</button>';
+  return h;
+}
+function reModsRefresh(){ var e = document.getElementById('re-mods'); if(e) e.innerHTML = reModsHTML(); }
+function reModTogglePreset(pid){
+  var defs = RE.reg.mods || (RE.reg.mods = []), i = defs.findIndex(function(d){return d.id===pid;});
+  if(i>=0) defs.splice(i,1); else defs.push(JSON.parse(JSON.stringify(MOD_PRESETS.find(function(p){return p.id===pid;}))));
+  reModsRefresh();
+}
+function reModSet(id, f, v){ (RE.reg.mods||[]).forEach(function(d){ if(d.id===id){ if(f==='pct') v = Math.max(0, Math.min(MOD_CAP, +v||0)); if(f==='name') v = String(v).slice(0,40); d[f]=v; } }); reModsRefresh(); }
+function reModRemove(id){ RE.reg.mods = (RE.reg.mods||[]).filter(function(d){return d.id!==id;}); reModsRefresh(); }
+function reModAddCustom(){ (RE.reg.mods || (RE.reg.mods=[])).push({id:'c'+uid(), name:'Mi dificultad', kind:'toggle', pct:5, std:false}); reModsRefresh(); }
 function reAddMetric(){
-  if((RE.reg.metrics||[]).length>=6){ toast('Máximo 6 métricas'); return; }
+  if((RE.reg.metrics||[]).length>=14){ toast('Máximo 14 medidas'); return; }
   RE.reg.metrics = (RE.reg.metrics||[]).concat([{id:uid(), name:'', unit:'', better:'high'}]);
   reRerender();
 }
@@ -7312,7 +7386,7 @@ function regEntryBodyHTML(){
     html += mSecLabel('Nota (opcional)')+
       '<input id="en-note" class="finp" type="text" value="'+esc(ex?(ex.note||''):'')+'" style="margin-bottom:14px;"/>';
   }
-  html += enAxesHTML()+'<datalist id="en-labels">'+Object.keys(labels).map(function(l){return '<option value="'+esc(l)+'">';}).join('')+'</datalist>'+
+  html += enModsHTML()+enAxesHTML()+'<datalist id="en-labels">'+Object.keys(labels).map(function(l){return '<option value="'+esc(l)+'">';}).join('')+'</datalist>'+
     '<div id="en-date-lbl">'+mSecLabel(isFin && EN.status==='expected' ? 'Fecha estimada' : 'Fecha')+'</div>'+
     dateFieldHTML('en-date', EN.date, false, false)+'<div style="height:18px;"></div>'+
     '<div style="display:flex;gap:8px;">'+
@@ -7410,6 +7484,7 @@ function saveRegEntry(){
     if(!any && !(EN.existing && EN.existing.auto)){ toast('Escribe al menos un valor'); return; }
     entry.values = vals; entry.note = g('en-note').trim();
     if(EN.axes && EN.axes.length) entry.axes = EN.axes.slice();
+    var _md = enModsClean(reg); if(_md) entry.mods = _md;
   }
   var wasRecord = reg.kind==='metrics' ? regRecordsBroken(reg, entry) : [];
   reg.entries = (reg.entries||[]).filter(function(e){return e.id!==entry.id;}).concat([entry]);
@@ -8505,9 +8580,177 @@ var SK_MODES = [['mixed','Mixto'],['real','Medida real'],['consist','Constancia'
 var SK = null;
 function skTrack(id){ return (S.levelTracks||[]).find(function(t){return t.id===id;})||null; }
 function skAxes(tr){ return (tr.axes||[]).filter(function(a){return !a.del;}); }
-function skSubs(a){ return (a&&a.subs||[]).filter(function(x){return !x.del;}); }
-function skAll(tr){ var o=[]; skAxes(tr).forEach(function(a){ o.push(a); skSubs(a).forEach(function(x){ o.push(x); }); }); return o; }
-function skFind(tr, id){ var r=null; skAxes(tr).forEach(function(a){ if(a.id===id) r={a:a,parent:null}; skSubs(a).forEach(function(x){ if(x.id===id) r={a:x,parent:a}; }); }); return r; }
+function skSubs(a){ return (a&&a.subs||[]).filter(function(x){return !x.del;}); }  // en bruto: incluye atajos (ref)
+// Red de habilidades: una habilidad puede tener sub-habilidades a cualquier profundidad, y una misma
+// habilidad puede aparecer dentro de varias (un «atajo» {id, ref:<id destino>} apunta a la original).
+var SK_MAX_DEPTH = 6, SK_MAX_KIDS = 7;
+function skAll(tr){ var o=[]; (function walk(list){ list.forEach(function(a){ if(a.ref) return; o.push(a); walk(skSubs(a)); }); })(skAxes(tr)); return o; }
+function skFind(tr, id, withRef){
+  var r=null;
+  (function walk(list, parent, path){
+    list.forEach(function(a){
+      if(r) return;
+      if(a.id===id && (!a.ref || withRef)){ r={a:a, parent:parent, path:path}; return; }
+      if(!a.ref) walk(skSubs(a), a, path.concat([a]));
+    });
+  })(skAxes(tr), null, []);
+  return r;
+}
+function skFindAny(id){
+  var ts = S.levelTracks||[];
+  for(var i=0;i<ts.length;i++){ var f = skFind(ts[i], id); if(f){ f.tr = ts[i]; return f; } }
+  return null;
+}
+// Hijos ya resueltos: cada uno con su seguimiento real (los atajos se siguen hasta la original).
+function skKids(tr, a){
+  return skSubs(a).map(function(x){
+    if(!x.ref) return {n:x, tr:tr, via:null};
+    var f = skFindAny(x.ref); if(!f) return null;
+    return {n:f.a, tr:f.tr, via:x};
+  }).filter(Boolean);
+}
+function skAxesV(tr){
+  return skAxes(tr).map(function(x){
+    if(!x.ref) return {n:x, tr:tr, via:null};
+    var f = skFindAny(x.ref); if(!f) return null;
+    return {n:f.a, tr:f.tr, via:x};
+  }).filter(Boolean);
+}
+function skDescIds(tr, a, out, depth){
+  out = out||{}; depth = depth||0; if(depth>12) return out;
+  skKids(tr, a).forEach(function(k){ if(out[k.n.id]) return; out[k.n.id]=1; skDescIds(k.tr, k.n, out, depth+1); });
+  return out;
+}
+// ¿Dónde aparece una habilidad? (original + atajos), como rutas «Seguimiento › Habilidad › …».
+function skWhere(id){
+  var out = [];
+  (S.levelTracks||[]).forEach(function(tr){
+    (function walk(list, trail, parentId){
+      list.forEach(function(x){
+        if((x.ref||x.id)===id) out.push({tid:tr.id, trail:trail.slice(), parentId:parentId, alias:!!x.ref});
+        if(!x.ref) walk(skSubs(x), trail.concat([{id:x.id,name:x.name}]), x.id);
+      });
+    })(skAxes(tr), [{id:null,name:tr.name}], null);
+  });
+  return out;
+}
+function skPurgeIds(ids){
+  // quita etiquetas de entradas y atajos que apuntaban a habilidades eliminadas
+  (S.registries||[]).forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.axes) e.axes = e.axes.filter(function(i){return !ids[i];}); }); });
+  (S.levelTracks||[]).forEach(function(tr){
+    var prune = function(list){ return (list||[]).filter(function(x){ return !(x.ref && ids[x.ref]); }).map(function(x){ if(x.subs) x.subs = prune(x.subs); return x; }); };
+    tr.axes = prune(tr.axes);
+  });
+}
+
+// ── Plantillas de habilidades ───────────────────────────────────────────────
+// Datos puros (se pueden compartir): cada nodo lleva una clave estable `tpl` para que las plantillas
+// se enlacen entre sí (Escalada y Trote reutilizan nodos de Cuerpo como atajos) sin duplicar nada.
+// Las metas son referencias APROXIMADAS para empezar: se editan en cada habilidad.
+var SK_TPL = {
+  cuerpo: {
+    name:'Cuerpo', color:'#c9693a', icon:'💪', needs:[],
+    desc:'Mapa de tu fuerza y movilidad por partes del cuerpo: dedos, brazos, piernas, torso y core.',
+    reg:{name:'Fuerza y cuerpo', color:'#c9693a', mods:['lastre','borde','unilat','tempo','fatiga'], metrics:[
+      {k:'ag20',name:'Agarre abierto 20 mm',unit:'kg'},{k:'ag25',name:'Agarre abierto 25 mm',unit:'kg'},
+      {k:'sa20',name:'Semiarqueado 20 mm',unit:'kg'},{k:'sa25',name:'Semiarqueado 25 mm',unit:'kg'},{k:'pin',name:'Pinza',unit:'kg'},
+      {k:'col',name:'Colgado en barra',unit:'s'},{k:'cur',name:'Curl de bíceps (8 rep.)',unit:'kg'},{k:'pre',name:'Press de hombros (8 rep.)',unit:'kg'},
+      {k:'sen',name:'Sentadilla (1 rep.)',unit:'kg'},{k:'sal',name:'Salto vertical',unit:'cm'},
+      {k:'dom',name:'Dominadas',unit:'rep.'},{k:'fle',name:'Flexiones',unit:'rep.'},{k:'fon',name:'Fondos',unit:'rep.'},
+      {k:'pla',name:'Plancha',unit:'s'}]},
+    tree:[
+      {k:'brazos',n:'Brazos',kids:[
+        {k:'dedos',n:'Dedos',kids:[
+          {k:'ag20',n:'Agarre abierto 20 mm',m:'ag20',s:20,t:120},{k:'ag25',n:'Agarre abierto 25 mm',m:'ag25',s:20,t:130},
+          {k:'sa20',n:'Semiarqueado 20 mm',m:'sa20',s:20,t:120},{k:'sa25',n:'Semiarqueado 25 mm',m:'sa25',s:20,t:130},{k:'pin',n:'Fuerza de pinza',m:'pin',s:5,t:40}]},
+        {k:'ante',n:'Antebrazo',m:'col',s:10,t:120},{k:'bice',n:'Bíceps',m:'cur',s:5,t:30},{k:'homb',n:'Hombros',m:'pre',s:10,t:50}]},
+      {k:'piernas',n:'Piernas',kids:[{k:'sen',n:'Sentadilla',m:'sen',s:20,t:140},{k:'sal',n:'Salto vertical',m:'sal',s:20,t:70}]},
+      {k:'torso',n:'Torso',kids:[{k:'dom',n:'Dominadas',m:'dom',s:0,t:20},{k:'fle',n:'Flexiones',m:'fle',s:0,t:50},{k:'fon',n:'Fondos',m:'fon',s:0,t:25}]},
+      {k:'core',n:'Core',kids:[{k:'pla',n:'Plancha',m:'pla',s:20,t:240}]}
+    ]},
+  escalada: {
+    name:'Escalada', color:'#3f7fbf', icon:'🧗', needs:['cuerpo'],
+    desc:'Agarre, bloques y vías. Tu fuerza de agarre viene de «Cuerpo»: lo que entrenes allí también sube aquí.',
+    reg:{name:'Escalada', color:'#3f7fbf', mods:['borde','unilat','fatiga'], metrics:[
+      {k:'roj',name:'Bloques rojos',unit:'bloques'},{k:'gra',name:'Grado máx. de bloque (V)',unit:'V'},{k:'lar',name:'Largos de vía',unit:'largos'}]},
+    tree:[
+      {k:'agarre',n:'Fuerza de agarre',kids:[{ref:'cuerpo/ag20'},{ref:'cuerpo/ag25'},{ref:'cuerpo/sa20'},{ref:'cuerpo/sa25'},{ref:'cuerpo/pin'}]},
+      {k:'tracc',n:'Tracción',kids:[{ref:'cuerpo/dom'},{ref:'cuerpo/bice'}]},
+      {k:'bloque',n:'Bloques',kids:[{k:'roj',n:'Bloques rojos',m:'roj',s:0,t:10},{k:'gra',n:'Grado máximo',m:'gra',s:0,t:8}]},
+      {k:'resis',n:'Resistencia',kids:[{k:'lar',n:'Largos de vía',m:'lar',s:0,t:20}]}
+    ]},
+  trote: {
+    name:'Trote', color:'#4f9a6b', icon:'🏃', needs:['cuerpo'],
+    desc:'Marcas estándar (5K, 10K, media maratón 21K, maratón 42K, Cooper) y fuerza de piernas enlazada con «Cuerpo».',
+    reg:{name:'Trote', color:'#4f9a6b', mods:['lastre','inclin','terreno','fatiga'], metrics:[
+      {k:'k5',name:'5 km (tiempo)',unit:'min',better:'low'},{k:'k10',name:'10 km (tiempo)',unit:'min',better:'low'},
+      {k:'k21',name:'Media maratón 21 km (tiempo)',unit:'min',better:'low'},{k:'k42',name:'Maratón 42 km (tiempo)',unit:'min',better:'low'},
+      {k:'coo',name:'Cooper (12 min)',unit:'m'},{k:'sem',name:'Km semanales',unit:'km'},{k:'las',name:'Distancia con lastre',unit:'km'}]},
+    tree:[
+      {k:'vel',n:'Velocidad',kids:[{k:'k5',n:'5 km',m:'k5',s:40,t:20,low:1},{k:'k10',n:'10 km',m:'k10',s:80,t:42,low:1},{k:'coo',n:'Test de Cooper',m:'coo',s:1600,t:3200}]},
+      {k:'res',n:'Resistencia',kids:[{k:'k21',n:'Media maratón 21 km',m:'k21',s:180,t:100,low:1},{k:'k42',n:'Maratón 42 km',m:'k42',s:330,t:210,low:1},{k:'sem',n:'Km semanales',m:'sem',s:0,t:60}]},
+      {k:'fz',n:'Fuerza',kids:[{ref:'cuerpo/piernas'},{k:'las',n:'Con lastre',m:'las',s:0,t:10}]}
+    ]}
+};
+function skTplFind(key){
+  var r = null;
+  (S.levelTracks||[]).forEach(function(tr){ if(r) return; (function walk(list){ list.forEach(function(x){ if(r) return; if(x.tpl===key && !x.ref){ r = x; return; } if(!x.ref) walk(skSubs(x)); }); })(skAxes(tr)); });
+  return r;
+}
+function skTplTrack(k){ return (S.levelTracks||[]).find(function(t){return t.tpl===k;})||null; }
+function skTplMissing(key, out){
+  out = out || []; var t = SK_TPL[key]; if(!t || out.indexOf(key)>=0) return out;
+  t.needs.forEach(function(n){ skTplMissing(n, out); });
+  if(!skTplTrack(key)) out.push(key);
+  return out;
+}
+function skTplBuild(key){
+  var T = SK_TPL[key], reg = {id:uid(), kind:'metrics', name:T.reg.name, color:T.reg.color, currency:'$', labelHint:'', goals:[], entries:[], tpl:key, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(),
+    metrics: T.reg.metrics.map(function(m){ return {id:uid(), name:m.name, unit:m.unit, better:m.better||'high', _k:m.k}; }),
+    mods: T.reg.mods.map(function(id){ return JSON.parse(JSON.stringify(MOD_PRESETS.find(function(p){return p.id===id;}))); })};
+  var mid = {}; reg.metrics.forEach(function(m){ mid[m._k]=m.id; delete m._k; });
+  var tr = {id:uid(), name:T.name, color:T.color, tpl:key, xp:0, source:{type:'manual', taskIds:[]}, regSources:[{regId:reg.id, mode:'fixed', xp:1, log:false}], axes:[]};
+  function mk(spec, i){
+    if(spec.ref){ var tgt = skTplFind(spec.ref); return tgt ? {id:uid(), ref:tgt.id} : null; }
+    var col = SK_COLORS[i % SK_COLORS.length];
+    var n = {id:uid(), name:spec.n, color:col, tpl:key+'/'+spec.k, mode:'mixed', w:{real:50,consist:30,effort:20}, regId:'', metricId:'', agg:'max', low:false, start:0, target:'', scope:'tagged', labels:[], goalId:'', taskKeys:[], lvTarget:10, manual:50};
+    if(spec.kids){ n.fromSubs = true; n.avgMode = 'data'; n.subs = spec.kids.map(mk).filter(Boolean); }
+    else { n.mode='real'; n.regId=reg.id; n.metricId=mid[spec.m]; n.scope='metric'; n.low=!!spec.low; n.start=spec.s; n.target=spec.t; }
+    return n;
+  }
+  tr.axes = T.tree.map(mk).filter(Boolean);
+  return {reg:reg, tr:tr};
+}
+function skTplInstall(key){
+  var miss = skTplMissing(key);
+  if(!miss.length){ toast('Ya la tienes'); return; }
+  var slotsFree = maxLevelTrackSlots() - (S.levelTracks||[]).length;
+  var regsFree = registryCap() - regCountedList().length;
+  if(miss.length>slotsFree){ showInfoModal('Falta cupo de seguimientos','Esta plantilla necesita '+miss.length+' seguimiento'+(miss.length===1?'':'s')+' nuevo'+(miss.length===1?'':'s')+' ('+miss.map(function(k){return SK_TPL[k].name;}).join(' + ')+') y tu plan permite '+slotsFree+' más.','Entendido'); return; }
+  if(miss.length>regsFree){ showInfoModal('Falta cupo de registros','Esta plantilla crea '+miss.length+' registro'+(miss.length===1?'':'s')+' de Marcas y ya estás cerca del máximo de tu plan.','Entendido'); return; }
+  try{ var bk = JSON.stringify({tracks:S.levelTracks, regs:S.registries}); localStorage.setItem('og6-pre-tpl', bk); }catch(e){}
+  miss.forEach(function(k){
+    var b = skTplBuild(k);
+    if(!S.registries) S.registries = [];
+    S.registries.push(b.reg); if(!S.levelTracks) S.levelTracks = []; S.levelTracks.push(b.tr);
+  });
+  saveState(); removeOverlay('tpl-sheet'); render(); toast('✓ Instalada: '+SK_TPL[key].name+(miss.length>1?' (+ '+(miss.length-1)+' necesaria)':''));
+}
+function openSkTemplates(){
+  var o = document.getElementById('tpl-sheet'); if(o) o.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='tpl-sheet';
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('tpl-sheet'); });
+  var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:19px;">Plantillas de habilidades</span><button onclick="removeOverlay(\'tpl-sheet\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Crean un seguimiento con sus habilidades, un registro de Marcas y la dificultad extra. Las metas son referencias aproximadas: edítalas a tu medida.</div>';
+  Object.keys(SK_TPL).forEach(function(k){
+    var T = SK_TPL[k], have = !!skTplTrack(k), miss = skTplMissing(k);
+    h += '<div style="border:1px solid var(--line-soft);border-left:4px solid '+T.color+';border-radius:12px;padding:12px;margin-bottom:10px;"><div style="font-weight:700;font-size:15px;color:var(--ink);">'+T.icon+' '+esc(T.name)+'</div>'+
+      '<div style="font-size:12px;color:var(--ink-soft);line-height:1.5;margin:4px 0 8px;">'+esc(T.desc)+'</div>'+
+      (T.needs.length&&!have?'<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">También instala: '+T.needs.filter(function(n){return !skTplTrack(n);}).map(function(n){return esc(SK_TPL[n].name);}).join(', ')+'</div>':'')+
+      (have?'<div style="font-size:12px;font-weight:700;color:var(--good,#3a8f5c);">✓ Ya instalada</div>':'<button class="sbtn" style="padding:9px 14px;font-size:13px;" onclick="skTplInstall(\''+k+'\')">Instalar'+(miss.length>1?' ('+miss.length+')':'')+'</button>')+'</div>';
+  });
+  h += '</div>'; ov.innerHTML = h; document.body.appendChild(ov);
+}
 function skNorm(s){ return String(s||'').trim().toLowerCase(); }
 function skRegs(tr, ax){
   var ids = (tr.regSources||[]).map(function(r){return r.regId;});
@@ -8517,6 +8760,7 @@ function skRegs(tr, ax){
 function skMatch(ax, reg, e){
   if((e.axes||[]).indexOf(ax.id)>=0) return 'tag';
   if(reg.id!==ax.regId) return '';
+  if(ax.scope==='metric'){ return (ax.metricId && e.values && e.values[ax.metricId]!=null && !isNaN(e.values[ax.metricId])) ? 'rule' : ''; }
   if(ax.scope==='all') return 'rule';
   if(ax.scope==='label'){ var L=(ax.labels||[]).map(skNorm); if(L.length && L.indexOf(skNorm(e.label))>=0) return 'rule'; }
   return '';
@@ -8561,9 +8805,14 @@ function skEvents(tr, ax){
   });
   return Object.keys(ev).map(function(k){return ev[k];});
 }
-function skReal(ax, list){
+// Una entrada con una dificultad «no estándar» (lastre, inclinación…) no cuenta para marcas estándar.
+function skNonStd(reg, e){
+  var m = e && e.mods; if(!m) return false;
+  return regModDefs(reg).some(function(d){ return d.std===false && m[d.id] && (m[d.id]===true || +m[d.id]>0); });
+}
+function skRealM(ax, list){
   var reg = ax.regId ? regById(ax.regId) : null; if(!reg || reg.kind==='finance') return null;
-  var es = list.filter(function(x){return x.reg===reg.id;}).sort(function(a,b){return (a.date+(a.e.ts||0)).toString().localeCompare((b.date+(b.e.ts||0)).toString());});
+  var es = list.filter(function(x){return x.reg===reg.id && !(ax.stdOnly && skNonStd(reg, x.e));}).sort(function(a,b){return (a.date+(a.e.ts||0)).toString().localeCompare((b.date+(b.e.ts||0)).toString());});
   var mid = reg.kind==='habit' ? '__count' : (ax.metricId||'__count'), v, unit;
   if(mid==='__count'){ v = es.length; unit = reg.kind==='habit' ? 'días' : 'veces'; }
   else {
@@ -8575,6 +8824,7 @@ function skReal(ax, list){
   var ratio = v==null ? 0 : (v-st)/(tg-st);
   return {v:v, unit:unit, start:st, target:tg, ratio:Math.max(0,Math.min(1,ratio))};
 }
+function skReal(ax, list){ return skRealM(ax, list); }
 function skPeriodRange(period, i){
   var now = new Date();
   if(period==='semana'){
@@ -8604,7 +8854,8 @@ function skXpForScore(ax, sc){
   var N = Math.max(2, +ax.lvTarget||10), lf = 1 + sc/100*(N-1), L = Math.floor(lf), r = lf-L;
   return lvlThresh(L) + r*(lvlThresh(L+1)-lvlThresh(L));
 }
-function skCompute(tr, ax){
+function skCompute(tr, ax, depth){
+  depth = depth||0;
   var list = skEvents(tr, ax), parts = {};
   var rl = skReal(ax, list); if(rl) parts.real = {pct:rl.ratio*100, d:rl};
   parts.consist = skConsist(ax, list);
@@ -8617,9 +8868,14 @@ function skCompute(tr, ax){
     used = used.map(function(u){ return [u[0], u[1]/tot*100]; });
     used.forEach(function(u){ score += parts[u[0]].pct*u[1]/100; });
   } else score = (parts[ax.mode] || parts.consist).pct;
-  var subs = skSubs(ax);
-  if(ax.fromSubs && subs.length){ score = subs.reduce(function(t,x){ return t+skCompute(tr, x).score; },0)/subs.length; }
-  return {score:Math.round(score), parts:parts, used:used, list:list};
+  var has = list.length>0, kids = skKids(tr, ax);
+  if(ax.fromSubs && kids.length && depth<SK_MAX_DEPTH+2){
+    var cs = kids.map(function(k){ return skCompute(k.tr, k.n, depth+1); });
+    var pool = ax.avgMode==='data' ? cs.filter(function(c){return c.has;}) : cs;
+    score = pool.length ? pool.reduce(function(t,c){return t+c.score;},0)/pool.length : 0;
+    has = has || cs.some(function(c){return c.has;});
+  }
+  return {score:Math.round(score), parts:parts, used:used, list:list, has:has, kids:kids.length};
 }
 function skNewGoal(){
   var a = SK.a, reg = a.regId ? regById(a.regId) : null, ng = SK.o.ng||{}; if(!reg){ toast('Elige un registro'); return; }
@@ -8660,7 +8916,7 @@ function skSessSave(){
   skEnsureSource(tr, reg.id);
   var rsrc = tr.regSources.find(function(x){return x.regId===reg.id;}), pts = rsrc && rsrc.mode!=='metric' && rsrc.xp>0 ? rsrc.xp : 1;
   reg.entries = (reg.entries||[]).concat([entry]); reg.updatedAt = new Date().toISOString();
-  if(!tr.regAwarded) tr.regAwarded = {}; tr.regAwarded[entry.id] = pts; trackAddXP(tr, pts, 'Sesión · '+reg.name);
+  if(!tr.regAwarded) tr.regAwarded = {}; tr.regAwarded[entry.id] = pts; trkDayAdd(tr, date, 'reg', pts, 'Sesión · '+reg.name);
   try{ syncRegGoalsToPlan(reg); }catch(e){}
   saveState(); removeOverlay('skill-sess'); skRefreshDetail(tr.id); try{ refreshRegViews(); }catch(e){} toast('✓ Sesión anotada · +'+pts+' XP');
 }
@@ -8671,18 +8927,20 @@ function skSnapshot(tr){
 }
 function skPrevMonthKey(){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
 function skRadarSVG(tr, list, prevKey, showPrev){
+  var _V = list.map(function(x){ return x && x.n ? x : {n:x, tr:tr, via:null}; }), _trs = _V.map(function(v){return v.tr;});
+  list = _V.map(function(v){return v.n;});
   var n = list.length, cx=170, cy=160, R=100, pts=[], prev=[], hasPrev=false, g='';
   function P(i,r){ var a=-Math.PI/2+i*2*Math.PI/n; return [cx+Math.cos(a)*r, cy+Math.sin(a)*r]; }
   [25,50,75,100].forEach(function(l){ var ps=[]; for(var i=0;i<n;i++){ var p=P(i,R*l/100); ps.push(p[0].toFixed(1)+','+p[1].toFixed(1)); } g += '<polygon points="'+ps.join(' ')+'" fill="'+(l===100?'var(--paper)':'none')+'" stroke="var(--line)" stroke-width="'+(l===100?1.4:1)+'" '+(l===100?'':'stroke-dasharray="3 4"')+'/>'; });
   for(var i=0;i<n;i++){ var e=P(i,R); g += '<line x1="'+cx+'" y1="'+cy+'" x2="'+e[0].toFixed(1)+'" y2="'+e[1].toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>'; }
-  var sc = list.map(function(a){return skCompute(tr,a).score;});
+  var sc = list.map(function(a,i){return skCompute(_trs[i],a).score;});
   list.forEach(function(a,i){ pts.push(P(i,R*sc[i]/100)); var h=a.hist&&a.hist[prevKey]; if(h!=null){ hasPrev=true; prev.push(P(i,R*h/100)); } else prev.push(P(i,0)); });
   var fmt = function(ps){ return ps.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' '); };
   if(showPrev && hasPrev) g += '<polygon points="'+fmt(prev)+'" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".8"/>';
   g += '<polygon points="'+fmt(pts)+'" fill="var(--accent)" fill-opacity=".24" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>';
   list.forEach(function(a,i){
     var p=pts[i], l=P(i,R+22), c=Math.cos(-Math.PI/2+i*2*Math.PI/n), anchor = Math.abs(c)<.25?'middle':(c>0?'start':'end');
-    g += '<g style="cursor:pointer" onclick="skOpen(\''+tr.id+'\',\''+a.id+'\')"><circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="5" fill="'+a.color+'" stroke="var(--paper)" stroke-width="2"/>'+
+    g += '<g style="cursor:pointer" onclick="skOpen(\''+_trs[i].id+'\',\''+a.id+'\')"><circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="5" fill="'+a.color+'" stroke="var(--paper)" stroke-width="2"/>'+
       '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+4).toFixed(1)+'" text-anchor="'+anchor+'" font-size="12" font-weight="600" fill="var(--ink)" font-family="Inter,sans-serif">'+esc(a.name.length>13?a.name.slice(0,12)+'…':a.name)+'</text>'+
       '<text x="'+l[0].toFixed(1)+'" y="'+(l[1]+18).toFixed(1)+'" text-anchor="'+anchor+'" font-size="11" fill="var(--muted)" font-family="Inter,sans-serif">'+sc[i]+'</text></g>';
   });
@@ -8696,18 +8954,18 @@ function skHexUsed(){ return (S.levelTracks||[]).filter(function(t){return skAxe
 function skHexMax(){ return isPremium() ? 999 : 2; }
 function skSectionHTML(tr){
   if(featureLocked('hexagon')) return '<div style="margin:18px 0 6px;padding:12px;border:1.5px dashed var(--line);border-radius:12px;opacity:.6;"><div style="font-size:13px;font-weight:700;color:var(--ink);">Habilidades en gráfico'+soonBadge()+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.5;">Mide partes de este seguimiento (fuerza, técnica…) en un radar.</div></div>';
-  var axes = skAxes(tr); skSnapshot(tr);
+  var axes = skAxes(tr), axV = skAxesV(tr); skSnapshot(tr);
   var h = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;justify-content:space-between;"><span>Habilidades</span><span style="font-weight:600;">'+axes.length+' / 7</span></div>';
   if(axes.length>=3){
-    var pk = skPrevMonthKey(), rd = skRadarSVG(tr, axes, pk, skShowPrev());
+    var pk = skPrevMonthKey(), rd = skRadarSVG(tr, axV, pk, skShowPrev());
     h += '<div style="background:var(--bg);border-radius:14px;padding:8px 4px 6px;margin-bottom:10px;">'+rd.svg+(rd.hasPrev?'<div style="display:flex;justify-content:center;"><button onclick="skTogglePrev(\''+tr.id+'\')" style="background:none;border:none;font-size:11px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">'+(skShowPrev()?'Ocultar':'Mostrar')+' comparación con el mes pasado</button></div>':'')+'</div>';
   } else {
     if(!axes.length && skHexUsed()>=skHexMax()) h += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;">Tu plan gratuito permite el gráfico de habilidades en '+skHexMax()+' seguimientos. Con la suscripción no hay límite.</div>'; else
     h += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;text-align:left;">Opcional: define de 3 a 7 indicadores (por ejemplo Fuerza, Técnica, Equilibrio) para ver este seguimiento como un gráfico de radar'+(axes.length?'. Te faltan '+(3-axes.length)+' para dibujarlo.':'.')+'</div>';
   }
-  axes.forEach(function(a){
-    var c = skCompute(tr,a);
-    h += '<div onclick="skOpen(\''+tr.id+'\',\''+a.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+a.color+';border-radius:10px;margin-bottom:6px;cursor:pointer;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name)+(skSubs(a).length?' <span style="font-weight:600;font-size:10.5px;color:var(--muted);">⬡ '+skSubs(a).length+'</span>':'')+'</div><div style="height:5px;background:var(--line-soft);border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+a.color+';"></div></div></div><b style="font-size:16px;color:var(--ink);min-width:28px;text-align:right;">'+c.score+'</b></div>';
+  axV.forEach(function(v){
+    var a = v.n, c = skCompute(v.tr,a);
+    h += '<div onclick="skOpen(\''+v.tr.id+'\',\''+a.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+a.color+';border-radius:10px;margin-bottom:6px;cursor:pointer;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name)+(skSubs(a).length?' <span style="font-weight:600;font-size:10.5px;color:var(--muted);">⬡ '+skSubs(a).length+'</span>':'')+'</div><div style="height:5px;background:var(--line-soft);border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+a.color+';"></div></div></div><b style="font-size:16px;color:var(--ink);min-width:28px;text-align:right;">'+c.score+'</b></div>';
   });
   if(axes.length<7 && (axes.length>0 || skHexUsed()<skHexMax())) h += '<button onclick="skEdit(\''+tr.id+'\',null)" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">+ Nueva habilidad</button>';
   h += '<button onclick="skSession(\''+tr.id+'\')" style="width:100%;background:var(--bg);border:none;border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;margin-top:8px;">Anotar una sesión fuera de la app</button>';
@@ -8719,9 +8977,8 @@ function skBar(label, pct, sub, color, wtxt){
     '<div style="height:7px;background:var(--line-soft);border-radius:4px;overflow:hidden;"><div style="height:100%;width:'+Math.max(0,Math.min(100,pct))+'%;background:'+color+';border-radius:4px;"></div></div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5;">'+sub+'</div></div>';
 }
-function skOpen(tid, aid){
-  var tr = skTrack(tid), fd = tr && skFind(tr, aid), a = fd && fd.a, par = fd && fd.parent; if(!a) return;
-  var c = skCompute(tr,a), p = c.parts, html = '', wmap = {};
+function skPartsHTML(tr, a, c){
+  var p = c.parts, html = '', wmap = {};
   c.used.forEach(function(u){ wmap[u[0]] = Math.round(u[1])+'%'; });
   var show = a.mode==='mixed' ? c.used.map(function(u){return u[0];}) : (a.mode==='manual' ? [] : [p[a.mode]?a.mode:'consist']);
   if(show.indexOf('real')>=0 && p.real){ var d=p.real.d; html += skBar('Medida real', p.real.pct, (d.v==null?'Sin marcas todavía':fmtNum(d.v)+' '+d.unit)+' · de '+fmtNum(d.start)+' (0 pts) a '+fmtNum(d.target)+' '+d.unit+' (100 pts)'+(d.v!=null&&p.real.pct<100?' · te faltan '+fmtNum(Math.round(Math.abs(d.target-d.v)*10)/10)+' '+d.unit:' · meta lograda'), a.color, wmap.real); }
@@ -8731,35 +8988,114 @@ function skOpen(tid, aid){
     if(sc<99.5) need = ' · para '+nx+' puntos faltan ~'+Math.max(1,Math.ceil(skXpForScore(a,nx)-d3.xp))+' XP';
     html += skBar('Esfuerzo (XP)', sc, fmtNum(d3.xp)+' XP en '+d3.n+' práctica'+(d3.n===1?'':'s')+' · nivel '+d3.lvl+' de '+d3.N+need, a.color, wmap.effort); }
   if(a.mode==='manual') html = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;">Puntaje manual: lo ajustas tú.</div>';
-  var _subs = skSubs(a);
-  if(a.fromSubs && _subs.length) html = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Este puntaje es el promedio de sus '+_subs.length+' sub-habilidades.</div>';
-  if(!par){
-    html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 8px;display:flex;justify-content:space-between;"><span>Sub-habilidades</span><span style="font-weight:600;">'+_subs.length+' / 7</span></div>';
-    if(_subs.length>=3){ var _rd = skRadarSVG(tr, _subs, skPrevMonthKey(), false); html += '<div style="background:var(--bg);border-radius:14px;padding:8px 4px 6px;margin-bottom:10px;">'+_rd.svg+'</div>'; }
-    else html += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;">Opcional: divide «'+esc(a.name)+'» en 3 a 7 partes para ver su propio gráfico'+(_subs.length?'. Te faltan '+(3-_subs.length)+' para dibujarlo.':' (por ejemplo, en un agarre: abierto, cerrado, semiarqueado).')+'</div>';
-    _subs.forEach(function(x){ var cx = skCompute(tr,x); html += '<div onclick="removeOverlay(\'skill-view\');skOpen(\''+tr.id+'\',\''+x.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+x.color+';border-radius:10px;margin-bottom:6px;cursor:pointer;"><div style="flex:1;min-width:0;font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(x.name)+'</div><b style="font-size:15px;color:'+x.color+';">'+cx.score+'</b><span style="color:var(--muted-soft);">›</span></div>'; });
-    if(_subs.length<7) html += '<button onclick="removeOverlay(\'skill-view\');skEdit(\''+tr.id+'\',null,\''+a.id+'\')" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin:2px 0 8px;">+ Nueva sub-habilidad</button>';
+  return html;
+}
+function skKidRow(k){
+  var x = k.n, cx = skCompute(k.tr, x);
+  return '<div onclick="skOpen(\''+k.tr.id+'\',\''+x.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+(x.color||'var(--accent)')+';border-radius:10px;margin-bottom:6px;cursor:pointer;">'+
+    '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(x.name)+(k.via?' <span title="Atajo: está en otro lugar también" style="color:var(--muted);font-weight:500;font-size:11px;">↗</span>':'')+'</div>'+
+    (cx.kids?'<div style="font-size:10.5px;color:var(--muted);margin-top:1px;">'+cx.kids+' sub-habilidad'+(cx.kids===1?'':'es')+'</div>':'')+'</div>'+
+    '<b style="font-size:15px;color:'+(x.color||'var(--accent)')+';">'+cx.score+'</b><span style="color:var(--muted-soft);">›</span></div>';
+}
+function skOpen(tid, aid){
+  var tr = skTrack(tid), fd = tr && skFind(tr, aid); if(!fd) return;
+  var a = fd.a, c = skCompute(tr,a), kids = skKids(tr, a), raw = skSubs(a), depth = fd.path.length, html = '';
+  if(a.fromSubs && kids.length){
+    html = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Este puntaje es el promedio de '+(a.avgMode==='data'?'las sub-habilidades que ya tienen datos':'sus '+kids.length+' sub-habilidades')+'.</div>';
+  } else html = skPartsHTML(tr, a, c);
+  // Dónde aparece (original + atajos)
+  var wh = skWhere(a.id);
+  if(wh.length>1){
+    html = '<div style="margin-bottom:12px;"><div style="font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Aparece en</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+
+      wh.map(function(w){ return '<span style="font-size:11.5px;padding:4px 9px;border-radius:12px;background:var(--bg);border:1px solid var(--line);color:var(--ink-soft);">'+w.trail.map(function(t){return esc(t.name);}).join(' › ')+'</span>'; }).join('')+'</div></div>'+html;
   }
-  var _v = document.getElementById('skill-view'); if(_v) _v.remove();
-  var el = document.createElement('div'); el.className='overlay'; el.id='skill-view';
+  // Sub-habilidades
+  html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:6px 0 8px;display:flex;justify-content:space-between;"><span>Sub-habilidades</span><span style="font-weight:600;">'+raw.length+' / '+SK_MAX_KIDS+'</span></div>';
+  if(kids.length>=3){ var _rd = skRadarSVG(tr, kids, skPrevMonthKey(), false); html += '<div style="background:var(--bg);border-radius:14px;padding:8px 4px 6px;margin-bottom:10px;">'+_rd.svg+'</div>'; }
+  else if(!kids.length) html += '<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;">Opcional: divide «'+esc(a.name)+'» en partes (hasta '+SK_MAX_KIDS+'). Con 3 o más verás su propio gráfico. Por ejemplo, un agarre: abierto, semiarqueado, pinza.</div>';
+  html += kids.map(skKidRow).join('');
+  if(raw.length<SK_MAX_KIDS && depth<SK_MAX_DEPTH){
+    html += '<div style="display:flex;gap:8px;margin:2px 0 8px;"><button onclick="skEdit(\''+tr.id+'\',null,\''+a.id+'\')" style="flex:1;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;">+ Nueva</button>'+
+      '<button onclick="skPickExisting(\''+tr.id+'\',\''+a.id+'\')" style="flex:1;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Usar una existente</button></div>';
+  } else if(depth>=SK_MAX_DEPTH) html += '<div style="font-size:11.5px;color:var(--muted);margin:2px 0 8px;">Llegaste al nivel máximo de profundidad.</div>';
+  var crumbs = '<span>'+esc(tr.name)+'</span>'+fd.path.map(function(x){ return ' › <a onclick="skOpen(\''+tr.id+'\',\''+x.id+'\')" style="color:var(--accent-text);font-weight:700;cursor:pointer;">'+esc(x.name)+'</a>'; }).join('');
+  var body = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:19px;">'+esc(a.name)+'</span><button onclick="removeOverlay(\'skill-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;line-height:1.6;">'+crumbs+'</div>'+
+    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:16px;"><span style="font-size:38px;font-weight:800;color:'+(a.color||'var(--accent)')+';">'+c.score+'</span><span style="font-size:13px;color:var(--muted);">/ 100</span></div>'+html+
+    '<div style="display:flex;gap:8px;margin-top:6px;"><button class="cbtn" style="flex:1;" onclick="skEdit(\''+tr.id+'\',\''+a.id+'\')">Editar</button></div></div>';
+  var el = document.getElementById('skill-view');
+  if(el){ brPutSheet(el, body); var sh = el.querySelector('.sheet'); if(sh) sh.scrollTop = 0; return; }   // misma ventana, sin recrearla
+  el = document.createElement('div'); el.className='overlay'; el.id='skill-view';
   el.addEventListener('click',function(e){ if(e.target===el) removeOverlay('skill-view'); });
-  el.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:19px;">'+esc(a.name)+'</span><button onclick="removeOverlay(\'skill-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">'+(par?'<a onclick="removeOverlay(\'skill-view\');skOpen(\''+tr.id+'\',\''+par.id+'\')" style="color:var(--accent-text);font-weight:700;cursor:pointer;">‹ '+esc(par.name)+'</a> · ':'')+esc(tr.name)+'</div>'+
-    '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:16px;"><span style="font-size:38px;font-weight:800;color:'+a.color+';">'+c.score+'</span><span style="font-size:13px;color:var(--muted);">/ 100</span></div>'+html+
-    '<div style="display:flex;gap:8px;margin-top:6px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'skill-view\');skEdit(\''+tr.id+'\',\''+a.id+'\')">Editar</button></div></div>';
+  el.innerHTML = body;
   document.body.appendChild(el);
+}
+// Refresca la habilidad abierta (si hay una) sin recrear la ventana.
+function skReopen(tid, aid){ if(document.getElementById('skill-view')) skOpen(tid, aid); }
+// ── Usar una habilidad que ya existe (atajo) ──
+var SKP = null;
+function skPickExisting(tid, parentId){
+  var tr = skTrack(tid); if(!tr) return;
+  SKP = {tid:tid, parent:parentId, q:''};
+  var o = document.getElementById('skill-pick'); if(o) o.remove();
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='skill-pick'; ov.style.zIndex = 640;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('skill-pick'); });
+  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">Usar una existente</span><button onclick="removeOverlay(\'skill-pick\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;line-height:1.5;">La misma habilidad aparecerá aquí también. Si la entrenas, sube en todos los lugares donde está.</div>'+
+    '<input class="finp" placeholder="Buscar habilidad…" oninput="SKP.q=this.value;skPickList()" style="margin-bottom:10px;"/><div id="skp-list"></div></div>';
+  document.body.appendChild(ov); skPickList();
+}
+function skPickCandidates(){
+  var par = skFindAny(SKP.parent), out = [];
+  var me = par ? par.a : null; if(!me) return out;
+  var already = {}; skKids(par.tr, me).forEach(function(k){ already[k.n.id]=1; });
+  (S.levelTracks||[]).forEach(function(tr){
+    (function walk(list, trail){
+      list.forEach(function(x){
+        if(x.ref) return;
+        var okCycle = x.id!==me.id && !skDescIds(tr, x)[me.id] && !already[x.id];
+        if(okCycle) out.push({tr:tr, n:x, trail:trail.concat([x.name])});
+        walk(skSubs(x), trail.concat([x.name]));
+      });
+    })(skAxes(tr), [tr.name]);
+  });
+  return out;
+}
+function skPickList(){
+  var box = document.getElementById('skp-list'); if(!box||!SKP) return;
+  var q = skNorm(SKP.q), list = skPickCandidates().filter(function(c){ return !q || skNorm(c.trail.join(' ')).indexOf(q)>=0; }).slice(0,60);
+  box.innerHTML = list.length ? list.map(function(c,i){
+    return '<button onclick="skPickAdd(\''+c.n.id+'\')" style="display:block;width:100%;text-align:left;background:var(--bg);border:none;border-left:4px solid '+(c.n.color||'var(--accent)')+';border-radius:10px;padding:9px 10px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;">'+
+      '<div style="font-weight:700;font-size:13px;color:var(--ink);">'+esc(c.n.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:1px;">'+c.trail.slice(0,-1).map(esc).join(' › ')+'</div></button>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:18px 0;">No hay habilidades disponibles para agregar aquí.</div>';
+}
+function skPickAdd(targetId){
+  var par = skFindAny(SKP.parent); if(!par) return;
+  var tgt = skFindAny(targetId); if(!tgt) return;
+  if(skSubs(par.a).length>=SK_MAX_KIDS){ toast('Máximo '+SK_MAX_KIDS+' sub-habilidades'); return; }
+  if(tgt.a.id===par.a.id || skDescIds(tgt.tr, tgt.a)[par.a.id]){ toast('Eso crearía un círculo'); return; }
+  if(!par.a.subs) par.a.subs = [];
+  par.a.subs.push({id:uid(), ref:targetId});
+  if(!par.a.fromSubs) par.a.fromSubs = true;
+  saveState(); removeOverlay('skill-pick'); skOpen(par.tr.id, par.a.id); try{ skRefreshDetail(par.tr.id); render(); }catch(e){}
+  toast('✓ Agregada: '+tgt.a.name);
+}
+function skRemoveRef(tid, parentId, refNodeId){
+  var tr = skTrack(tid), f = tr && skFind(tr, parentId); if(!f) return;
+  f.a.subs = (f.a.subs||[]).filter(function(x){return x.id!==refNodeId;});
+  saveState(); skOpen(tid, parentId);
 }
 // ── Editor ──
 function skEdit(tid, aid, parentId){
   var tr = skTrack(tid); if(!tr) return;
   var fd = aid ? skFind(tr, aid) : null, ex = fd ? fd.a : null;
   if(fd && fd.parent) parentId = fd.parent.id;
-  var pAx = parentId ? skAxes(tr).find(function(x){return x.id===parentId;}) : null;
+  var pFd = parentId ? skFind(tr, parentId) : null, pAx = pFd ? pFd.a : null;
   var used = (pAx ? skSubs(pAx) : skAxes(tr)).map(function(x){return x.color;});
   var col = SK_COLORS.find(function(c){return used.indexOf(c)<0;}) || SK_COLORS[0];
   SK = {tid:tid, o:{}, a: ex ? JSON.parse(JSON.stringify(ex)) : {id:null, name:'', color:col, mode:'mixed', w:{real:50,consist:30,effort:20}, regId:'', metricId:'', agg:'max', low:false, start:0, target:'', scope:'tagged', labels:[], goalId:'', taskKeys:[], lvTarget:10, manual:50}};
   SK.parent = pAx ? pAx.id : null;
-  if(SK.parent) delete SK.a.subs;
+  SK.nsubs = ex ? skSubs(ex).length : 0; SK.nkids = ex ? skKids(tr, ex).length : 0; delete SK.a.subs;
   SK.a.w = SK.a.w || {real:50,consist:30,effort:20}; SK.a.labels = SK.a.labels||[]; SK.a.taskKeys = SK.a.taskKeys||[];
   if(!SK.a.regId) SK.o.reg = true;
   var _o = document.getElementById('skill-ed'); if(_o) _o.remove();
@@ -8795,10 +9131,10 @@ function skDraw(){
   var a = SK.a, regs = regList().filter(function(r){return r.kind!=='finance' && r.kind!=='cycle';}), reg = a.regId ? regById(a.regId) : null;
   var needReal = a.mode==='real' || a.mode==='mixed', needConsist = a.mode==='consist' || a.mode==='mixed';
   var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(a.id?'Editar':'Nueva')+(SK.parent?' sub-habilidad':' habilidad')+'</span><button onclick="removeOverlay(\'skill-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">en «'+(SK.parent?esc((skAxes(tr).find(function(x){return x.id===SK.parent;})||{}).name||'')+'» · «':'')+esc(tr.name)+'»</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">en «'+(SK.parent?esc(((skFind(tr, SK.parent)||{}).a||{}).name||'')+'» · «':'')+esc(tr.name)+'»</div>'+
     '<input class="finp" placeholder="Nombre (ej. Fuerza, Técnica)" maxlength="24" value="'+esc(a.name)+'" oninput="SK.a.name=this.value"/>'+
     '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px;">'+SK_COLORS.map(function(c){ return '<button onclick="SK.a.color=\''+c+'\';skRe()" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(a.color===c?'3px solid var(--ink)':'3px solid transparent')+';cursor:pointer;padding:0;"></button>'; }).join('')+'</div>'+
-    (!SK.parent && a.id && skSubs(a).length ? skLbl('Puntaje de esta habilidad')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+skChip(!a.fromSubs,'Propio','SK.a.fromSubs=false;skRe()')+skChip(!!a.fromSubs,'Promedio de sus sub-habilidades','SK.a.fromSubs=true;skRe()')+'</div>' : '')+
+    (a.id && SK.nsubs>0 ? skLbl('Puntaje de esta habilidad')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+skChip(!a.fromSubs,'Propio','SK.a.fromSubs=false;skRe()')+skChip(!!a.fromSubs,'Promedio de sus sub-habilidades','SK.a.fromSubs=true;skRe()')+'</div>'+(a.fromSubs?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">'+skChip(a.avgMode!=='data','Contar todas','SK.a.avgMode=\'all\';skRe()')+skChip(a.avgMode==='data','Solo las que tienen datos','SK.a.avgMode=\'data\';skRe()')+'</div>':'') : '')+
     skLbl('¿Cómo se calcula el puntaje?')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+SK_MODES.map(function(m){ return skChip(a.mode===m[0], m[1], 'SK.a.mode=\''+m[0]+'\';skRe()'); }).join('')+'</div>'+
     skNote({mixed:'Combina medida real, constancia y esfuerzo con los porcentajes que escribas.',real:'Tu marca real (ej. kilos levantados) frente a una meta.',consist:'Qué tan seguido practicas: periodos (semanas o meses) en que cumpliste tu meta.',effort:'El XP que ganas en esta habilidad. Pasa por la curva de niveles: cada nivel cuesta más que el anterior.',manual:'Tú pones el puntaje a mano.'}[a.mode]);
   if(a.mode==='mixed'){
@@ -8817,7 +9153,7 @@ function skDraw(){
       h += '<div style="display:flex;gap:12px;"><label style="flex:1;font-size:11.5px;color:var(--muted);line-height:1.35;">Marca de partida<br><span style="font-size:10.5px;">tu nivel al empezar = 0 puntos</span><input class="finp" type="number" inputmode="decimal" value="'+esc(a.start)+'" oninput="SK.a.start=this.value;skPrevUpd()" style="margin:4px 0 0;"/></label><label style="flex:1;font-size:11.5px;color:var(--muted);line-height:1.35;">Marca meta<br><span style="font-size:10.5px;">lo que quieres lograr = 100 puntos</span><input class="finp" type="number" inputmode="decimal" value="'+esc(a.target)+'" oninput="SK.a.target=this.value;skPrevUpd()" style="margin:4px 0 0;"/></label></div>'+
         '<div id="sk-prev" style="font-size:12px;font-weight:600;color:var(--accent-text);margin:2px 0 6px;"></div>'+
         skNote('Ejemplo: levantas 40 kg hoy y quieres llegar a 100 kg → partida 40, meta 100; con 70 kg tendrás 50 puntos. Si menos es mejor (un tiempo), la partida es la más alta y la meta la más baja.')+
-        (a.metricId&&a.metricId!=='__count'?'<button class="cat-tab-btn" onclick="skFirstMark()" style="padding:5px 10px;font-size:12px;">Usar mi primera marca como partida</button>':'');
+        (a.metricId&&a.metricId!=='__count'?'<button class="cat-tab-btn" onclick="skFirstMark()" style="padding:5px 10px;font-size:12px;">Usar mi primera marca como partida</button>':'')+skDet('adv','Opciones avanzadas', '<label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink);"><input type="checkbox" '+(a.stdOnly?'checked':'')+' onchange="SK.a.stdOnly=this.checked"/> Solo marcas estándar (ignorar las hechas con lastre, inclinación u otra dificultad)</label>', '');
     }
   }
   if(needConsist && reg){
@@ -8833,7 +9169,7 @@ function skDraw(){
     var tk = {}; (S.tasks||[]).forEach(function(t){ var k=skNorm(t.text); if(k && (t.period==='dia' && !t.date)) tk[k]=t.text; });
     var regIn = '<select class="finp" onchange="SK.a.regId=this.value;var r=regById(this.value);SK.a.metricId=r&&r.metrics&&r.metrics[0]?r.metrics[0].id:\'__count\';SK.a.goalId=\'\';SK.a.labels=[];skRe()" style="margin-bottom:8px;"><option value="">Sin registro</option>'+regs.map(function(r){return '<option value="'+r.id+'"'+(r.id===a.regId?' selected':'')+'>'+esc(r.name)+'</option>';}).join('')+'</select>'+
       skNote('Las entradas que marques con esta habilidad al anotarlas siempre cuentan (aparece «Cuenta para» en la ventanilla del registro). Además puedes automatizarlo:')+
-      (reg?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'+skChip(a.scope==='tagged','Solo las marcadas','SK.a.scope=\'tagged\';skRe()')+skChip(a.scope==='label','Por concepto','SK.a.scope=\'label\';skRe()')+skChip(a.scope==='all','Todas las del registro','SK.a.scope=\'all\';skRe()')+'</div>'+
+      (reg?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'+skChip(a.scope==='tagged','Solo las marcadas','SK.a.scope=\'tagged\';skRe()')+skChip(a.scope==='label','Por concepto','SK.a.scope=\'label\';skRe()')+skChip(a.scope==='all','Todas las del registro','SK.a.scope=\'all\';skRe()')+(reg.kind==='metrics'?skChip(a.scope==='metric','Por medida','SK.a.scope=\'metric\';if(!SK.a.metricId||SK.a.metricId===\'__count\')SK.a.metricId=((reg.metrics||[])[0]||{}).id||\'\';skRe()'):'')+'</div>'+(a.scope==='metric'&&reg.kind==='metrics'?skNote('Cuenta toda anotación que tenga un valor en esta medida (útil para que una habilidad se alimente sola, p. ej. «Agarre 20 mm»).')+'<select class="finp" onchange="SK.a.metricId=this.value;skRe()" style="margin-bottom:8px;">'+(reg.metrics||[]).map(function(m){return '<option value="'+m.id+'"'+(m.id===a.metricId?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select>':'')+
         (a.scope==='label'?(Object.keys(labels).length?'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+Object.keys(labels).slice(0,24).map(function(l){ var on=a.labels.indexOf(l)>=0; return skChip(on, esc(l), 'skLabel(\''+l.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')'); }).join('')+'</div>':skNote('Aún no hay conceptos en este registro.')):''):'');
     var taskIn = Object.keys(tk).length ? skNote('Tareas diarias que cuentan al completarlas (las que se llaman igual se agrupan como una).')+'<div style="display:flex;flex-wrap:wrap;gap:6px;max-height:130px;overflow-y:auto;">'+Object.keys(tk).slice(0,60).map(function(k){ var on=a.taskKeys.indexOf(k)>=0; return skChip(on, esc(tk[k].slice(0,24)), 'skTaskKey(\''+k.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')'); }).join('')+'</div>' : skNote('No tienes tareas diarias todavía.');
     h += skLbl('Qué cuenta para esta habilidad')+skDet('reg','Entradas de un registro', regIn, reg?esc(reg.name):'')+skDet('task','Tareas', taskIn, a.taskKeys.length?a.taskKeys.length+' elegida'+(a.taskKeys.length===1?'':'s'):'')+
@@ -8852,40 +9188,46 @@ function skSave(){
   if(a.mode==='real' && !(a.regId && +a.target)){ toast('Elige un registro y una marca meta'); return; }
   var o = JSON.parse(JSON.stringify(a)); o.name = name; o.start = +o.start||0; o.target = +o.target||0;
   if(!tr.axes) tr.axes = [];
-  if(SK.parent){
-    var pa = tr.axes.find(function(x){return x.id===SK.parent;}); if(!pa){ toast('No se encontró la habilidad'); return; }
-    if(!pa.subs) pa.subs = [];
-    if(o.id) pa.subs = pa.subs.map(function(x){ return x.id===o.id ? Object.assign({}, x, o) : x; });
-    else { if(skSubs(pa).length>=7){ toast('Máximo 7 sub-habilidades'); return; } o.id = uid(); pa.subs.push(o); }
-    if(o.regId) skEnsureSource(tr, o.regId);
-    saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); render(); toast('✓ Sub-habilidad guardada'); skOpen(tr.id, pa.id); return;
+  var pa = null;
+  if(SK.parent){ var pf = skFind(tr, SK.parent); pa = pf && pf.a; if(!pa){ toast('No se encontró la habilidad'); return; } if(!pa.subs) pa.subs = []; }
+  var list = pa ? pa.subs : tr.axes;
+  if(o.id){
+    var cur = skFind(tr, o.id); if(!cur){ toast('No se encontró la habilidad'); return; }
+    Object.assign(cur.a, o);      // conserva sus sub-habilidades (o no las trae) y su lugar
+  } else {
+    if(skSubs({subs:list}).length>=SK_MAX_KIDS){ toast('Máximo '+SK_MAX_KIDS+(pa?' sub-habilidades':' habilidades')); return; }
+    o.id = uid(); list.push(o);
   }
-  if(o.id) tr.axes = tr.axes.map(function(x){ return x.id===o.id ? Object.assign({}, x, o) : x; });
-  else { if(skAxes(tr).length>=7){ toast('Máximo 7 habilidades'); return; } o.id = uid(); tr.axes.push(o); }
   if(o.regId) skEnsureSource(tr, o.regId);
   if((o.taskKeys||[]).length && tr.source && tr.source.type==='manual'){ (S.tasks||[]).forEach(function(t){ if(o.taskKeys.indexOf(skNorm(t.text))>=0 && (tr.source.taskIds||[]).indexOf(t.id)<0){ tr.source.taskIds = (tr.source.taskIds||[]).concat([t.id]); } }); }
-  saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); render(); toast('✓ Habilidad guardada');
+  saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); render(); toast(pa?'✓ Sub-habilidad guardada':'✓ Habilidad guardada');
+  if(pa) skOpen(tr.id, pa.id); else if(document.getElementById('skill-view')) skOpen(tr.id, o.id);
 }
 function skDelete(){
   var tr = skTrack(SK.tid); if(!tr) return;
-  if(SK.parent){
-    var pa = (tr.axes||[]).find(function(x){return x.id===SK.parent;}); if(!pa) return;
-    pa.subs = (pa.subs||[]).filter(function(x){return x.id!==SK.a.id;});
-    (S.registries||[]).forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.axes) e.axes = e.axes.filter(function(i){return i!==SK.a.id;}); }); });
-    saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); toast('Sub-habilidad eliminada'); skOpen(tr.id, pa.id); return;
-  }
-  var a = (tr.axes||[]).find(function(x){return x.id===SK.a.id;}); if(!a) return;
-  tr.axes = tr.axes.filter(function(x){return x!==a;});
-  skSubs(a).forEach(function(sb){ (S.registries||[]).forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.axes) e.axes = e.axes.filter(function(i){return i!==sb.id;}); }); }); });
-  (S.registries||[]).forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.axes) e.axes = e.axes.filter(function(i){return i!==a.id;}); }); });
-  saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); toast('Habilidad eliminada');
+  var f = skFind(tr, SK.a.id); if(!f) return;
+  var ids = {}; ids[f.a.id]=1;
+  (function walk(n){ skSubs(n).forEach(function(x){ if(x.ref) return; ids[x.id]=1; walk(x); }); })(f.a);   // descendientes propios (los atajos no borran la original)
+  var list = f.parent ? f.parent.subs : tr.axes;
+  var i = list.indexOf(f.a); if(i>=0) list.splice(i,1);
+  skPurgeIds(ids);
+  saveState(); removeOverlay('skill-ed'); skRefreshDetail(tr.id); render();
+  if(f.parent){ toast('Sub-habilidad eliminada'); skOpen(tr.id, f.parent.id); }
+  else { toast('Habilidad eliminada'); removeOverlay('skill-view'); }
 }
 // ── «Cuenta para» en la ventanilla de un registro ──
 function skEntryAxes(reg){
   var out = [];
   (S.levelTracks||[]).forEach(function(tr){
     var fed = (tr.regSources||[]).some(function(x){return x.regId===reg.id;});
-    skAxes(tr).forEach(function(a){ if(fed || a.regId===reg.id) out.push({tr:tr, a:a}); skSubs(a).forEach(function(sb){ if(fed || sb.regId===reg.id) out.push({tr:tr, a:Object.assign({}, sb, {name:a.name+' › '+sb.name})}); }); });
+    (function walk(list, trail){
+      list.forEach(function(x){
+        if(x.ref) return;
+        var path = trail.concat([x.name]);
+        if(fed || x.regId===reg.id) out.push({tr:tr, a:trail.length ? Object.assign({}, x, {name:path.join(' › ')}) : x});
+        walk(skSubs(x), path);
+      });
+    })(skAxes(tr), []);
   });
   return out;
 }
@@ -8899,6 +9241,37 @@ function axesPickHTML(reg, sel, lab, fn, cid){
   }).join('')+'</div></div>';
 }
 function axesSwap(id, html){ var e = document.getElementById(id); if(!e) return; var t=document.createElement('div'); t.innerHTML = html; if(t.firstChild) e.replaceWith(t.firstChild); }
+
+// ── Dificultad extra en la ventanilla de una anotación ──
+function enModsClean(reg){
+  var m = EN && EN.mods, out = {}, any = false; if(!m) return null;
+  regModDefs(reg).forEach(function(d){ var v = m[d.id]; if(d.kind==='amount'){ if(+v>0){ out[d.id]=+v; any=true; } } else if(v){ out[d.id]=true; any=true; } });
+  return any ? out : null;
+}
+function enModsHTML(){
+  var reg = regById(EN.regId); if(!reg || reg.kind!=='metrics') return '';
+  var defs = regModDefs(reg); if(!defs.length) return '';
+  if(!EN.mods) EN.mods = JSON.parse(JSON.stringify((EN.existing && EN.existing.mods) || {}));
+  var n = defs.filter(function(d){ return d.kind==='amount' ? +EN.mods[d.id]>0 : !!EN.mods[d.id]; }).length;
+  var pct = regModPct(reg, {mods:EN.mods});
+  return '<details id="en-mods" '+((EN.modsOpen||n)?'open':'')+' ontoggle="EN.modsOpen=this.open" style="border:1px solid var(--line-soft);border-radius:12px;margin-bottom:14px;padding:0 12px;"><summary style="cursor:pointer;padding:11px 0;font-size:13px;font-weight:700;color:var(--ink);list-style:none;display:flex;justify-content:space-between;"><span>Dificultad extra</span><span style="font-size:11.5px;font-weight:600;color:var(--muted);">'+(n?n+' · +'+pct+' % XP':'opcional')+'</span></summary><div style="padding-bottom:12px;">'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+defs.map(function(d){
+      var on = d.kind==='amount' ? +EN.mods[d.id]>0 : !!EN.mods[d.id];
+      return '<button type="button" onclick="enToggleMod(\''+d.id+'\')" style="padding:6px 11px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-soft,rgba(0,0,0,.05))':'transparent')+';color:'+(on?'var(--ink)':'var(--muted)')+';">'+(on?'✓ ':'')+esc(d.name)+(d.std===false?'':'')+'</button>';
+    }).join('')+'</div>'+
+    defs.filter(function(d){ return d.kind==='amount' && EN.mods[d.id]!=null && EN.mods[d.id]!==false; }).map(function(d){
+      return '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;"><span style="flex:1;">'+esc(d.name)+'</span><input class="finp" type="text" inputmode="decimal" value="'+esc(EN.mods[d.id]===true?'':EN.mods[d.id])+'" placeholder="0" oninput="enModAmt(\''+d.id+'\',this.value)" style="width:80px;margin:0;text-align:right;"/><span style="color:var(--muted);width:30px;">'+esc(d.unit||'')+'</span></div>';
+    }).join('')+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5;">Da un poco más de XP (máx. +'+MOD_CAP+' %). Las marcas con dificultad extra no cuentan como marcas estándar.</div></div></details>';
+}
+function enToggleMod(id){
+  var reg = regById(EN.regId), d = regModDefs(reg).find(function(x){return x.id===id;}); if(!d) return;
+  if(!EN.mods) EN.mods = {};
+  if(d.kind==='amount'){ if(EN.mods[id]!=null && EN.mods[id]!==false) delete EN.mods[id]; else EN.mods[id] = ''; }
+  else EN.mods[id] = !EN.mods[id];
+  EN.modsOpen = true; axesSwap('en-mods', enModsHTML());
+}
+function enModAmt(id, v){ var n = parseNumInput(v); EN.mods[id] = isNaN(n) ? '' : n; var e = document.querySelector('#en-mods summary span:last-child'); if(e){ var reg=regById(EN.regId), pct=regModPct(reg,{mods:EN.mods}); e.textContent = pct? '+'+pct+' % XP':'opcional'; } }
 function enAxesHTML(){
   var reg = regById(EN.regId); if(!reg) return '';
   if(!EN.axes) EN.axes = ((EN.existing && EN.existing.axes) || []).slice();
@@ -12970,7 +13343,8 @@ function renderLevelTracksSection(){
     html += '<div style="font-size:12px;color:var(--muted);line-height:1.5;padding:6px 2px 10px;">Sube de nivel en algo específico — por ejemplo "Deporte" — con las tareas de una categoría o las que tú elijas.</div>';
   }
   // El botón siempre está; si ya no hay cupo, el aviso del plan aparece recién al tocarlo.
-  html += '<button onclick="openTrackEditor(null)" style="width:100%;margin-top:'+(tracks.length?10:0)+'px;background:var(--bg);border:1.5px dashed var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">+ Nuevo seguimiento</button>';
+  if(!featureLocked('hexagon')) html += '<button onclick="openSkTemplates()" style="width:100%;margin-top:'+(tracks.length?10:0)+'px;background:none;border:1.5px dashed var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;">Plantillas: Cuerpo, Escalada, Trote…</button>';
+  html += '<button onclick="openTrackEditor(null)" style="width:100%;margin-top:'+((tracks.length||!featureLocked('hexagon'))?10:0)+'px;background:var(--bg);border:1.5px dashed var(--line);border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">+ Nuevo seguimiento</button>';
   html += '</div>';
   return html;
 }
@@ -13103,6 +13477,7 @@ function trackEditorBodyHTML(){
     teStyleAreaHTML()+
     teColorAreaHTML()+
     teLevelNamesAreaHTML()+
+    teXpModeHTML()+
     '<div style="display:flex;gap:8px;margin-top:20px;">'+
       (TE.isNew?'':'<button onclick="confirmDeleteTrack(\''+t.id+'\')" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+
       '<button onclick="saveTrackEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button>'+
@@ -13111,6 +13486,11 @@ function trackEditorBodyHTML(){
 // Color del seguimiento: por defecto sigue el color de su categoría (si
 // sigue una); el círculo con el degradé representa esa opción ("automático").
 // El resto son la misma paleta que usan las categorías, para que combine.
+function teXpModeHTML(){
+  var t = TE.track, sum = t.xpMode==='sum';
+  return '<details style="border:1px solid var(--line-soft);border-radius:12px;margin-top:16px;padding:0 12px;"'+(sum?' open':'')+'><summary style="cursor:pointer;padding:11px 0;font-size:13px;font-weight:700;color:var(--ink);list-style:none;">Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
+    '<label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink);line-height:1.45;"><input type="checkbox" '+(sum?'checked':'')+' onchange="TE.track.xpMode=this.checked?\'sum\':undefined" style="margin-top:3px;"/><span>Sumar por separado el XP de la tarea y el de los registros<br><span style="font-size:11.5px;color:var(--muted);">Por defecto, una sesión (tarea + anotaciones del mismo día) cuenta una sola vez: gana el mayor XP.</span></span></label></div></details>';
+}
 function teColorAreaHTML(){
   var t = TE.track;
   var isManual = t.source && t.source.type==='manual';
@@ -23903,7 +24283,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.20.122';
+var APP_VERSION = '2026.10.21.123';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
