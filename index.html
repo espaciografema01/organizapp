@@ -1581,6 +1581,7 @@ function wipeLocalForAccountSwitch(uid){
     if(k && (k.indexOf('og6-')===0 || k.indexOf('gr-extra-last-')===0)) keys.push(k);
   }
   keys.forEach(function(k){ localStorage.removeItem(k); });
+  try{ grmWipeAll(); }catch(e){}
   try{ localStorage.setItem('gr-last-uid', uid); }catch(e){}
   _savePending = false; if(_saveTimer){ clearTimeout(_saveTimer); _saveTimer = null; }
   location.reload();
@@ -11678,6 +11679,7 @@ function doFactoryReset(){
     if(k && k.startsWith('og6-')) keys.push(k);
   }
   keys.forEach(function(k){ localStorage.removeItem(k); });
+  try{ grmWipeAll(); }catch(e){}
   // Mostrar pantalla de reinicio
   var done = document.createElement('div');
   done.style.cssText='position:fixed;inset:0;background:var(--paper);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;';
@@ -14122,7 +14124,7 @@ function buildTimerSteps(timer, runtime, noPrep){
       var color = set.color||CATEGORY_COLORS[i%CATEGORY_COLORS.length];
       var isReps = set.kind==='reps', count = Math.max(1, set.count||10);
       for(var k=1; k<=reps; k++){
-        var st = {type:'work', name:name, key:(name||'').toLowerCase().trim(), color:color, round:r+1, totalRounds:timer.rounds, exIdx:i+1, exTotal:sets.length, rep:k, reps:reps, tap:!!set.tap, kind:isReps?'reps':'time', n:0, regId:set.regId||null, metricId:set.metricId||null, metricId2:set.metricId2||null, ask:(set.ask!==undefined?!!set.ask:(isReps||!!set.tap||!!set.regId)), icon:set.icon||null, rec:!!set.rec, autoEnd:set.autoEnd!==false, setId:set.id||null, planSec:Math.max(1,set.sec||30), planCount:count};
+        var st = {type:'work', name:name, key:(name||'').toLowerCase().trim(), color:color, round:r+1, totalRounds:timer.rounds, exIdx:i+1, exTotal:sets.length, rep:k, reps:reps, tap:!!set.tap, kind:isReps?'reps':'time', n:0, regId:set.regId||null, metricId:set.metricId||null, metricId2:set.metricId2||null, ask:(set.ask!==undefined?!!set.ask:(isReps||!!set.tap||!!set.regId)), icon:set.icon||null, media:set.media||null, rec:!!set.rec, autoEnd:set.autoEnd!==false, setId:set.id||null, planSec:Math.max(1,set.sec||30), planCount:count};
         if(isReps){ st.count=count; st.open=true; st.estSec=Math.max(5,Math.round(count*3)); st.sec = runtime?TIMER_OPEN_SEC:st.estSec; }
         else st.sec = Math.max(1,set.sec||30);
         steps.push(st);
@@ -14791,6 +14793,7 @@ function timerRenderFrame(force){
       '<div '+(step.tap?'onpointerdown="timerTap(event)"':'')+' style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;padding:0 24px;text-align:center;'+(step.tap?'cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;':'')+'">'+
         (step.tap?'<div id="tr-circle" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(78vw,300px);height:min(78vw,300px);border-radius:50%;border:3px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);pointer-events:none;z-index:0;"></div>':'')+
         '<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;">'+
+        (function(){ var dm = step.type==='work' ? step.media : (nxt && nxt.media); return dm ? '<div style="margin-bottom:14px;box-shadow:0 6px 20px rgba(0,0,0,.35);border-radius:16px;">'+grmHTML(dm,'min(44vw,190px)',{r:16})+'</div>' : ''; })()+
         '<div style="font-size:16px;font-weight:700;letter-spacing:.03em;color:rgba(255,255,255,.9);margin-bottom:'+(step.type==='work'&&step.reps>1?'4':'10')+'px;text-transform:uppercase;">'+esc(step.name||(isRest?'Descanso':'Ejercicio'))+'</div>'+
         (step.type==='work'&&step.reps>1?'<div style="font-size:12.5px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px;">Serie '+step.rep+' de '+step.reps+'</div>':'')+
         main+sub+timeEl+
@@ -19167,9 +19170,10 @@ function exIconSVG(id, size, color, sw){
   var ic = EX_ICONS[id]; if(!ic) return '';
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+(color||'currentColor')+'" stroke-width="'+(sw||1.7)+'" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">'+ic[1]+'</svg>';
 }
-// Iniciales del ejercicio (máx. 3 letras): "Dominadas altas" → "DA".
+// Iniciales del ejercicio (máx. 3 letras): "Dominadas altas" → "DA". Solo cuentan letras:
+// se ignoran símbolos, números y emojis ("+ Press 45°" → "PR").
 function exInitials(name){
-  var w=String(name||'').trim().split(/\s+/).filter(function(x){return x;});
+  var w=String(name||'').split(/[^\p{L}]+/u).filter(function(x){return x;}); // cualquier símbolo, número o guion separa palabras
   if(!w.length) return '?';
   var out;
   if(w.length===1) out=w[0].slice(0,2); else out=w.slice(0,3).map(function(x){return x.charAt(0);}).join('');
@@ -19314,6 +19318,16 @@ function promptName(title, defVal, cb){
 }
 function timerSetSaveBtnHTML(set){
   return '<button type="button" onclick="saveSetAsExercise(\''+set.id+'\')" style="width:100%;margin-top:10px;background:none;border:1.5px dashed var(--accent);color:var(--accent-text);border-radius:9px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Guardar este ejercicio en mi biblioteca</button>';
+}
+// Crear un ejercicio nuevo directamente desde la biblioteca (sin pasar por un temporizador).
+function newExerciseInLib(){
+  promptName('Nombre del ejercicio', '', function(name){
+    if(!S.exerciseLib) S.exerciseLib=[];
+    var id = uid();
+    S.exerciseLib.push({id:id, name:name, set:{name:name, sec:30, color:CATEGORY_COLORS[S.exerciseLib.length%CATEGORY_COLORS.length]}, updatedAt:Date.now()});
+    saveState(); exLibRefresh(); render();
+    openExerciseEditor(id); // se abre para ajustar duración, series, color, etc.
+  });
 }
 function saveSetAsExercise(setId){
   var set = M.timer.sets.find(function(x){return x.id===setId;}); if(!set) return;
@@ -20150,6 +20164,238 @@ function previewPack(k){
   playTimerSound(ctx, snd.start||'boxing', t, v, 1); playTimerSound(ctx, snd.finish||'fanfare', t+2.4, v, 1);
 }
 
+// ═══ Demostraciones (video / GIF / imagen) por ejercicio — solo en este dispositivo ═══════════════
+// El archivo se guarda en IndexedDB (no en la nube ni en localStorage). En el ejercicio solo queda una
+// referencia pequeña: set.media = {id, type:'video'|'image', mime, w, h, crop:{x,y,w,h}} (crop en fracciones 0–1).
+// El recorte NO recodifica el archivo: se aplica al mostrarlo (CSS), así funciona igual con video y GIF.
+// En otro dispositivo la referencia viaja con el ejercicio, pero el archivo no: ahí simplemente no se muestra.
+var GRM_MAX_BYTES = 8*1024*1024, GRM_MAX_SEC = 20, _grmDb = null, _grmUrls = {};
+function grmOpen(){
+  return new Promise(function(ok, fail){
+    if(_grmDb) return ok(_grmDb);
+    try{
+      var rq = indexedDB.open('gr-media', 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore('blobs'); };
+      rq.onsuccess = function(){ _grmDb = rq.result; ok(_grmDb); };
+      rq.onerror = function(){ fail(rq.error); };
+    }catch(e){ fail(e); }
+  });
+}
+function grmTx(mode, fn){
+  return grmOpen().then(function(db){ return new Promise(function(ok, fail){
+    var tx = db.transaction('blobs', mode), res = fn(tx.objectStore('blobs'));
+    tx.oncomplete = function(){ ok(res && res.result); };
+    tx.onerror = tx.onabort = function(){ fail(tx.error); };
+  }); });
+}
+function grmPut(id, blob){ return grmTx('readwrite', function(st){ return st.put({blob:blob, ts:Date.now()}, id); }); }
+function grmGet(id){ return grmTx('readonly', function(st){ return st.get(id); }).then(function(r){ return r && r.blob || null; }); }
+function grmDel(id){ if(_grmUrls[id]){ try{ URL.revokeObjectURL(_grmUrls[id]); }catch(e){} delete _grmUrls[id]; } return grmTx('readwrite', function(st){ return st.delete(id); }).catch(function(){}); }
+function grmUrl(id){
+  if(_grmUrls[id]) return Promise.resolve(_grmUrls[id]);
+  return grmGet(id).then(function(b){ if(!b) return null; _grmUrls[id] = URL.createObjectURL(b); return _grmUrls[id]; });
+}
+function grmWipeAll(){
+  try{ Object.keys(_grmUrls).forEach(function(k){ URL.revokeObjectURL(_grmUrls[k]); }); }catch(e){}
+  _grmUrls = {};
+  try{ if(_grmDb){ _grmDb.close(); _grmDb = null; } indexedDB.deleteDatabase('gr-media'); }catch(e){}
+}
+// Limpieza: borra los archivos que ningún ejercicio usa (solo al abrir la app, y nunca los de las últimas 24 h).
+function grmGC(){
+  try{
+    if(!S || !Array.isArray(S.tasks)) return;
+    var all = JSON.stringify(S);
+    grmOpen().then(function(db){
+      var tx = db.transaction('blobs', 'readonly'), st = tx.objectStore('blobs'), rq = st.openCursor(), dead = [];
+      rq.onsuccess = function(){
+        var c = rq.result;
+        if(c){ var v = c.value; if(all.indexOf(c.key) === -1 && (!v || !v.ts || Date.now()-v.ts > 86400000)) dead.push(c.key); c.continue(); }
+        else dead.forEach(function(k){ grmDel(k); });
+      };
+    }).catch(function(){});
+  }catch(e){}
+}
+// HTML del recuadro con la demostración ya recortada. width: CSS ('96px', 'min(46vw,200px)').
+function grmHTML(m, width, opts){
+  if(!m || !m.id || !m.w || !m.h) return '';
+  opts = opts||{};
+  var c = m.crop || {x:0,y:0,w:1,h:1}, ar = (c.w*m.w)/(c.h*m.h);
+  return '<div class="grm" data-mid="'+esc(m.id)+'" data-type="'+(m.type==='video'?'video':'image')+'" data-c="'+[c.x,c.y,c.w,c.h].join(',')+'"'+(opts.ph?' data-ph="1"':'')+
+    ' style="position:relative;overflow:hidden;width:'+width+';aspect-ratio:'+ar.toFixed(4)+';border-radius:'+(opts.r||12)+'px;background:rgba(127,127,127,.15);flex-shrink:0;"></div>';
+}
+function grmHydrate(){
+  var els = document.querySelectorAll('.grm:not([data-h])');
+  Array.prototype.forEach.call(els, function(box){
+    box.setAttribute('data-h','1');
+    var id = box.getAttribute('data-mid'), c = box.getAttribute('data-c').split(',').map(parseFloat);
+    grmUrl(id).then(function(url){
+      if(!box.isConnected) return;
+      if(!url){
+        if(box.hasAttribute('data-ph')){ box.style.aspectRatio='auto'; box.innerHTML='<div style="padding:10px;font-size:11px;color:var(--muted);line-height:1.4;text-align:center;">Este archivo no está en este dispositivo</div>'; }
+        else box.style.display='none';
+        return;
+      }
+      var el;
+      if(box.getAttribute('data-type')==='video'){
+        el = document.createElement('video'); el.muted = true; el.loop = true; el.autoplay = true; el.playsInline = true; el.setAttribute('playsinline',''); el.setAttribute('muted','');
+        el.src = url; var pl = el.play(); if(pl && pl.catch) pl.catch(function(){});
+      } else { el = document.createElement('img'); el.src = url; el.alt = ''; }
+      el.style.cssText = 'position:absolute;max-width:none;display:block;width:'+(100/c[2])+'%;left:-'+(c[0]/c[2]*100)+'%;top:-'+(c[1]/c[3]*100)+'%;pointer-events:none;';
+      box.appendChild(el);
+    }).catch(function(){ box.style.display='none'; });
+  });
+}
+(function(){
+  try{
+    var t = null;
+    new MutationObserver(function(){ clearTimeout(t); t = setTimeout(grmHydrate, 30); }).observe(document.body, {childList:true, subtree:true});
+    setTimeout(grmHydrate, 300);
+    setTimeout(grmGC, 9000);
+  }catch(e){}
+})();
+// ── Sección en el editor del ejercicio ──
+function timerSetMediaHTML(set){
+  var lbl = '<div style="font-size:11px;color:var(--muted);margin:14px 0 6px;">Demostración (video o GIF)</div>';
+  var b = 'background:none;border:1.5px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;';
+  if(set.media){
+    return lbl+'<div style="display:flex;align-items:center;gap:12px;">'+grmHTML(set.media,'96px',{ph:true})+
+      '<div style="display:flex;flex-direction:column;gap:6px;"><button type="button" style="'+b+'" onclick="grmCropOpen(\''+set.id+'\')">Recortar</button>'+
+      '<button type="button" style="'+b+'" onclick="grmPick(\''+set.id+'\')">Cambiar</button>'+
+      '<button type="button" style="'+b+'color:var(--bad);" onclick="grmRemove(\''+set.id+'\')">Quitar</button></div></div>';
+  }
+  return lbl+'<button type="button" onclick="grmPick(\''+set.id+'\')" style="width:100%;background:none;border:1.5px dashed var(--line);color:var(--ink-soft);border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">＋ Añadir demostración</button>'+
+    '<div style="font-size:10.5px;color:var(--muted);margin-top:5px;line-height:1.5;">Se guarda solo en este dispositivo. Máx. 8 MB y '+GRM_MAX_SEC+' s de video.</div>';
+}
+function grmSetMedia(setId, media){
+  M.timer.sets = M.timer.sets.map(function(s){ if(s.id!==setId) return s; var u = Object.assign({}, s); if(media) u.media = media; else delete u.media; return u; });
+  mRerenderTimerArea();
+}
+function grmRemove(setId){ grmSetMedia(setId, null); } // el archivo se borra solo en la próxima limpieza si nadie más lo usa
+function grmPick(setId){
+  var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'video/*,image/gif,image/*';
+  inp.style.display = 'none';
+  inp.onchange = function(){
+    var f = inp.files && inp.files[0]; inp.remove(); if(!f) return;
+    var isVid = /^video\//.test(f.type), isImg = /^image\//.test(f.type);
+    if(!isVid && !isImg){ toast('Elige un video, un GIF o una imagen'); return; }
+    if(f.size > GRM_MAX_BYTES){ toast('El archivo pesa '+(f.size/1048576).toFixed(1).replace('.',',')+' MB; el máximo es 8 MB'); return; }
+    var url = URL.createObjectURL(f), done = function(w, h){
+      URL.revokeObjectURL(url);
+      if(!w || !h){ toast('No se pudo leer el archivo'); return; }
+      var id = uid();
+      grmPut(id, f).then(function(){
+        var side = Math.min(w, h), cw = side/w, ch = side/h;
+        var media = {id:id, type:isVid?'video':'image', mime:f.type||'', w:w, h:h, crop:{x:(1-cw)/2, y:(1-ch)/2, w:cw, h:ch}};
+        grmSetMedia(setId, media);
+        grmCropOpen(setId, true);
+      }).catch(function(){ toast('No se pudo guardar el archivo en este dispositivo'); });
+    };
+    if(isVid){
+      var v = document.createElement('video'); v.preload = 'metadata'; v.muted = true;
+      v.onloadedmetadata = function(){
+        if(v.duration > GRM_MAX_SEC+0.5){ URL.revokeObjectURL(url); toast('El video dura '+Math.round(v.duration)+' s; el máximo es '+GRM_MAX_SEC+' s'); return; }
+        done(v.videoWidth, v.videoHeight);
+      };
+      v.onerror = function(){ URL.revokeObjectURL(url); toast('No se pudo leer el video'); };
+      v.src = url;
+    } else {
+      var im = new Image(); im.onload = function(){ done(im.naturalWidth, im.naturalHeight); }; im.onerror = function(){ URL.revokeObjectURL(url); toast('No se pudo leer la imagen'); }; im.src = url;
+    }
+  };
+  document.body.appendChild(inp); inp.click();
+}
+// ── Recorte con cuadrícula ──
+var GRC = null;
+function grmCropOpen(setId, isNew){
+  var set = M.timer.sets.find(function(s){return s.id===setId;}); if(!set || !set.media) return;
+  var m = set.media;
+  GRC = {setId:setId, m:m, isNew:!!isNew, c:Object.assign({}, m.crop||{x:0,y:0,w:1,h:1}), ar:null, drag:null};
+  var bw = Math.min(320, Math.round(window.innerWidth*0.86)), bh = Math.round(bw*m.h/m.w);
+  if(bh > Math.round(window.innerHeight*0.5)){ bh = Math.round(window.innerHeight*0.5); bw = Math.round(bh*m.w/m.h); }
+  GRC.bw = bw; GRC.bh = bh;
+  var chip = function(k, t){ return '<button type="button" id="grc-a-'+k+'" onclick="grmCropAspect(\''+k+'\')" style="border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+t+'</button>'; };
+  removeOverlay('grm-crop');
+  var ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'grm-crop'; ov.style.zIndex = 9600;
+  ov.innerHTML = '<div class="sheet" style="text-align:center;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="serif" style="font-weight:700;font-size:18px;">Recortar demostración</span>'+
+    '<button onclick="grmCropCancel()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Arrastra el recuadro para mover lo que se verá. Usa la esquina para cambiar su tamaño.</div>'+
+    '<div id="grc-box" style="position:relative;width:'+bw+'px;height:'+bh+'px;margin:0 auto;background:#000;border-radius:10px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;">'+
+      '<div id="grc-media" style="position:absolute;inset:0;"></div>'+
+      '<div id="grc-rect" style="position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.55);border:2px solid #fff;cursor:move;touch-action:none;">'+
+        '<div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.35) 1px,transparent 1px);background-size:33.333% 33.333%;pointer-events:none;"></div>'+
+        '<div id="grc-h" style="position:absolute;right:-14px;bottom:-14px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);touch-action:none;"></div>'+
+      '</div></div>'+
+    '<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:14px 0;">'+chip('1','Cuadrado')+chip('1.3333','4:3')+chip('0.75','3:4')+chip('1.7778','16:9')+chip('free','Libre')+'</div>'+
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="grmCropCancel()">Cancelar</button><button class="sbtn" style="flex:1;" onclick="grmCropSave()">Listo</button></div></div>';
+  document.body.appendChild(ov);
+  // vista previa (sin recorte) del archivo completo
+  grmUrl(m.id).then(function(url){
+    var host = document.getElementById('grc-media'); if(!host || !url) return;
+    var el;
+    if(m.type==='video'){ el = document.createElement('video'); el.muted = true; el.loop = true; el.autoplay = true; el.playsInline = true; el.setAttribute('playsinline',''); el.src = url; var p = el.play(); if(p && p.catch) p.catch(function(){}); }
+    else { el = document.createElement('img'); el.src = url; }
+    el.style.cssText = 'width:100%;height:100%;display:block;pointer-events:none;object-fit:fill;';
+    host.appendChild(el);
+  });
+  var rect = document.getElementById('grc-rect'), handle = document.getElementById('grc-h');
+  rect.addEventListener('pointerdown', function(e){ if(e.target===handle) return; grcStart(e,'move'); });
+  handle.addEventListener('pointerdown', function(e){ e.stopPropagation(); grcStart(e,'size'); });
+  grcPaint();
+}
+function grcStart(e, mode){
+  e.preventDefault();
+  GRC.drag = {mode:mode, x:e.clientX, y:e.clientY, c:Object.assign({}, GRC.c)};
+  var mv = function(ev){ grcMove(ev); }, up = function(){ GRC.drag = null; window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+}
+function grcMove(e){
+  if(!GRC || !GRC.drag) return;
+  var d = GRC.drag, m = GRC.m, dx = (e.clientX-d.x)/GRC.bw, dy = (e.clientY-d.y)/GRC.bh, c = Object.assign({}, d.c);
+  if(d.mode==='move'){
+    c.x = Math.max(0, Math.min(1-c.w, d.c.x+dx)); c.y = Math.max(0, Math.min(1-c.h, d.c.y+dy));
+  } else {
+    var minF = 0.12, nw = d.c.w+dx, nh = d.c.h+dy;
+    if(GRC.ar){ // proporción fija: manda el ancho; alto = ancho·(w/h del archivo)/ar
+      var k = m.w/(m.h*GRC.ar); // alto en fracción = ancho en fracción · k
+      nw = Math.max(minF, Math.min(1-d.c.x, nw)); nh = nw*k;
+      if(d.c.y+nh > 1){ nh = 1-d.c.y; nw = nh/k; }
+      if(nw < minF){ nw = minF; nh = nw*k; }
+    } else { nw = Math.max(minF, Math.min(1-d.c.x, nw)); nh = Math.max(minF, Math.min(1-d.c.y, nh)); }
+    c.w = nw; c.h = nh;
+  }
+  GRC.c = c; grcPaint();
+}
+function grcPaint(){
+  var r = document.getElementById('grc-rect'); if(!r || !GRC) return;
+  var c = GRC.c; r.style.left = (c.x*100)+'%'; r.style.top = (c.y*100)+'%'; r.style.width = (c.w*100)+'%'; r.style.height = (c.h*100)+'%';
+  ['1','1.3333','0.75','1.7778','free'].forEach(function(k){
+    var b = document.getElementById('grc-a-'+k); if(!b) return;
+    var on = (k==='free' && !GRC.ar) || (GRC.ar && Math.abs(parseFloat(k)-GRC.ar) < 0.001);
+    b.style.background = on ? 'var(--accent)' : 'var(--bg)'; b.style.color = on ? '#fff' : 'var(--ink-soft)'; b.style.borderColor = on ? 'var(--accent)' : 'var(--line)';
+  });
+}
+function grmCropAspect(k){
+  if(!GRC) return;
+  var m = GRC.m, c = GRC.c;
+  if(k==='free'){ GRC.ar = null; grcPaint(); return; }
+  var a = parseFloat(k); GRC.ar = a;
+  var kk = m.w/(m.h*a), cx = c.x+c.w/2, cy = c.y+c.h/2;
+  var w = Math.min(c.w, 1/kk), h = w*kk; // el mayor rectángulo posible de esa proporción que quepa
+  if(h > 1){ h = 1; w = 1/kk; }
+  if(w < 0.12){ w = 0.12; h = w*kk; }
+  c = {w:w, h:h, x:Math.max(0, Math.min(1-w, cx-w/2)), y:Math.max(0, Math.min(1-h, cy-h/2))};
+  GRC.c = c; grcPaint();
+}
+function grmCropSave(){
+  if(!GRC) return;
+  var g = GRC, media = Object.assign({}, g.m, {crop:{x:+g.c.x.toFixed(4), y:+g.c.y.toFixed(4), w:+g.c.w.toFixed(4), h:+g.c.h.toFixed(4)}});
+  GRC = null; removeOverlay('grm-crop'); grmSetMedia(g.setId, media);
+}
+function grmCropCancel(){
+  var g = GRC; GRC = null; removeOverlay('grm-crop');
+  if(g && g.isNew) grmSetMedia(g.setId, null); // si recién lo había elegido y cancela, no queda asignado
+}
+
 var EXE = null;
 function openExerciseEditor(id){
   var it = exLibList().find(function(x){return x.id===id;}); if(!it) return;
@@ -20200,7 +20446,7 @@ function renameLibItem(kind, id){
   promptName('Cambiar nombre', it.name, function(v){ S[key] = S[key].map(function(x){ return x.id===id ? Object.assign({},x,{name:v,updatedAt:Date.now()}) : x; }); saveState(); render(); });
 }
 function exGroupList(){ return (S.exerciseGroups||[]).filter(function(g){return !g.del;}); }
-function exSummary(st){ return (st.kind==='reps'?((st.count||10)+' repeticiones'):fmtDur(st.sec||30))+(st.tap?' · con toques':'')+((st.reps||1)>1?' · '+st.reps+' series':''); }
+function exSummary(st){ return (st.kind==='reps'?((st.count||10)+' repeticiones'):fmtDur(st.sec||30))+(st.media?' · con demo':'')+(st.tap?' · con toques':'')+((st.reps||1)>1?' · '+st.reps+' series':''); }
 function addExGroup(){
   promptName('Nuevo grupo de ejercicios','',function(name){
     if(!S.exerciseGroups) S.exerciseGroups=[];
@@ -20247,7 +20493,7 @@ function exLibListHTML(){
   var q = (S._exQ||'').trim().toLowerCase();
   var groups = exGroupList(), items = exLibList();
   var match = function(it){ return !q || (it.name||'').toLowerCase().indexOf(q)!==-1; };
-  if(!items.length && !groups.length) return '<div style="text-align:center;font-size:12px;color:var(--muted);padding:8px 0;line-height:1.6;">Guarda un ejercicio desde su ⚙ al armar un temporizador, o crea grupos para ordenarlos.</div>';
+  if(!items.length && !groups.length) return '<div style="text-align:center;font-size:12px;color:var(--muted);padding:8px 0;line-height:1.6;">Crea un ejercicio con «＋ Ejercicio», guárdalo desde su ⚙ al armar un temporizador, o crea grupos para ordenarlos.</div>';
   var html = '<div data-drag-list data-drag-cb="exGroups">';
   groups.forEach(function(g){
     var its = items.filter(function(it){return it.gid===g.id;}), vis = its.filter(match);
@@ -20290,7 +20536,7 @@ function timerLibSectionsHTML(){
   }
   html += head('Ejercicios guardados', exs.length, 'tpl_ex');
   if(lo.ex){
-  html += '<div style="display:flex;gap:6px;margin-bottom:10px;"><input id="exlib-q" class="finp" type="text" placeholder="Buscar ejercicio..." value="'+esc(S._exQ||'')+'" oninput="S._exQ=this.value;exLibRefresh();" style="flex:1;margin:0;"/><button onclick="addExGroup()" style="background:var(--accent-bg);border:1.5px solid var(--accent);color:var(--accent-text);border-radius:10px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;flex-shrink:0;">＋ Grupo</button></div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px;"><input id="exlib-q" class="finp" type="text" placeholder="Buscar ejercicio..." value="'+esc(S._exQ||'')+'" oninput="S._exQ=this.value;exLibRefresh();" style="flex:1;margin:0;"/><button onclick="newExerciseInLib()" style="background:var(--accent);border:1.5px solid var(--accent);color:#fff;border-radius:10px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;flex-shrink:0;">＋ Ejercicio</button><button onclick="addExGroup()" style="background:var(--accent-bg);border:1.5px solid var(--accent);color:var(--accent-text);border-radius:10px;padding:0 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;flex-shrink:0;">＋ Grupo</button></div>';
   html += '<div id="exlib-list">'+exLibListHTML()+'</div>';
   }
   return html;
@@ -20513,7 +20759,7 @@ function mSetSetReg(id,regId){
 function mSetSetMetric2(id,mid){ M.timer.sets = M.timer.sets.map(function(s){ if(s.id!==id) return s; var u=Object.assign({},s); if(mid) u.metricId2=mid; else delete u.metricId2; return u; }); mRerenderTimerArea(); }
 function mSetSetMetric(id,mid){ M.timer.sets = M.timer.sets.map(function(s){ return s.id===id?Object.assign({},s,{metricId:mid}):s; }); mRerenderTimerArea(); }
 function timerSetStyleHTML(set){
-  return '<div style="font-size:11px;color:var(--muted);margin:12px 0 6px;">Color</div>'+stylePickerHTML(set.color||CATEGORY_COLORS[0], set.icon||'', 'mSetSetStyle(\''+set.id+'\',');
+  return '<div style="font-size:11px;color:var(--muted);margin:12px 0 6px;">Color</div>'+stylePickerHTML(set.color||CATEGORY_COLORS[0], set.icon||'', 'mSetSetStyle(\''+set.id+'\',')+timerSetMediaHTML(set);
 }
 function mSetSetStyle(id,kind,v){
   M.timer.sets = M.timer.sets.map(function(x){ if(x.id!==id) return x; var u=Object.assign({},x); if(kind==='icon'){ if(v) u.icon=v; else delete u.icon; } else u.color=v; return u; });
@@ -24283,7 +24529,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.21.123';
+var APP_VERSION = '2026.10.21.125';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
