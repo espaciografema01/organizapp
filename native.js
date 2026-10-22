@@ -106,6 +106,29 @@
       stop: function(){ var P = plugin('GrTimer'); return P ? P.stop().catch(function(){}) : Promise.resolve(); }
     },
 
+    // GPS con la pantalla apagada: servicio nativo en primer plano (plugin propio GrGeo).
+    // Mismo contrato que usa el index: start(onPoint(lat,lon,acc,alt,ts), onError(msg)) / stop().
+    geo: (function(){
+      var h = [], next = 0, lastTs = 0, onP = null, onE = null, vis = null;
+      function feed(p){ var ts = +p.ts || Date.now(); if(ts <= lastTs) return; lastTs = ts; if(onP) onP(p.lat, p.lon, p.acc, (p.alt==null?null:p.alt), ts); }
+      function drain(){ var P = plugin('GrGeo'); if(!P || !onP) return; P.drain({since: next}).then(function(r){ (r.points||[]).forEach(feed); if(r && r.next!=null) next = r.next; }).catch(function(){}); }
+      return {
+        available: function(){ return native && !!plugin('GrGeo'); },
+        start: function(onPoint, onError){
+          var P = plugin('GrGeo'); onP = onPoint; onE = onError; lastTs = 0; next = 0;
+          P.addListener('point', function(p){ feed(p); if(p.seq!=null) next = p.seq + 1; }).then(function(x){ h.push(x); });
+          P.addListener('error', function(e){ if(onE) onE(e && e.msg); }).then(function(x){ h.push(x); });
+          vis = function(){ if(!document.hidden) drain(); }; document.addEventListener('visibilitychange', vis);
+          P.start().then(function(r){ if(r && r.seq!=null) next = r.seq; }).catch(function(e){ if(onE) onE(String(e && e.message || e).indexOf('denied')>=0 ? 'Permiso de ubicación denegado: actívalo en los ajustes' : 'No se pudo iniciar el GPS'); });
+        },
+        stop: function(){
+          var P = plugin('GrGeo'); if(vis){ document.removeEventListener('visibilitychange', vis); vis = null; }
+          h.forEach(function(x){ try{ x.remove(); }catch(e){} }); h = []; onP = onE = null;
+          if(P) P.stop().catch(function(){});
+        }
+      };
+    })(),
+
     // Vibración. En nativo usa Haptics (un patrón [v,p,v,...] se reproduce por tramos).
     vibrate: function(pattern){
       var H = plugin('Haptics');
