@@ -1356,7 +1356,7 @@ async function syncWithCloud(){
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
         registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
-        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[],
+        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, zoneLog: S.zoneLog||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
         timerCfg: S.timerCfg||{},
@@ -1766,7 +1766,7 @@ function pushToCloud(){
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
       registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
-        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[],
+        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, zoneLog: S.zoneLog||[],
         exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
       timerCfg: S.timerCfg||{},
@@ -2654,6 +2654,9 @@ function loadState(){
     try{var ab2=localStorage.getItem('og6-actbests');if(ab2)S.actBests=JSON.parse(ab2)||{};}catch(e){}
     try{var es2=localStorage.getItem('og6-exskills');if(es2)S.exSkills=JSON.parse(es2)||{};}catch(e){}
     try{var sc2=localStorage.getItem('og6-skcfg');if(sc2)S.skCfg=JSON.parse(sc2)||{};}catch(e){}
+    try{var ez2=localStorage.getItem('og6-exzones');if(ez2)S.exZones=JSON.parse(ez2)||{};}catch(e){}
+    try{var zb2=localStorage.getItem('og6-zonebase');if(zb2)S.zoneBase=JSON.parse(zb2)||{};}catch(e){}
+    try{var zl2=localStorage.getItem('og6-zonelog');if(zl2)S.zoneLog=JSON.parse(zl2)||[];}catch(e){}
     try{var tl2=localStorage.getItem('og6-timerlv');if(tl2)S.timerLv=JSON.parse(tl2)||{};}catch(e){}
     try{var pa2=localStorage.getItem('og6-planacts');if(pa2)S.planActs=JSON.parse(pa2)||[];}catch(e){}
     try{var sl2=localStorage.getItem('og6-sklog');if(sl2)S.skLog=JSON.parse(sl2)||[];}catch(e){}
@@ -2870,6 +2873,9 @@ function _saveStateNow(){
     _lsSet('og6-exskills',JSON.stringify(S.exSkills||{}));
     _lsSet('og6-skcfg',JSON.stringify(S.skCfg||{}));
     _lsSet('og6-timerlv',JSON.stringify(S.timerLv||{}));
+    _lsSet('og6-exzones',JSON.stringify(S.exZones||{}));
+    _lsSet('og6-zonebase',JSON.stringify(S.zoneBase||{}));
+    _lsSet('og6-zonelog',JSON.stringify(S.zoneLog||[]));
     _lsSet('og6-planacts',JSON.stringify(S.planActs||[]));
     _lsSet('og6-actbests',JSON.stringify(S.actBests||{}));
     _lsSet('og6-exlib',JSON.stringify(S.exerciseLib||[]));
@@ -3260,17 +3266,18 @@ function labTap(){
 }
 function maxLevelTrackSlots(){
   if(isPremium()) return 999; // plan completo: sin límite
-  var base = 2;
+  var base = limOn() ? LIM.track : 2;
   var lvlBonus = getLevel(S.xp||0) >= 8 ? 1 : 0;
   var medalBonus = S.bonusTrackSlots || 0;
   return base + lvlBonus + medalBonus + adSlots('track_slot');
 }
 function trackAddXP(track, pts, label){
+  if(trackLocked(track)) return;
   var oldLvl = getLevel(track.xp||0);
   track.xp = Math.max(0,(track.xp||0) + pts);
   track.log = (track.log||[]).concat([{d:todayStr(), x:pts, n:label||''}]).slice(-150);
   var newLvl = getLevel(track.xp);
-  if(newLvl > oldLvl){
+  if(newLvl > oldLvl && track.view==='level'){
     setTimeout(function(){
       playSound('achievement');
       showRewardToast('✦ '+esc(track.name)+' — ¡Nivel '+newLvl+'!', trackLevelName(track,newLvl));
@@ -3314,6 +3321,7 @@ function regModBonus(reg, e, base){
 function trkSingle(tr){ return tr.xpMode!=='sum'; }
 function trkDayAdd(tr, date, kind, pts, label){
   if(!pts) return;
+  if(trackLocked(tr)) return;
   if(!trkSingle(tr)){
     if(pts>0) trackAddXP(tr, pts, label);
     else { tr.xp = Math.max(0,(tr.xp||0)+pts); tr.log = (tr.log||[]).concat([{d:todayStr(), x:pts, n:label||''}]).slice(-150); }
@@ -5117,7 +5125,7 @@ function renderEnergySimple(){
 
   // ── Mis modos personalizados ──────────────────────────────────────────────
   var userModes = S.modes||[];
-  var canCreateMode = isPremium() || userModes.length < FREE_LIMITS.customModes;
+  var canCreateMode = isPremium() || userModes.length < freeLim('customModes');
 
   html += '<div style="font-size:11px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:18px;">Mis modos</div>';
 
@@ -5177,8 +5185,8 @@ function renderEnergySimple(){
     '</button>';
   } else {
     html += '<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px;">'+
-      'Límite de modos del plan gratuito ('+FREE_LIMITS.customModes+'). '+
-      '<span onclick="openDonationInfo()" style="color:var(--accent-text);cursor:pointer;font-weight:700;text-decoration:underline;">Comprar acceso</span> para ilimitados.'+
+      (freeLim('customModes')===0 ? 'Diseñar modos personalizados es parte de la suscripción. ' : 'Límite de modos del plan gratuito ('+FREE_LIMITS.customModes+'). ')+
+      '<span onclick="openDonationInfo()" style="color:var(--accent-text);cursor:pointer;font-weight:700;text-decoration:underline;">Ver suscripción</span>'+
     '</div>';
   }
 
@@ -5197,7 +5205,7 @@ function openEnergySheet(){
   var canBaja = bajaCanActivate();
   var userModes = S.modes||[];
   var hiperfoco = isHiperfocoActive();
-  var canCreateMode = isPremium() || userModes.length < FREE_LIMITS.customModes;
+  var canCreateMode = isPremium() || userModes.length < freeLim('customModes');
   var isNormalAct = !S.activeMode && !hiperfoco;
   var isBajaAct = !!(S.activeMode && S.activeMode.type==='baja');
 
@@ -5675,15 +5683,15 @@ function renderYoTemaScreenBase(){
     '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;">'+
       '<div style="font-weight:700;font-size:14px;color:var(--ink);">Tema visual</div>'+
       (userIsDonante?'':
-        '<div style="font-size:10px;color:var(--muted);">3 gratis · 6 con acceso</div>'
+        '<div style="font-size:10px;color:var(--muted);">'+(limOn()?'1 gratis · Oscuro y Bosque con anuncio':'3 gratis · 6 con acceso')+'</div>'
       )+
     '</div>'+
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'+
       themes.map(function(t){
         var active = S.theme===t.id;
-        var locked = !userIsDonante && FREE_THEMES.indexOf(t.id)===-1;
+        var locked = !themeAllowed(t.id);
         var textColor = (t.id==='dark'||t.id==='galaxia'||t.id==='terracota') ? '#f5f5f5' : '#1a1a1a';
-        return '<button onclick="'+(locked?'openDonationInfo()':'setTheme(\''+t.id+'\')')+'" style="cursor:pointer;border:'+(active?'2px solid var(--accent)':'1.5px solid var(--line)')+';border-radius:12px;padding:12px 6px;background:'+t.bg+(locked?';opacity:.6':'')+';font-family:Inter,sans-serif;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">'+
+        return '<button onclick="'+(locked?'themeLockedTap(\''+t.id+'\')':'setTheme(\''+t.id+'\')')+'" style="cursor:pointer;border:'+(active?'2px solid var(--accent)':'1.5px solid var(--line)')+';border-radius:12px;padding:12px 6px;background:'+t.bg+(locked?';opacity:.6':'')+';font-family:Inter,sans-serif;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">'+
           (locked?'<span style="position:absolute;top:5px;right:6px;color:'+textColor+';opacity:.5;">'+LOCK_ICON+'</span>':'')+
           '<div style="width:22px;height:22px;border-radius:50%;background:'+t.color+';'+(active?'box-shadow:0 0 0 2px '+t.bg+',0 0 0 4px '+t.color+';':'')+'"></div>'+
           '<div style="font-size:11px;font-weight:600;color:'+textColor+';">'+t.name+'</div>'+
@@ -6445,6 +6453,8 @@ async function loadAdsState(){
     var r = await Promise.all([db.collection('config').doc('ads').get(), db.collection('unlocks').doc(uid).get()]);
     if(!currentUser || currentUser.uid!==uid) return;
     ADS_CFG = r[0].exists ? r[0].data() : null;
+    try{ localStorage.setItem('og6-limon', (ADS_CFG && ADS_CFG.limitsEnforced===true) ? '1' : '0'); }catch(e){}
+    try{ limAfterLoad(); }catch(e){}
     UNLOCKS = r[1].exists ? r[1].data() : {};
   }catch(e){ console.warn('Anuncios: no se pudo leer el estado', e && e.message); return; }
   try{ render(); }catch(e){}
@@ -6467,9 +6477,11 @@ function adOffered(f){
     return true;
   }catch(e){ return false; }
 }
-function showAdOfferModal(f, title, body){
+var _adThen = null;
+function showAdOfferModal(f, title, body, then, extraText){
+  _adThen = (typeof then==='function') ? then : null;
   var cfg = adFeatureCfg(f) || {}, n = cfg.adsRequired||1, d = cfg.days||30, p = adProgress(f);
-  var extra = 'También puedes ver '+n+' anuncio'+(n===1?'':'s')+' y obtener 1 cupo extra durante '+d+' días'+(p>0?' (llevas '+p+'/'+n+')':'')+'.';
+  var extra = extraText || ('También puedes ver '+n+' anuncio'+(n===1?'':'s')+' y obtener 1 cupo extra durante '+d+' días'+(p>0?' (llevas '+p+'/'+n+')':'')+'.');
   var old = document.getElementById('info-modal'); if(old) old.remove();
   var box = document.createElement('div'); box.className='conf-box'; box.id='info-modal';
   box.innerHTML='<div class="conf-inner">'+
@@ -6517,7 +6529,9 @@ async function desbloquearConAnuncio(idFuncion, dias){
     if(!ok){ toast('El anuncio terminó, pero la confirmación aún no llega. Revisa en un momento.'); setTimeout(loadAdsState, 20000); return; }
     var cfg = adFeatureCfg(idFuncion) || {};
     var n = cfg.adsRequired||1, p = adProgress(idFuncion);
-    toast(p>0 && p<n ? ('✓ Anuncio '+p+'/'+n+'. Falta '+(n-p)+' más.') : ('✓ ¡Desbloqueado por '+(cfg.days||dias||30)+' días!'));
+    var _done = !(p>0 && p<n), _cb = _adThen; _adThen = null;
+    toast(!_done ? ('✓ Anuncio '+p+'/'+n+'. Falta '+(n-p)+' más.') : ('✓ ¡Desbloqueado!'+(_cb?'':' ('+(cfg.days||dias||30)+' días)')));
+    if(_done && _cb){ try{ _cb(); }catch(e){ console.warn('adThen', e && e.message); } }
   }catch(e){
     console.warn('desbloquearConAnuncio:', e && e.message);
     toast('No se pudo completar. Inténtalo más tarde.');
@@ -6525,6 +6539,72 @@ async function desbloquearConAnuncio(idFuncion, dias){
     _adBusy = false;
     try{ render(); }catch(x){}
   }
+}
+
+
+// ══ Límites del plan (modelo con anuncios) ══════════════════════════════════
+// Solo rigen en la app nativa, para cuentas sin suscripción, y cuando Firestore config/ads tiene
+// limitsEnforced:true (interruptor apagado por defecto). En web/TWA siguen los límites de siempre.
+// Las ampliaciones por anuncio vienen de config/ads.features.<id> (ver FIRESTORE-CONFIG-ADS.md).
+// Nada de esto borra datos: lo que excede el límite queda visible pero bloqueado hasta ampliar o suscribirse.
+var LIM = {checklist:5, checklistAd:5, registry:1, track:1, hexSkills:5, hexSkillsMax:7, hexCharts:2, timers:6, timersAd:2, demos:5};
+function limOn(){
+  try{
+    if(!Platform.isNative || isPremium()) return false;
+    if(ADS_CFG) return ADS_CFG.limitsEnforced===true;
+    return localStorage.getItem('og6-limon')==='1';
+  }catch(e){ return false; }
+}
+function freeLim(k){ return (limOn() && (k==='customModes'||k==='templates')) ? 0 : FREE_LIMITS[k]; }
+// Aviso de tope: ofrece anuncio si se puede; si no, solo informa (y menciona la suscripción).
+function limGate(f, title, body, then, extraText){
+  if(f && adOffered(f)) showAdOfferModal(f, title, body, then, extraText);
+  else showInfoModal(title, body+' Con la suscripción no hay límite.', 'Entendido');
+}
+// Checklist: 5 ítems; +5 con un anuncio solo para esa tarea (marca adCl). Las copias vuelven a 5.
+function clMax(t){
+  if(isPremium()) return 999;
+  if(!limOn()) return MAX_CHECKLIST_ITEMS_FREE;
+  return LIM.checklist + (t && t.adCl ? LIM.checklistAd : 0);
+}
+function clBlocked(t, n){ return !isPremium() && n >= clMax(t); }
+function clLimitMsg(t){
+  var hasAd = !!(t && t.adCl);
+  return 'En el plan gratuito cada checklist admite '+clMax(t)+' ítems'+(limOn() && !hasAd ? ' (hasta '+(LIM.checklist+LIM.checklistAd)+' con un anuncio, solo para esta tarea).' : '.');
+}
+// Rutinas de temporizador propias: 6 gratis; +2 por anuncio (temporal). Las de fábrica y las de plantillas de habilidades no cuentan.
+function timerOwnCount(){ return timerTplAll().filter(function(t){ return !/^(seed-|tpl-)/.test(t.id); }).length; }
+function timerCap(){ if(isPremium() || !limOn()) return 99999; return LIM.timers + LIM.timersAd*adSlots('timer_slot'); }
+function timerCanAdd(){ return timerOwnCount() < timerCap(); }
+function timerLimitTap(){
+  limGate('timer_slot','Rutinas al máximo','Tu plan gratuito incluye '+LIM.timers+' rutinas propias.', null,
+    'Mira un anuncio y suma '+LIM.timersAd+' rutinas durante '+((adFeatureCfg('timer_slot')||{}).days||30)+' días.');
+}
+// Demostraciones (video/GIF) distintas guardadas: gratis hasta LIM.demos; sin anuncios.
+function grmCount(){
+  var ids = {};
+  function walk(o, d){ if(!o || d>8 || typeof o!=='object') return; if(o.media && o.media.id) ids[o.media.id] = 1; if(Array.isArray(o)) o.forEach(function(x){ walk(x, d+1); }); else Object.keys(o).forEach(function(k){ if(k!=='media') walk(o[k], d+1); }); }
+  walk(S.timerTemplates||[], 0); walk(S.setLib||[], 0); walk(S.exerciseLib||[], 0); try{ walk(M && M.timer, 0); }catch(e){}
+  return Object.keys(ids).length;
+}
+function limAfterLoad(){
+  // Si el tema activo ya no está permitido (venció el desbloqueo), se vuelve al Blanco.
+  if(limOn() && S.theme && !themeAllowed(S.theme)){ S.theme = 'light'; try{ document.body.className = 'theme-light task-size-medium'; }catch(e){} try{ saveState(); }catch(e){} }
+}
+// Temas: gratis solo Blanco; Oscuro y Bosque por anuncio (30 días); el resto, suscripción.
+var LIM_AD_THEMES = ['dark','bosque'];
+function themeAllowed(t){
+  if(isPremium()) return true;
+  if(!limOn()) return ['light','dark','bosque'].indexOf(t)>=0;
+  return t==='light' || (LIM_AD_THEMES.indexOf(t)>=0 && adActive('theme_'+t).length>0);
+}
+function themeLockedTap(t){
+  if(limOn() && LIM_AD_THEMES.indexOf(t)>=0 && adOffered('theme_'+t)){
+    showAdOfferModal('theme_'+t, 'Tema bloqueado', 'En el plan gratuito solo está el tema Blanco.', function(){ setTheme(t); },
+      'Mira un anuncio y úsalo '+((adFeatureCfg('theme_'+t)||{}).days||30)+' días.');
+    return;
+  }
+  openDonationInfo();
 }
 
 async function refreshSubscription(){
@@ -6720,7 +6800,28 @@ function fmtMoney(n, cur){ return (n<0?'−':'')+(cur||'$')+fmtNum(Math.abs(n));
 // ── Cupos: gratis = 3 registros de cualquier tipo (puedes repetir tipo con nombres distintos);
 //    suscripción = 5; nivel 10 = +1 ──
 function registryBonusSlots(){ return getLevel(S.xp||0)>=10 ? 1 : 0; }
-function registryCap(){ return (isPremium()?5:3)+registryBonusSlots(); }
+function registryCap(){ if(limOn()) return LIM.registry + adSlots('registry_slot'); return (isPremium()?5:3)+registryBonusSlots(); }
+// Registros por encima del cupo (p. ej. venció el anuncio semanal): quedan guardados pero bloqueados.
+function regLocked(r){
+  if(!r || !limOn() || r.kind==='cycle') return false;
+  var i = regCountedList().indexOf(r); return i>=0 && i>=registryCap();
+}
+function regLockedTap(){
+  limGate('registry_slot','Registro bloqueado','Tu plan gratuito incluye '+LIM.registry+' registro. Tus datos siguen guardados.', null,
+    'Mira un anuncio para usar '+(LIM.registry+1)+' registros durante '+((adFeatureCfg('registry_slot')||{}).days||7)+' días.');
+}
+function regNewLimit(){
+  limGate('registry_slot','Límite de registros','Tu plan gratuito incluye '+LIM.registry+' registro.', null,
+    'Mira un anuncio para sumar 1 registro durante '+((adFeatureCfg('registry_slot')||{}).days||7)+' días.');
+}
+function trackLocked(tr){
+  if(!tr || !limOn()) return false;
+  var i = (S.levelTracks||[]).indexOf(tr); return i>=0 && i>=maxLevelTrackSlots();
+}
+function trackLockedTap(){
+  limGate('track_slot','Seguimiento bloqueado','Tu cupo de seguimientos es '+maxLevelTrackSlots()+'. Los datos siguen guardados.', null,
+    'Mira un anuncio para sumar un cupo durante '+((adFeatureCfg('track_slot')||{}).days||7)+' días.');
+}
 function regCountedList(){ return regList().filter(function(r){return r.kind!=='cycle';}); }
 function canCreateRegistry(kind){ return regCountedList().length < registryCap(); }
 function canCreateAnyRegistry(){ return canCreateRegistry(); }
@@ -6787,6 +6888,7 @@ function regSpark(r){
   return ser.length>=2 ? miniSpark(ser,r.color,false) : '';
 }
 function regQuickBtn(r){
+  if(regLocked(r)) return '<button onclick="event.stopPropagation();regLockedTap()" aria-label="Bloqueado" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line);background:var(--bg);cursor:pointer;">🔒</button>';
   if(r.kind==='cycle') return '<button onclick="event.stopPropagation();cyDay(\''+r.id+'\',\''+todayStr()+'\')" aria-label="Anotar hoy" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);font-size:20px;">+</button>';
   var base='flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;';
   if(r.kind==='habit'){
@@ -6838,11 +6940,11 @@ function renderRegistriesSection(){
   html += '<div data-drag-list data-drag-cb="regs">';
   list.forEach(function(r){
     var pe_ = r.kind==='finance' ? regEntries(r).filter(function(e){return e.status==='expected';}) : [], pc = pe_.length, pl = pe_.filter(function(e){return pendDiff(e)<0;}).length;
-    html += '<div data-drag-item data-id="'+r.id+'" style="display:flex;align-items:center;gap:6px;padding:10px 12px 10px 4px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;">'+gripHTML()+
+    html += '<div data-drag-item data-id="'+r.id+'" style="'+(regLocked(r)?'opacity:.55;':'')+'display:flex;align-items:center;gap:6px;padding:10px 12px 10px 4px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;">'+gripHTML()+
       '<div onclick="openRegistryView(\''+r.id+'\')" oncontextmenu="event.preventDefault();openQuickAdd(\''+r.id+'\');return false;" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;">'+
       '<div style="width:38px;height:38px;border-radius:11px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
       '<div style="flex:1;min-width:0;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
+        '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(regLocked(r)?'🔒 ':'')+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
         '<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(regSummaryLine(r))+'</div>'+
       '</div>'+regSpark(r)+'</div>'+regQuickBtn(r)+
     '</div>';
@@ -6856,7 +6958,7 @@ function renderRegistriesSection(){
   if(canCreateAnyRegistry()){
     html += '<button onclick="openRegEditor(null)" style="width:100%;background:var(--accent);color:white;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;margin-top:8px;">+ Nuevo registro</button>';
   } else {
-    html += '<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);">Llegaste al límite de tu plan ('+registryCap()+').</div>';
+    html += '<div style="text-align:center;padding:12px;font-size:12px;color:var(--muted);">Llegaste al límite de tu plan ('+registryCap()+').'+(limOn()?' <span onclick="regNewLimit()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">Ampliar</span>':'')+'</div>';
   }
   return html+'</div>';
 }
@@ -6867,6 +6969,7 @@ function openRegEditor(regId){
   var isNew = !regId;
   var reg;
   if(isNew){
+    if(!canCreateAnyRegistry() && limOn()){ regNewLimit(); return; }
     if(!canCreateAnyRegistry()){ showInfoModal('Límite de registros','Ya tienes el máximo de registros de tu plan (gratis: 3 de cualquier tipo). Con la suscripción son hasta 5, y al llegar al nivel 10 se suma uno más.','Entendido'); return; }
     var kind = canCreateRegistry('finance') ? 'finance' : (canCreateRegistry('metrics') ? 'metrics' : 'habit');
     reg = {id:uid(), kind:kind, name:'', color:CATEGORY_COLORS[regList().length%CATEGORY_COLORS.length], currency:'$', labelHint:'', metrics:[], entries:[], createdAt:new Date().toISOString()};
@@ -6921,7 +7024,7 @@ function regEditorBodyHTML(){
     habit:['Hábitos','Un sí o no por día','Ej: meditar, tomar agua']
   };
   if(RE.isNew){
-    var kinds = ['finance','metrics','habit'].filter(function(k){ return canCreateRegistry(k); });
+    var kinds = ['finance','habit'].filter(function(k){ return canCreateRegistry(k); });
     if(kinds.length>1){
       html += '<div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;">1. ¿Qué quieres anotar?</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">'+
         kinds.map(function(k){ var a = r.kind===k, i = KIND_INFO[k];
@@ -7233,6 +7336,7 @@ function habitStreaks(map){
 }
 function habitSet(regId, date, yes, extra){
   var reg = regById(regId); if(!reg) return;
+  if(regLocked(reg)){ regLockedTap(); return; }
   reg.entries = (reg.entries||[]).filter(function(e){return e.date!==date;});
   if(yes!==null) reg.entries.push(Object.assign({id:uid(), date:date, yes:!!yes, ts:Date.now()}, extra||{}));
   reg.updatedAt = new Date().toISOString();
@@ -7379,6 +7483,7 @@ function regLastByLabel(reg, label){
 function openRegEntry(regId, opts){
   opts = opts || {};
   var reg = regById(regId); if(!reg) return;
+  if(regLocked(reg)){ regLockedTap(); return; }
   if(reg.kind==='habit'){
     var he = opts.entryId ? regEntries(reg).find(function(e){return e.id===opts.entryId;}) : null;
     openHabitSheet(regId, he ? he.date : (opts.date || todayStr())); return;
@@ -8509,6 +8614,7 @@ function regViewBodyHTML(reg){
 }
 function openRegistryView(regId){
   var reg = regById(regId); if(!reg) return;
+  if(regLocked(reg)){ regLockedTap(); return; }
   removeOverlay('reg-view');
   var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-view';
   overlay.dataset.regId = regId;
@@ -8816,7 +8922,7 @@ function skTplBuild(key){
     else { n.mode = spec.mode||'mixed'; if(spec.lv) n.lvTarget = spec.lv; if(spec.metric){ n.metricId = spec.metric; n.start = 0; n.target = spec.t; n.scope='tagged'; } }
     return n;
   }
-  tr.axes = T.tree.map(mk).filter(Boolean);
+  tr.axes = T.tree.map(mk).filter(Boolean); if(limOn()) tr.axes = tr.axes.slice(0, LIM.hexSkills);
   return {reg:null, tr:tr};
 }
 function skTplTimers(key){
@@ -8841,7 +8947,6 @@ function skTplInstall(key){
   miss.forEach(function(k){
     var b = skTplBuild(k);
     if(!S.levelTracks) S.levelTracks = []; S.levelTracks.push(b.tr);
-    try{ skTplTimers(k); }catch(e){}
   });
   saveState(); removeOverlay('tpl-sheet'); render(); toast('✓ Instalada: '+SK_TPL[key].name+(miss.length>1?' (+ '+(miss.length-1)+' necesaria)':''));
 }
@@ -8959,7 +9064,7 @@ function skImportInstall(d){
     if(n.kids) o.subs = n.kids.map(mk).filter(Boolean);
     return o;
   }
-  tr.axes = d.tree.map(mk).filter(Boolean);
+  tr.axes = d.tree.map(mk).filter(Boolean); if(limOn()) tr.axes = tr.axes.slice(0, LIM.hexSkills);
   if(!S.levelTracks) S.levelTracks = []; S.levelTracks.push(tr);
   saveState(); render(); return true;
 }
@@ -9822,7 +9927,7 @@ function skLogDel(id){ skLogRemove(id); saveState(); skLogDraw(); skReopen(_skl.
 // ══ Habilidades en Enfoque + enlace ejercicio → habilidades + «Hoy sumaste» ══
 function setEnfSeg(v){ S._enfSeg = v; try{ localStorage.setItem('og6-enfseg', v); }catch(e){} render(); }
 function goHabilidades(){ S._enfSeg = 'hab'; if(S.timerPlacement==='seguimiento'){ S.tab = 'proyectos'; S._projView = 'timer'; } else S.tab = 'timer'; render(); }
-function enfSegHTML(){ var cur = S._enfSeg || 'rut'; return '<div style="margin-bottom:14px;">'+mSegHTML('enf-seg', [['rut','Rutinas'],['hab','Habilidades']], cur, 'setEnfSeg')+'</div>'; }
+function enfSegHTML(){ var cur = S._enfSeg || 'rut'; return '<div style="margin-bottom:14px;">'+mSegHTML('enf-seg', [['rut','Rutinas'],['hab','Habilidades'],['cue','Cuerpo']], cur, 'setEnfSeg')+'</div>'; }
 function renderHabilidadesTab(){
   var html = '<div style="padding:16px 16px 90px;">'+enfSegHTML()+renderLevelTracksSection();
   html += '<div onclick="openExSkills()" style="display:flex;align-items:center;gap:12px;padding:12px;border:1.5px dashed var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Ejercicios y habilidades</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Elige a qué habilidades suma cada ejercicio, en cualquier rutina</div></div><span style="color:var(--muted);">›</span></div>';
@@ -9837,7 +9942,7 @@ function habLinkCardHTML(){
 function exKey(n){ return skNorm(n).replace(/\s+/g,' '); }
 function exSkillIds(name){ return ((S.exSkills||{})[exKey(name)]||[]).filter(function(id){ return !!skFindAny(id); }); }
 function mergeExSkills(cloud){ S.exSkills = Object.assign({}, cloud.exSkills||{}, S.exSkills||{}); if(cloud.skCfg && !Object.keys(S.skCfg||{}).length) S.skCfg = cloud.skCfg;
-  S.timerLv = Object.assign({}, cloud.timerLv||{}, S.timerLv||{});
+  S.timerLv = Object.assign({}, cloud.timerLv||{}, S.timerLv||{}); mergeZoneData(cloud);
   var pm = {}; (S.planActs||[]).forEach(function(a){ pm[a.id]=a; }); (cloud.planActs||[]).forEach(function(c){ var l = pm[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) pm[c.id]=c; }); S.planActs = Object.keys(pm).map(function(k){return pm[k];});
 }
 function exNames(){
@@ -9866,6 +9971,13 @@ function exsList(){
   }).join('') : '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:18px 0;">Aún no hay ejercicios. Aparecen al crear temporizadores.</div>';
 }
 function exsPick(key){
+  var nm = (exNames().find(function(e){return e.key===key;})||{}).name || key, nz = ((S.exZones||{})[key]||[]).length, ns = ((S.exSkills||{})[key]||[]).length;
+  var box = document.createElement('div'); box.className='conf-box'; box.style.zIndex = 9500; var bs = 'width:100%;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:var(--bg);color:var(--ink);border:1.5px solid var(--line);';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:16px;text-align:center;margin-bottom:14px;">'+esc(nm)+'</div><div style="display:flex;flex-direction:column;gap:8px;"><button style="'+bs+'" data-k="'+esc(key)+'" onclick="this.closest(\'.conf-box\').remove();exsPickSkills(this.dataset.k)">Habilidades'+(ns?' ('+ns+')':'')+'</button><button style="'+bs+'" data-k="'+esc(key)+'" onclick="this.closest(\'.conf-box\').remove();exsPickZones(this.dataset.k)">Zonas del cuerpo'+(nz?' ('+nz+')':'')+'</button><button onclick="this.closest(\'.conf-box\').remove()" style="'+bs+'color:var(--muted);font-weight:600;">Cancelar</button></div></div>';
+  document.body.appendChild(box);
+}
+function exsPickZones(key){ openZonesPicker((S.exZones||{})[key]||[], function(a){ if(!S.exZones) S.exZones = {}; if(a.length) S.exZones[key] = a; else delete S.exZones[key]; saveState(); exsList(); render(); }, 'Zonas de este ejercicio'); }
+function exsPickSkills(key){
   var ids = (S.exSkills||{})[key]||[];
   openSkPicker(ids, function(a){ if(!S.exSkills) S.exSkills = {}; if(a.length) S.exSkills[key] = a; else delete S.exSkills[key]; saveState(); exsList(); }, 'Habilidades de este ejercicio');
 }
@@ -10230,11 +10342,27 @@ function skRefreshDetail(tid){ var tr = skTrack(tid), ov = document.getElementBy
 function skTogglePrev(tid){ S._skPrev = !skShowPrev(); skRefreshDetail(tid); }
 // Sección dentro del detalle del seguimiento
 function skHexUsed(){ return (S.levelTracks||[]).filter(function(t){return skAxes(t).length>0;}).length; }
-function skHexMax(){ return isPremium() ? 999 : 2; }
+function skHexMax(){ if(isPremium()) return 999; return limOn() ? LIM.hexCharts + adSlots('hex_chart') : 2; }
+// Habilidades por gráfico: 5 gratis; hasta 7 viendo un anuncio por cada habilidad extra (se guarda en el seguimiento).
+function skAxMax(tr){ if(isPremium() || !limOn()) return 7; return Math.min(7, LIM.hexSkills + Math.max(0, +(tr && tr.adAx)||0)); }
+function skAxGate(tr){
+  if(skAxes(tr).length>0 || skHexUsed()<skHexMax()){
+    if(skAxes(tr).length >= skAxMax(tr)) {
+      limGate('hex_skill','Habilidades al máximo','Tu plan gratuito admite '+skAxMax(tr)+' habilidades por gráfico (hasta '+LIM.hexSkillsMax+' con anuncios).',
+        function(){ tr.adAx = (+tr.adAx||0)+1; saveState(); try{ skRefreshDetail(tr.id); }catch(e){} skEdit(tr.id,null); },
+        'Mira un anuncio y añade 1 habilidad más a este gráfico.');
+      return false;
+    }
+    return true;
+  }
+  limGate('hex_chart','Gráficos al máximo','Tu plan gratuito permite el gráfico de habilidades en '+skHexMax()+' seguimientos.', function(){ try{ skRefreshDetail(tr.id); }catch(e){} },
+    'Mira un anuncio y añade un gráfico más durante '+((adFeatureCfg('hex_chart')||{}).days||30)+' días.');
+  return false;
+}
 function skSectionHTML(tr){
   if(featureLocked('hexagon')) return '<div style="margin:18px 0 6px;padding:12px;border:1.5px dashed var(--line);border-radius:12px;opacity:.6;"><div style="font-size:13px;font-weight:700;color:var(--ink);">Habilidades en gráfico'+soonBadge()+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.5;">Mide partes de este seguimiento (fuerza, técnica…) en un radar.</div></div>';
   var axes = skAxes(tr), axV = skAxesV(tr); skSnapshot(tr);
-  var h = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;justify-content:space-between;"><span>Habilidades</span><span style="font-weight:600;">'+axes.length+' / 7</span></div>';
+  var h = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;display:flex;justify-content:space-between;"><span>Habilidades</span><span style="font-weight:600;">'+axes.length+' / '+(limOn()?skAxMax(tr):7)+'</span></div>';
   if(axes.length>=3){
     var pk = skPrevMonthKey(), rd = skRadarSVG(tr, axV, pk, skShowPrev());
     h += '<div style="background:var(--bg);border-radius:14px;padding:8px 4px 6px;margin-bottom:10px;">'+rd.svg+(rd.hasPrev?'<div style="display:flex;justify-content:center;"><button onclick="skTogglePrev(\''+tr.id+'\')" style="background:none;border:none;font-size:11px;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;">'+(skShowPrev()?'Ocultar':'Mostrar')+' comparación con el mes pasado</button></div>':'')+'</div>';
@@ -10246,7 +10374,9 @@ function skSectionHTML(tr){
     var a = v.n, c = skCompute(v.tr,a);
     h += '<div onclick="skOpen(\''+v.tr.id+'\',\''+a.id+'\')" style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--bg);border-left:4px solid '+a.color+';border-radius:10px;margin-bottom:6px;cursor:pointer;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name)+(skSubs(a).length?' <span style="font-weight:600;font-size:10.5px;color:var(--muted);">⬡ '+skSubs(a).length+'</span>':'')+'</div><div style="height:5px;background:var(--line-soft);border-radius:3px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:'+c.score+'%;background:'+a.color+';"></div></div></div><b style="font-size:16px;color:var(--ink);min-width:28px;text-align:right;">'+c.score+'</b></div>';
   });
-  if(axes.length<7 && (axes.length>0 || skHexUsed()<skHexMax())) h += '<button onclick="skEdit(\''+tr.id+'\',null)" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">+ Nueva habilidad</button>';
+  if(axes.length<7 && (axes.length>0 || skHexUsed()<skHexMax()) && !(limOn() && axes.length>=skAxMax(tr))) h += '<button onclick="skEdit(\''+tr.id+'\',null)" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">+ Nueva habilidad</button>';
+  if(limOn() && axes.length<7 && axes.length>=skAxMax(tr)) h += '<button onclick="skAxGateTap(\''+tr.id+'\')" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">🔒 Nueva habilidad (con anuncio)</button>';
+  if(limOn() && !axes.length && skHexUsed()>=skHexMax()) h += '<button onclick="skAxGateTap(\''+tr.id+'\')" style="width:100%;background:none;border:1.5px dashed var(--line);border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;margin-top:2px;">🔒 Añadir gráfico (con anuncio)</button>';
   h += '<button onclick="skSession(\''+tr.id+'\')" style="width:100%;background:var(--bg);border:none;border-radius:11px;padding:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;margin-top:8px;">Anotar una sesión fuera de la app</button>';
   return h;
 }
@@ -10392,8 +10522,10 @@ function skRemoveRef(tid, parentId, refNodeId){
   saveState(); skOpen(tid, parentId);
 }
 // ── Editor ──
+function skAxGateTap(tid){ var tr = skTrack(tid); if(tr) skAxGate(tr); }
 function skEdit(tid, aid, parentId){
   var tr = skTrack(tid); if(!tr) return;
+  if(!aid && !parentId && limOn() && !skAxGate(tr)) return;
   var fd = aid ? skFind(tr, aid) : null, ex = fd ? fd.a : null;
   if(fd && fd.parent) parentId = fd.parent.id;
   var pFd = parentId ? skFind(tr, parentId) : null, pAx = pFd ? pFd.a : null;
@@ -10441,7 +10573,7 @@ function skDraw(){
     '<input class="finp" placeholder="Nombre (ej. Fuerza, Técnica)" maxlength="24" value="'+esc(a.name)+'" oninput="SK.a.name=this.value"/>'+
     '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px;">'+SK_COLORS.map(function(c){ return '<button onclick="SK.a.color=\''+c+'\';skRe()" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(a.color===c?'3px solid var(--ink)':'3px solid transparent')+';cursor:pointer;padding:0;"></button>'; }).join('')+'</div>'+
     (a.id && SK.nsubs>0 ? skLbl('Puntaje de esta habilidad')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+skChip(!a.fromSubs,'Propio','SK.a.fromSubs=false;skRe()')+skChip(!!a.fromSubs,'Promedio de sus sub-habilidades','SK.a.fromSubs=true;skRe()')+'</div>'+(a.fromSubs?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">'+skChip(a.avgMode!=='data','Contar todas','SK.a.avgMode=\'all\';skRe()')+skChip(a.avgMode==='data','Solo las que tienen datos','SK.a.avgMode=\'data\';skRe()')+skChip(a.avgMode==='sum','Sumar sus marcas (total)','SK.a.avgMode=\'sum\';skRe()')+'</div>'+(a.avgMode==='sum'?'<div style="display:flex;gap:8px;margin-top:8px;"><input class="finp" type="number" inputmode="decimal" placeholder="Meta del total" value="'+esc(a.target||'')+'" oninput="SK.a.target=this.value" style="flex:1;margin:0;"/><input class="finp" placeholder="Unidad (kg)" maxlength="8" value="'+esc(a.unit||'')+'" oninput="SK.a.unit=this.value" style="width:100px;margin:0;"/></div>':''):'') : '')+
-    skLbl('¿Cómo se calcula el puntaje?')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+SK_MODES.map(function(m){ return skChip(a.mode===m[0], m[1], 'SK.a.mode=\''+m[0]+'\';skRe()'); }).join('')+'</div>'+
+    skLbl('Zonas del cuerpo')+'<button class="cbtn" style="width:100%;text-align:left;" onclick="openZonesPicker(SK.a.zones||[],function(a){SK.a.zones=a;skRe();},\'Zonas de esta habilidad\')">'+((a.zones||[]).length?esc(zoneNames(a.zones)):'Ninguna (opcional)')+'</button>'+skLbl('¿Cómo se calcula el puntaje?')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+SK_MODES.map(function(m){ return skChip(a.mode===m[0], m[1], 'SK.a.mode=\''+m[0]+'\';skRe()'); }).join('')+'</div>'+
     skNote({mixed:'Combina medida real, constancia y esfuerzo con los porcentajes que escribas.',real:'Tu marca real (ej. kilos levantados) frente a una meta.',consist:'Qué tan seguido practicas: periodos (semanas o meses) en que cumpliste tu meta.',effort:'El XP que ganas en esta habilidad. Pasa por la curva de niveles: cada nivel cuesta más que el anterior.',manual:'Tú pones el puntaje a mano.'}[a.mode]);
   if(a.mode==='mixed'){
     var wk = [['real','Medida real'],['consist','Constancia'],['effort','Esfuerzo']], s = skWSum();
@@ -12910,9 +13042,8 @@ function displayPrefsCardHTML(){
   '</div>';
 }
 function setTheme(t){
-  var FREE_THEMES = ['light','dark','bosque'];
-  if(!isPremium() && FREE_THEMES.indexOf(t)===-1){
-    openDonationInfo();
+  if(!themeAllowed(t)){
+    themeLockedTap(t);
     return;
   }
   S.themeAuto = false;
@@ -13952,7 +14083,7 @@ function moveTaskToDay(id){
 function duplicateTaskSameDay(id){
   var t = S.tasks.find(function(x){return x.id===id;}); if(!t) return;
   var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), done:false, prog:0, text:t.text+' (copia)'});
-  copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false,prog:0});});
+  copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false,prog:0});}); delete copy.adCl;
   var idx = S.tasks.findIndex(function(x){return x.id===id;});
   S.tasks.splice(idx+1, 0, copy);
   saveState(); render();
@@ -13964,7 +14095,7 @@ function duplicateTaskToNextDay(id){
   if(t.date){
     var nd=new Date(t.date+'T12:00:00'); nd.setDate(nd.getDate()+1);
     var copy1 = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), date:localDateStr(nd), day:dayIdxFromDate(nd), done:false, prog:0});
-    copy1.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
+    copy1.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});}); delete copy1.adCl;
     S.tasks.push(copy1);
     saveState();render();
     toast('⊕ Duplicada para '+formatDateShort(copy1.date));
@@ -13972,7 +14103,7 @@ function duplicateTaskToNextDay(id){
   }
   var nextDay = (t.day + 1) % 7;
   var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), day:nextDay, done:false, prog:0});
-  copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
+  copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});}); delete copy.adCl;
   S.tasks.push(copy);
   saveState();render();
   toast('⊕ Duplicada para '+DAYS[nextDay]);
@@ -13985,7 +14116,7 @@ function duplicateTaskToDays(id){
     days.forEach(function(d){
       if(d === t.day && !t.date) return; // no duplicar en el mismo día
       var copy = Object.assign({}, JSON.parse(JSON.stringify(t)), {id:uid(), day:d, date:null, done:false, prog:0});
-      copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});});
+      copy.checklist = (t.checklist||[]).map(function(i){return Object.assign({},i,{id:uid(),done:false});}); delete copy.adCl;
       S.tasks.push(copy);
     });
     saveState();render();
@@ -14515,6 +14646,7 @@ function levelTrackSourceLabelBase(track){
     var cat=(S.categories||[]).find(function(c){return c.id===track.source.categoryId;});
     return cat?('Categoría: '+cat.name):'Categoría eliminada';
   }
+  if(track.source.none) return 'Habilidades y temporizadores';
   var n=(track.source.taskIds||[]).length;
   return n+' tarea'+(n===1?'':'s')+' elegida'+(n===1?'':'s');
 }
@@ -14632,11 +14764,17 @@ function skMiniHex(tr, size){
   return {svg:'<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="flex:none;"><polygon points="'+out.join(' ')+'" fill="var(--bg)" stroke="var(--line)" stroke-width="1.5"/><polygon points="'+pts.join(' ')+'" fill="'+col+'55" stroke="'+col+'" stroke-width="1.8" stroke-linejoin="round"/></svg>', avg:Math.round(sc.reduce(function(a,b){return a+b;},0)/n), n:n};
 }
 function levelTrackCardHTML(track, idx, editable){
-  if(track.view==='hex'){
+  if(!trackLocked(track) && track.view!=='level'){
     var mh = skMiniHex(track, 42);
+    if(!mh) return '<div onclick="openTrackDetail(\''+track.id+'\')" style="display:flex;align-items:center;gap:12px;padding:9px 2px;cursor:pointer;"><svg width="42" height="42" viewBox="0 0 42 42" style="flex:none;"><polygon points="21,3 37,12 37,30 21,39 5,30 5,12" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="3 3"/></svg><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:1px;">'+skAxes(track).length+' de 3 habilidades para ver el hexágono</div></div><span style="font-size:16px;color:var(--muted);flex-shrink:0;">›</span></div>';
     if(mh) return '<div onclick="openTrackDetail(\''+track.id+'\')" style="display:flex;align-items:center;gap:12px;padding:9px 2px;cursor:pointer;">'+mh.svg+'<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:1px;">'+mh.n+' habilidades · promedio '+mh.avg+'</div></div><span style="font-size:16px;color:var(--muted);flex-shrink:0;">›</span></div>';
   }
   var info = lvlInfo(track.xp||0);
+  if(trackLocked(track)) return '<div onclick="trackLockedTap()" style="display:flex;align-items:center;gap:12px;padding:9px 2px;cursor:pointer;opacity:.6;">'+
+    '<div style="width:42px;height:42px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🔒</div>'+
+    '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:1px;">Bloqueado: no suma XP hasta ampliar tu cupo</div></div>'+
+    (editable?'<button onclick="event.stopPropagation();openTrackEditor(\''+track.id+'\')" style="background:none;border:none;font-size:12px;font-weight:700;color:var(--accent-text);cursor:pointer;text-decoration:underline;">Editar</button>':'')+'</div>';
   return '<div onclick="openTrackDetail(\''+track.id+'\')" style="display:flex;align-items:center;gap:12px;padding:9px 2px;cursor:pointer;">'+
     levelTrackGemHTML(track, idx, 42)+
     '<div style="flex:1;min-width:0;">'+
@@ -14697,7 +14835,7 @@ function trackWeekXP(track){
 }
 function trackDetailBodyHTML(track){
   var idx = Math.max(0,(S.levelTracks||[]).findIndex(function(t){return t.id===track.id;}));
-  if(track.view==='hex' && skAxes(track).length>=3){
+  if(track.view!=='level'){
     return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</span><div style="display:flex;gap:4px;flex-shrink:0;"><button onclick="removeOverlay(\'track-detail\');openTrackEditor(\''+track.id+'\')" title="Editar seguimiento" style="background:none;border:none;font-size:18px;color:var(--muted);cursor:pointer;">⚙</button><button onclick="removeOverlay(\'track-detail\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div></div>'+
       '<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px;">'+esc(levelTrackSourceLabel(track))+'</div>'+skSectionHTML(track);
   }
@@ -14751,6 +14889,7 @@ function trackDetailBodyHTML(track){
 }
 function openTrackDetail(id){
   var track = (S.levelTracks||[]).find(function(t){return t.id===id;}); if(!track) return;
+  if(trackLocked(track)){ trackLockedTap(); return; }
   removeOverlay('track-detail');
   var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='track-detail';
   overlay.addEventListener('click',function(e){ if(e.target===overlay) removeOverlay('track-detail'); });
@@ -14771,38 +14910,33 @@ function openTrackEditor(trackId){
   }
   var firstCat = (S.categories||[])[0];
   var track = isNew
-    ? {id:uid(), name:'', source:{type:'category', categoryId:firstCat?firstCat.id:null}, xp:0}
+    ? {id:uid(), name:'', source:(firstCat ? {type:'category', categoryId:firstCat.id} : {type:'manual', taskIds:[], none:true}), xp:0}
     : JSON.parse(JSON.stringify((S.levelTracks||[]).find(function(t){return t.id===trackId;})||{}));
   TE = {isNew:isNew, track:track};
   showTrackEditorModal();
 }
 function trackEditorBodyHTML(){
   var t = TE.track;
-  var isManual = t.source && t.source.type==='manual';
+  var isManual = t.source && t.source.type==='manual', isNone = isManual && !!t.source.none;
   var info = lvlInfo(t.xp||0);
   return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
       '<span class="serif" style="font-weight:700;font-size:18px;">'+(TE.isNew?'Nuevo seguimiento':'Editar seguimiento')+'</span>'+
       '<button onclick="removeOverlay(\'track-editor\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     '</div>'+
-    '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;">'+
-      levelTrackGemHTML(t, 0, 84)+
-      '<div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:6px;">Nivel '+info.lvl+' · '+esc(trackLevelName(t,info.lvl))+'</div>'+
-      (TE.isNew?'<div style="font-size:10.5px;color:var(--muted);margin-top:2px;">Así se ve tu seguimiento — se va llenando de color con el XP.</div>':'')+
-    '</div>'+
+    (t.view==='level' ? '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;">'+levelTrackGemHTML(t, 0, 84)+'<div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:6px;">Nivel '+info.lvl+' · '+esc(trackLevelName(t,info.lvl))+'</div></div>' : '')+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Nombre</div>'+
     '<input id="te-name" class="finp" type="text" placeholder="Ej: Deporte" value="'+esc(t.name||'')+'" oninput="TE.track.name=this.value;" style="margin-bottom:16px;"/>'+
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">¿Qué cuenta para subir de nivel acá?</div>'+
-    '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
-      '<button type="button" onclick="teSetSourceType(\'category\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(!isManual?'var(--accent)':'var(--line)')+';background:'+(!isManual?'var(--accent)':'var(--paper)')+';color:'+(!isManual?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Por categoría</button>'+
-      '<button type="button" onclick="teSetSourceType(\'manual\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(isManual?'var(--accent)':'var(--line)')+';background:'+(isManual?'var(--accent)':'var(--paper)')+';color:'+(isManual?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Tareas elegidas a mano</button>'+
-    '</div>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">¿Qué alimenta este seguimiento?</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:12px;">'+[['category','Una categoría',!isManual],['manual','Tareas a mano',isManual&&!isNone],['none','Solo habilidades',isNone]].map(function(o){ return '<button type="button" onclick="teSetSourceType(\''+o[0]+'\')" style="flex:1;padding:9px 4px;border-radius:10px;border:1.5px solid '+(o[2]?'var(--accent)':'var(--line)')+';background:'+(o[2]?'var(--accent)':'var(--paper)')+';color:'+(o[2]?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+o[1]+'</button>'; }).join('')+'</div>'+
     '<div id="te-source-area">'+teSourceAreaHTML()+'</div>'+
     '<div id="te-sum-area">'+teSummaryHTML()+'</div>'+
-    '<div id="te-xp-area">'+teXpAreaHTML()+'</div>'+
-    '<div id="te-reg-area">'+teRegAreaHTML()+'</div>'+
-    teStyleAreaHTML()+
     teColorAreaHTML()+
-    teLevelNamesAreaHTML()+
+    '<details class="st-adv"><summary>Experiencia, registro y símbolo</summary><div style="padding-bottom:12px;">'+
+      '<div id="te-xp-area">'+(isNone?'':teXpAreaHTML())+'</div>'+
+      '<div id="te-reg-area">'+teRegAreaHTML()+'</div>'+
+      teStyleAreaHTML()+
+      teLevelNamesAreaHTML()+
+    '</div></details>'+
     teXpModeHTML()+
     '<div style="display:flex;gap:8px;margin-top:20px;">'+
       (TE.isNew?'':'<button onclick="confirmDeleteTrack(\''+t.id+'\')" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+
@@ -14814,9 +14948,9 @@ function trackEditorBodyHTML(){
 // El resto son la misma paleta que usan las categorías, para que combine.
 function teXpModeHTML(){
   var t = TE.track, sum = t.xpMode==='sum';
-  return '<details style="border:1px solid var(--line-soft);border-radius:12px;margin-top:16px;padding:0 12px;"'+((sum||t.decay===false||t.view==='hex')?' open':'')+'><summary style="cursor:pointer;padding:11px 0;font-size:13px;font-weight:700;color:var(--ink);list-style:none;">Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
+  return '<details style="border:1px solid var(--line-soft);border-radius:12px;margin-top:16px;padding:0 12px;"'+((sum||t.decay===false||t.view==='level')?' open':'')+'><summary style="cursor:pointer;padding:11px 0;font-size:13px;font-weight:700;color:var(--ink);list-style:none;">Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
     '<label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink);line-height:1.45;"><input type="checkbox" '+(sum?'checked':'')+' onchange="TE.track.xpMode=this.checked?\'sum\':undefined" style="margin-top:3px;"/><span>Sumar por separado el XP de la tarea y el de los registros<br><span style="font-size:11.5px;color:var(--muted);">Por defecto, una sesión (tarea + anotaciones del mismo día) cuenta una sola vez: gana el mayor XP.</span></span></label>'+
-    '<div style="font-size:12.5px;color:var(--ink);margin:2px 0 6px;font-weight:600;">Cómo se muestra</div><select class="finp" onchange="TE.track.view=this.value===\'hex\'?\'hex\':undefined" style="margin-bottom:12px;"><option value="level"'+(t.view==='hex'?'':' selected')+'>Con niveles y XP</option><option value="hex"'+(t.view==='hex'?' selected':'')+'>Solo hexágono de habilidades</option></select>'+
+    '<div style="font-size:12.5px;color:var(--ink);margin:2px 0 6px;font-weight:600;">Cómo se muestra</div><select class="finp" onchange="TE.track.view=this.value===\'level\'?\'level\':undefined" style="margin-bottom:12px;"><option value="hex"'+(t.view==='level'?'':' selected')+'>Hexágono de habilidades</option><option value="level"'+(t.view==='level'?' selected':'')+'>Hexágono + niveles y XP</option></select>'+
     '<label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink);line-height:1.45;margin-top:12px;"><input type="checkbox" '+(t.decay===false?'':'checked')+' onchange="TE.track.decay=this.checked?undefined:false" style="margin-top:3px;"/><span>Perder XP si dejo de practicar<br><span style="font-size:11.5px;color:var(--muted);">Tras ~2 semanas sin practicar una habilidad, su XP baja poco a poco (la mitad cada ~3 meses) y las marcas se recuerdan hasta un 70 %. No toca tus niveles de seguimiento.</span></span></label></div></details>';
 }
 function teColorAreaHTML(){
@@ -14887,9 +15021,10 @@ function teSetLevelName(lvl, val){
 function teSourceAreaHTML(){
   var t = TE.track;
   var isManual = t.source && t.source.type==='manual';
+  if(isManual && t.source.none) return '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Este seguimiento se llena con lo que anotes en sus habilidades, con los temporizadores que las trabajan y con los registros que vincules (opcional). No depende de tus tareas.</div>';
   if(!isManual){
     var cats = S.categories||[];
-    if(!cats.length) return '<div style="font-size:12px;color:var(--muted);line-height:1.5;">No tienes categorías creadas todavía. Crea una en Yo → Categorías, o elige "Tareas elegidas a mano".</div>';
+    if(!cats.length) return '<div style="font-size:12px;color:var(--muted);line-height:1.5;">No tienes categorías creadas todavía. Crea una en Yo → Categorías, o usa «Tareas a mano» o «Solo habilidades».</div>';
     return '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+cats.map(function(c){
       var active = t.source && t.source.categoryId===c.id;
       return '<button type="button" onclick="teSetCategory(\''+c.id+'\')" style="padding:7px 12px;border-radius:20px;border:1.5px solid '+(active?c.color:'var(--line)')+';background:'+(active?(c.color+'22'):'var(--paper)')+';color:'+(active?c.color:'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(c.name)+'</button>';
@@ -15117,6 +15252,8 @@ function teSetSourceType(type){
     var firstCat = (S.categories||[])[0];
     var curCatId = (TE.track.source&&TE.track.source.type==='category')?TE.track.source.categoryId:null;
     TE.track.source = {type:'category', categoryId: curCatId || (firstCat?firstCat.id:null)};
+  } else if(type==='none'){
+    TE.track.source = {type:'manual', taskIds:[], none:true};
   } else {
     var curIds = (TE.track.source&&TE.track.source.type==='manual')?TE.track.source.taskIds:[];
     TE.track.source = {type:'manual', taskIds: curIds||[]};
@@ -15143,10 +15280,7 @@ function saveTrackEditor(){
   var src = TE.track.source;
   var hasRegs = (TE.track.regSources||[]).length>0;
   var srcEmpty = !src || (src.type==='category' && !src.categoryId) || (src.type==='manual' && !(src.taskIds||[]).length);
-  if(srcEmpty && !hasRegs){
-    toast('Elige una categoría, al menos una tarea o un registro'); return;
-  }
-  if(srcEmpty) TE.track.source = {type:'manual', taskIds:[]};
+  if(srcEmpty) TE.track.source = {type:'manual', taskIds:[], none:true};
   if(!hasRegs) delete TE.track.regSources;
   TE.track.name = name;
   if(!S.levelTracks) S.levelTracks=[];
@@ -16630,6 +16764,7 @@ function toggleLibSec(k){ if(!S._libSecOpen) S._libSecOpen={}; S._libSecOpen[k]=
 function toggleTimerLib(){ S._timerLibOpen = !S._timerLibOpen; render(); }
 function renderTimerHome(){
   timerSeedDefaults();
+  if((S._enfSeg||(function(){ try{ return localStorage.getItem('og6-enfseg'); }catch(e){ return null; } })())==='cue'){ S._enfSeg = 'cue'; return renderCuerpoTab(); }
   if((S._enfSeg||(function(){ try{ return localStorage.getItem('og6-enfseg'); }catch(e){ return null; } })())==='hab'){ S._enfSeg = 'hab'; return renderHabilidadesTab(); }
   var list = timerTplAll();
   var html = '<div style="padding:16px 16px 90px;">'+enfSegHTML();
@@ -16737,6 +16872,7 @@ function qcDraw(){
 function qcSet(m){ QC_MIN=m; var i=document.getElementById('tm-free-min'); if(i) i.value=''; qcDraw(); }
 function qcAdj(d){ QC_MIN=Math.max(1,Math.min(600,Math.round(QC_MIN)+d)); var i=document.getElementById('tm-free-min'); if(i) i.value=''; qcDraw(); }
 function qcType(v){ var n=parseFloat(v); if(n>0){ QC_MIN=Math.min(600,n); qcDraw(); } }
+function tmPickZones(id){ var tp = timerTplAll().find(function(x){return x.id===id;}); if(!tp) return; openZonesPicker(tp.zones||[], function(a){ tp.zones = a; tp.updatedAt = Date.now(); saveState(); render(); }, 'Zonas de «'+tp.name+'»'); }
 function openTimerTplMenu(id){
   var tp = timerTplAll().find(function(x){return x.id===id;}); if(!tp) return;
   var box = document.createElement('div'); box.className='conf-box';
@@ -16745,6 +16881,7 @@ function openTimerTplMenu(id){
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerTplEditor(\''+id+'\')" style="'+b+'background:var(--accent);color:#fff;border:none;">Editar</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerSkills(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Habilidades'+((tp.skills||[]).length?' ('+tp.skills.length+')':'')+'</button>'+
+    '<button onclick="this.closest(\'.conf-box\').remove();tmPickZones(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Zonas del cuerpo'+((tp.zones||[]).length?' ('+tp.zones.length+')':'')+'</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();tmLvToggle(\'t:'+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Niveles: '+(tmLvOn('t:'+id)?'activados':'desactivados')+'</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerIntensity(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Intensidad'+(tp.intensity?': '+INT_LEVELS[tp.intensity-1]:'')+'</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerGoal(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Objetivo'+(tp.goal?': '+esc(tp.goal):'')+'</button>'+
@@ -17987,8 +18124,8 @@ var TPL = {templateId:null, name:'', tasks:[], currentDay:0};
 
 function newTemplate(){
   // Verificar límite de plantillas (free)
-  if(!isPremium() && (S.templates||[]).length >= FREE_LIMITS.templates){
-    showInfoModal('Límite alcanzado','En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas.','Entendido');
+  if(!isPremium() && (S.templates||[]).length >= freeLim('templates')){
+    showInfoModal('Límite alcanzado', freeLim('templates')===0 ? 'Guardar plantillas es parte de la suscripción.' : 'En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas.','Entendido');
     return;
   }
   TPL = {
@@ -18202,7 +18339,7 @@ function renderTemplates(){
   // Lista de plantillas
   var list = S.templates || [];
   if(list.length){
-    html+='<div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;">Tus plantillas ('+list.length+(isPremium()?'':'/'+FREE_LIMITS.templates)+')</div>';
+    html+='<div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px;">Tus plantillas ('+list.length+(isPremium()?'':'/'+freeLim('templates'))+')</div>';
     list.forEach(function(t){
       var totalTasks = (t.tasks||[]).length;
       var perDay = [0,0,0,0,0,0,0];
@@ -18231,13 +18368,13 @@ function renderTemplates(){
   }
   
   // Botón nueva plantilla
-  var canCreate = isPremium() || list.length < FREE_LIMITS.templates;
+  var canCreate = isPremium() || list.length < freeLim('templates');
   // Pedido: además de armar una plantilla desde cero, poder capturar la
   // semana tal como está configurada ahora mismo (tareas diarias actuales).
   html+='<button onclick="openSaveWeekAsTemplateModal()" '+(canCreate?'':'disabled')+' style="width:100%;background:'+(canCreate?'var(--paper)':'var(--line)')+';border:1.5px solid var(--line);color:'+(canCreate?'var(--ink)':'var(--muted)')+';border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:'+(canCreate?'pointer':'default')+';margin-top:12px;font-family:Inter,sans-serif;">'+ico('camera',15,1.8)+' Guardar semana actual como plantilla</button>';
   html+='<button onclick="newTemplate()" '+(canCreate?'':'disabled')+' style="width:100%;background:'+(canCreate?'var(--accent-bg)':'var(--line)')+';border:1.5px dashed var(--accent);color:var(--accent-text);border-radius:12px;padding:14px;font-size:14px;font-weight:600;cursor:'+(canCreate?'pointer':'default')+';margin-top:8px;font-family:Inter,sans-serif;">+ Nueva plantilla desde cero</button>';
-  if(!isPremium() && list.length >= FREE_LIMITS.templates){
-    html+='<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;">Plan gratuito: máx '+FREE_LIMITS.templates+' plantillas.</div>';
+  if(!isPremium() && list.length >= freeLim('templates')){
+    html+='<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;">'+(freeLim('templates')===0?'Guardar plantillas es parte de la suscripción.':'Plan gratuito: máx '+FREE_LIMITS.templates+' plantillas.')+'</div>';
   }
   
   // Programación de semanas que vienen
@@ -18293,8 +18430,8 @@ function setWeekTemplate(weekKey, tplId){
 // vinculaciones? — SWT guarda esas 3 opciones mientras el diálogo está abierto.
 var SWT = null;
 function openSaveWeekAsTemplateModal(){
-  if(!isPremium() && (S.templates||[]).length >= FREE_LIMITS.templates){
-    showInfoModal('Límite alcanzado','En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas.','Entendido');
+  if(!isPremium() && (S.templates||[]).length >= freeLim('templates')){
+    showInfoModal('Límite alcanzado', freeLim('templates')===0 ? 'Guardar plantillas es parte de la suscripción.' : 'En el plan gratuito puedes crear hasta '+FREE_LIMITS.templates+' plantillas.','Entendido');
     return;
   }
   SWT = {onlyCrucial:false, onlyRecurring:true, includeLinks:false, name:'Semana actual'};
@@ -18899,9 +19036,11 @@ function sheetAddCLItem(taskId){
   var inp=document.getElementById('cl-sheet-new'); if(!inp) return;
   var text=inp.value.trim(); if(!text) return;
   var t=S.tasks.find(function(t){return t.id===taskId;});if(!t)return;
-  if(!isPremium() && (t.checklist||[]).length>=MAX_CHECKLIST_ITEMS_FREE){
-    toast('Máximo '+MAX_CHECKLIST_ITEMS_FREE+' ítems en el plan gratuito');
-    openDonationInfo();
+  if(clBlocked(t,(t.checklist||[]).length)){
+    if(limOn() && !t.adCl){
+      limGate('checklist_ext','Checklist al máximo',clLimitMsg(t),function(){ S.tasks=S.tasks.map(function(x){return x.id===taskId?Object.assign({},x,{adCl:true}):x;}); saveState(); render(); try{_refreshCLSheet(taskId);}catch(e){} },
+        'Mira un anuncio y añade '+LIM.checklistAd+' ítems más a esta tarea.');
+    } else { toast('Máximo '+clMax(t)+' ítems en el plan gratuito'); if(!limOn()) openDonationInfo(); }
     return;
   }
   var newItem={id:uid(),text:text,done:false,qty:1,prog:0};
@@ -19582,7 +19721,8 @@ function qaRecents(reg){
 }
 function openQuickAdd(regId){
   var _cr = regById(regId); if(_cr && _cr.kind==='cycle'){ cyDay(_cr.id, todayStr()); return; }
-  var regs = regList().filter(function(r){return r.kind!=='cycle';});
+  if(_cr && regLocked(_cr)){ regLockedTap(); return; }
+  var regs = regList().filter(function(r){return r.kind!=='cycle' && !regLocked(r);});
   removeOverlay('quick-add');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='quick-add'; ov.style.zIndex = 640; ov._t = Date.now();
   ov.addEventListener('click',function(e){ if(e.target===ov && Date.now()-ov._t>500) closeQuickAdd(); });
@@ -20684,6 +20824,7 @@ function saveCurrentTimerAsTemplate(){
 function confirmSaveTimerTemplate(){
   var el = document.getElementById('tt-name'); var name = (el&&el.value||'').trim();
   if(!name){ toast('Ponle un nombre'); return; }
+  if(!timerCanAdd()){ timerLimitTap(); return; }
   if(!S.timerTemplates) S.timerTemplates = [];
   S.timerTemplates.push({id:uid(), name:name, timer:cloneTimerFresh(M.timer), updatedAt:Date.now()});
   var b = document.querySelector('.conf-box'); if(b) b.remove();
@@ -20732,6 +20873,207 @@ function exIconSVG(id, size, color, sw){
   var ic = EX_ICONS[id]; if(!ic) return '';
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+(color||'currentColor')+'" stroke-width="'+(sw||1.7)+'" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">'+ic[1]+'</svg>';
 }
+// ══ Mapa del cuerpo: zonas, iconos, conexión con ejercicios/rutinas/habilidades ══
+var Z_ARM_L = '<rect x="26" y="58" width="11" height="32" rx="5.5" transform="rotate(6 31 74)"/>', Z_ARM_R = '<rect x="83" y="58" width="11" height="32" rx="5.5" transform="rotate(-6 89 74)"/>';
+var Z_NECK = '<rect x="53" y="32" width="14" height="11" rx="5"/>';
+var Z_SHOULDER = '<ellipse cx="38" cy="52" rx="11" ry="8"/><ellipse cx="82" cy="52" rx="11" ry="8"/>';
+var Z_FORE = '<rect x="22" y="92" width="10" height="34" rx="5" transform="rotate(5 27 109)"/><rect x="88" y="92" width="10" height="34" rx="5" transform="rotate(-5 93 109)"/>';
+var Z_HAND = '<ellipse cx="25" cy="133" rx="6" ry="8"/><ellipse cx="95" cy="133" rx="6" ry="8"/>';
+var Z_CALF = '<rect x="45" y="176" width="12" height="38" rx="6"/><rect x="63" y="176" width="12" height="38" rx="6"/>';
+var Z_FOOT = '<ellipse cx="51" cy="224" rx="9" ry="5"/><ellipse cx="69" cy="224" rx="9" ry="5"/>';
+var ZONES = [
+  {id:'cuello', name:'Cuello', g:'m', f:Z_NECK, b:Z_NECK, c:[60,40,.3]},
+  {id:'hombros', name:'Hombros', g:'m', f:Z_SHOULDER, b:Z_SHOULDER, c:[60,52,.17]},
+  {id:'pecho', name:'Pecho', g:'m', f:'<ellipse cx="50" cy="66" rx="11" ry="9"/><ellipse cx="70" cy="66" rx="11" ry="9"/>', c:[60,66,.2]},
+  {id:'espalda', name:'Espalda', g:'m', b:'<path d="M46 46H74L80 62L72 86H48L40 62Z"/>', c:[60,66,.2]},
+  {id:'biceps', name:'Bíceps', g:'m', f:Z_ARM_L+Z_ARM_R, c:[60,74,.17]},
+  {id:'triceps', name:'Tríceps', g:'m', b:Z_ARM_L+Z_ARM_R, c:[60,74,.17]},
+  {id:'antebrazos', name:'Antebrazos', g:'m', f:Z_FORE, b:Z_FORE, c:[60,110,.16]},
+  {id:'manos', name:'Manos y dedos', g:'m', f:Z_HAND, b:Z_HAND, c:[60,128,.17]},
+  {id:'core', name:'Abdomen y core', g:'m', f:'<rect x="46" y="78" width="28" height="36" rx="10"/>', c:[60,94,.2]},
+  {id:'lumbar', name:'Zona lumbar', g:'m', b:'<rect x="49" y="88" width="22" height="14" rx="5"/>', c:[60,92,.28]},
+  {id:'gluteos', name:'Glúteos', g:'m', b:'<ellipse cx="51" cy="112" rx="10" ry="9"/><ellipse cx="69" cy="112" rx="10" ry="9"/>', c:[60,112,.25]},
+  {id:'cuadriceps', name:'Cuádriceps', g:'m', f:'<rect x="44" y="116" width="15" height="56" rx="7.5"/><rect x="61" y="116" width="15" height="56" rx="7.5"/>', c:[60,145,.16]},
+  {id:'isquios', name:'Isquiotibiales', g:'m', b:'<rect x="44" y="124" width="15" height="48" rx="7.5"/><rect x="61" y="124" width="15" height="48" rx="7.5"/>', c:[60,148,.16]},
+  {id:'pantorrillas', name:'Pantorrillas', g:'m', f:Z_CALF, b:Z_CALF, c:[60,195,.16]},
+  {id:'pies', name:'Pies', g:'m', f:Z_FOOT, b:Z_FOOT, c:[60,222,.24]},
+  {id:'cerebro', soon:true, name:'Cerebro', g:'o', ico:'<path d="M9 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5 3 3 0 0 0 2 4 3 3 0 0 0 5 1V5.5A2.5 2.5 0 0 0 9 5zM15 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5 3 3 0 0 1-2 4 3 3 0 0 1-5 1V5.5A2.5 2.5 0 0 1 15 5z"/><path d="M9 10h1.5M13.5 10H15M9 14h1.5M13.5 14H15"/>'},
+  {id:'pulmones', soon:true, name:'Pulmones', g:'o', ico:'<path d="M12 4v8M12 11c-2.2 0-3.5 1.2-4.5 3.5L5.2 19c-.6 1.4.4 2.3 1.6 2.3H9c1.2 0 2-.7 2-2.3zM12 11c2.2 0 3.5 1.2 4.5 3.5l2.3 4.5c.6 1.4-.4 2.3-1.6 2.3H15c-1.2 0-2-.7-2-2.3z"/>'},
+  {id:'corazon', soon:true, name:'Corazón', g:'o', ico:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'}
+];
+function zoneById(id){ return ZONES.find(function(z){return z.id===id;}); }
+function zoneIconMarkup(z){
+  if(z.ico) return z.ico;
+  var v = z.f ? 'f' : 'b', c = z.c, base = ZONES.filter(function(x){return x[v] && x.id!==z.id;}).map(function(x){return x[v];}).join('');
+  return '<g transform="translate(12 12) scale('+(c[2]*2)+') translate(-'+c[0]+' -'+c[1]+')" fill="currentColor" stroke="none"><circle cx="60" cy="20" r="13" opacity=".18"/><g opacity=".2">'+base+'</g>'+z[v]+'</g>';
+}
+ZONES.forEach(function(z){ EX_ICONS['z-'+z.id] = [z.name, zoneIconMarkup(z)]; });
+function zoneIconHTML(id, size, color){ return exIconSVG('z-'+id, size||20, color); }
+var EX_ICON_GROUPS = [
+  ['Cuerpo', ZONES.filter(function(z){return z.g==='m';}).map(function(z){return 'z-'+z.id;})],
+  ['Deporte', ['dumbbell','kettlebell','glove','pushup','squat','bike','swim','yoga','rope','shoe','stretch','mountain','person']],
+  ['Mente y trabajo', ['book','pencil','laptop','code','bulb','headphones','music','wave','leaf','coffee']],
+  ['General', ['flame','bolt','heart','timer','target','trophy','star','flag','sun','moon','drop','plus','infinity','check']]
+];
+function iconPickerHTML(icon, prefix){
+  var cur = icon && EX_ICONS[icon], btn = function(id){ var on = id===icon; return '<button type="button" onclick="'+prefix+'\'icon\',\''+id+'\')" title="'+esc(EX_ICONS[id][0])+'" style="width:36px;height:36px;border-radius:10px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;">'+exIconSVG(id,20)+'</button>'; };
+  return '<details class="st-adv" style="margin:0 0 10px;"'+(cur?' open':'')+'><summary>Icono'+(cur?' · '+esc(cur[0]):'')+'</summary><div style="padding-bottom:10px;">'+
+    '<button type="button" onclick="'+prefix+'\'icon\',\'\')" style="margin-bottom:8px;background:none;border:none;font-size:12px;color:'+(icon?'var(--ink-soft)':'var(--muted-soft)')+';cursor:pointer;text-decoration:underline;font-family:Inter,sans-serif;">Sin icono</button>'+
+    EX_ICON_GROUPS.map(function(g){ return '<div style="font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:8px 0 6px;">'+g[0]+'</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+g[1].filter(function(id){return EX_ICONS[id];}).map(btn).join('')+'</div>'; }).join('')+'</div></details>';
+}
+// ── Conexiones ──
+function exZoneIds(name){ return ((S.exZones||{})[exKey(name)]||[]).filter(function(id){return !!zoneById(id);}); }
+function zoneNames(ids){ return (ids||[]).map(function(id){ var z = zoneById(id); return z ? z.name : ''; }).filter(Boolean).join(', '); }
+function zoneDefaultsFor(h){
+  var out = [];
+  var a = h.actId && (S.activities||[]).find(function(x){return x.id===h.actId;});
+  if(a){ var m = {trote:['cuadriceps','isquios','pantorrillas','gluteos'], caminata:['pantorrillas','cuadriceps','gluteos'], bici:['cuadriceps','pantorrillas']}; out = out.concat(m[a.type]||[]); }
+  return out;
+}
+function zoneIdsForHist(h){
+  var set = {}, add = function(id){ if(zoneById(id)) set[id] = 1; };
+  var tp = h.tplId ? timerTplAll().find(function(t){return t.id===h.tplId;}) : null;
+  if(tp){ (tp.zones||[]).forEach(add); if(tp.timer) (tp.timer.sets||[]).forEach(function(s){ exZoneIds(s.name).forEach(add); }); }
+  (h.exercises||[]).forEach(function(n){ exZoneIds(n).forEach(add); });
+  (h.skills||[]).forEach(function(id){ var f = skFindAny(id); if(f) (f.a.zones||[]).forEach(add); });
+  var out = Object.keys(set); return out.length ? out : zoneDefaultsFor(h);
+}
+function zoneEvents(){
+  var ev = [];
+  (S.timerHistory||[]).forEach(function(h){ if(h.del) return; var z = zoneIdsForHist(h); if(z.length) ev.push({date:h.date, z:z, pts:(h.lvPts!=null ? h.lvPts : timerContrib(h,null))}); });
+  (S.skLog||[]).forEach(function(l){ if(l.del) return; var f = skFindAny(l.skill), z = f ? (f.a.zones||[]) : []; if(z.length) ev.push({date:l.date, z:z, pts:1}); });
+  (S.zoneLog||[]).forEach(function(l){ if(l.del) return; ev.push({date:l.date, z:l.zones||[], pts:Math.max(0.5, (l.min||15)/10*([0.75,1,1.3,1.6][(l.int||2)-1]||1))}); });
+  return ev;
+}
+var ZONE_BASE = [['Sin base',0],['Básico',15],['Intermedio',30],['Avanzado',45]];
+function zoneStats(){
+  var ST = {}; ZONES.forEach(function(z){ ST[z.id] = {recent:0, total:0, n14:0, last:'', base:((S.zoneBase||{})[z.id]|0)}; });
+  zoneEvents().forEach(function(e){
+    var age = Math.max(0, exDaysAgo(e.date)), share = e.pts/Math.sqrt(Math.max(1,e.z.length));
+    e.z.forEach(function(id){ var s = ST[id]; if(!s) return; s.total += share; if(age<=120) s.recent += share*Math.pow(.5, age/10); if(age<=14) s.n14++; if(e.date>s.last) s.last = e.date; });
+  });
+  ZONES.forEach(function(z){
+    var s = ST[z.id], idle = s.last ? exDaysAgo(s.last) : 0, bf = ZONE_BASE[s.base] ? ZONE_BASE[s.base][1] : 0;
+    s.baseEff = bf*(idle<=30 ? 1 : Math.max(.4, Math.pow(.5, (idle-30)/90))); s.idle = idle;
+    s.value = Math.min(100, Math.round(s.baseEff + s.recent/10*100));
+  });
+  return ST;
+}
+function zoneColor(v){
+  if(v<=0) return 'var(--line)';
+  var S3 = [[0,[240,214,160]],[50,[224,114,60]],[100,[168,52,28]]], i = v<=50 ? 0 : 1, a = S3[i], b = S3[i+1], t = (v-a[0])/(b[0]-a[0]);
+  return 'rgb('+[0,1,2].map(function(k){ return Math.round(a[1][k]+(b[1][k]-a[1][k])*t); }).join(',')+')';
+}
+function zoneLabel(v){ return v<=0?'Sin trabajar':(v<25?'Poco':(v<55?'Moderada':(v<80?'Bien trabajada':'Muy trabajada'))); }
+function bodyMapHTML(st){
+  var fig = function(view, dx, lab){
+    return '<g transform="translate('+dx+' 6)"><circle cx="60" cy="20" r="13" fill="var(--line)" opacity=".5"/>'+ZONES.filter(function(z){return z[view];}).map(function(z){ return '<g onclick="openZone(\''+z.id+'\')" style="cursor:pointer;" fill="'+zoneColor(st[z.id].value)+'" stroke="var(--paper)" stroke-width="1.6">'+z[view]+'</g>'; }).join('')+'<text x="60" y="246" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1.4" fill="var(--muted)" font-family="Inter,sans-serif">'+lab+'</text></g>';
+  };
+  return '<svg viewBox="0 0 250 256" width="100%" style="display:block;max-height:430px;">'+fig('f',0,'FRENTE')+fig('b',130,'ESPALDA')+'</svg>';
+}
+function renderCuerpoTab(){
+  var st = zoneStats(), muscles = ZONES.filter(function(z){return z.g==='m';}), anyData = ZONES.some(function(z){ return st[z.id].value>0; });
+  var low = muscles.slice().sort(function(a,b){ return st[a.id].value-st[b.id].value || a.name.localeCompare(b.name,'es'); }).slice(0,3);
+  var organ = function(z){ var v = st[z.id].value; return '<button onclick="openZone(\''+z.id+'\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:14px;border:1px solid var(--line-soft);background:var(--bg);cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);"><span style="width:38px;height:38px;border-radius:50%;background:'+zoneColor(v)+';display:flex;align-items:center;justify-content:center;color:'+(v>40?'#fff':'var(--ink)')+';">'+exIconSVG('z-'+z.id,22)+'</span><span style="font-size:11.5px;font-weight:700;">'+z.name+'</span><span style="font-size:10px;color:var(--muted);">'+zoneLabel(v)+'</span></button>'; };
+  var ramp = '<div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:6px;font-size:10.5px;color:var(--muted);"><span>Sin trabajar</span><span style="width:120px;height:7px;border-radius:4px;background:linear-gradient(90deg,var(--line),rgb(240,214,160),rgb(224,114,60),rgb(168,52,28));"></span><span>Muy trabajada</span></div>';
+  return '<div style="padding:16px 16px 90px;">'+enfSegHTML()+
+    '<div class="st-sub" style="margin-bottom:10px;">Cuánto has trabajado cada zona: lo de los últimos días, más tu punto de partida. Toca una zona para ver el detalle.</div>'+
+    '<div class="card" style="padding:12px 8px 10px;margin-bottom:12px;">'+bodyMapHTML(st)+ramp+'</div>'+
+    (ZONES.some(function(z){return z.g==='o' && !z.soon;}) ? '<div style="display:flex;gap:8px;margin-bottom:14px;">'+ZONES.filter(function(z){return z.g==='o' && !z.soon;}).map(organ).join('')+'</div>' : '')+
+    (anyData ? '<div class="st-lbl" style="margin-top:6px;">Zonas por trabajar</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'+low.map(function(z){ return '<button onclick="openZone(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:16px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join('')+'</div>'
+      : '<div class="st-sub" style="margin-bottom:12px;">Aún no hay datos. Marca tu punto de partida en cada zona, anota un entrenamiento o conecta tus rutinas y ejercicios a las zonas (⋯ en una rutina › Zonas del cuerpo).</div>')+
+    '<button class="sbtn" style="width:100%;padding:14px;" onclick="openZoneLog([])">Anotar un entrenamiento</button>'+
+    '<div class="st-sub" style="margin-top:8px;text-align:center;">Para lo que hiciste sin rutina ni temporizador.</div></div>';
+}
+// ── Detalle de una zona ──
+var ZS = {id:''};
+function openZone(id){
+  if(!zoneById(id)) return; ZS = {id:id}; removeOverlay('zone-sheet');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='zone-sheet'; ov.style.zIndex = 640; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('zone-sheet'); });
+  document.body.appendChild(ov); zoneDraw();
+}
+function zoneConnected(id){
+  var ex = [], m = S.exZones||{}; Object.keys(m).forEach(function(k){ if((m[k]||[]).indexOf(id)>=0) ex.push(k); });
+  var rt = timerTplAll().filter(function(t){ return (t.zones||[]).indexOf(id)>=0; }).map(function(t){return t.name;});
+  var sk = []; (S.levelTracks||[]).forEach(function(tr){ (function walk(list){ list.forEach(function(x){ if(x.ref) return; if((x.zones||[]).indexOf(id)>=0) sk.push(x.name); walk(skSubs(x)); }); })(skAxes(tr)); });
+  return {ex:ex, rt:rt, sk:sk};
+}
+function zoneDraw(){
+  var ov = document.getElementById('zone-sheet'); if(!ov) return; var z = zoneById(ZS.id), s = zoneStats()[z.id], cn = zoneConnected(z.id);
+  var chip = function(on, t, fn){ return '<button onclick="'+fn+'" style="padding:8px 12px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+t+'</button>'; };
+  var line = function(l, v){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line-soft);"><span style="color:var(--muted);">'+l+'</span><b style="color:var(--ink);">'+v+'</b></div>'; };
+  var pill = function(arr, empty){ return arr.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+arr.map(function(n){ return '<span style="font-size:11.5px;padding:4px 9px;border-radius:12px;background:var(--bg);border:1px solid var(--line);color:var(--ink-soft);">'+esc(n)+'</span>'; }).join('')+'</div>' : '<div class="st-sub">'+empty+'</div>'; };
+  brPutSheet(ov, '<div class="sheet"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><span style="width:46px;height:46px;border-radius:14px;background:'+zoneColor(s.value)+';color:'+(s.value>40?'#fff':'var(--ink)')+';display:flex;align-items:center;justify-content:center;">'+exIconSVG('z-'+z.id,28)+'</span><div style="flex:1;"><span class="serif" style="font-weight:700;font-size:20px;">'+z.name+'</span><div class="st-sub" style="margin:0;">'+zoneLabel(s.value)+' · '+s.value+' / 100</div></div><button class="st-x" onclick="removeOverlay(\'zone-sheet\')" aria-label="Cerrar">×</button></div>'+
+    '<div style="height:8px;background:var(--line-soft);border-radius:4px;overflow:hidden;margin-bottom:12px;"><div style="width:'+s.value+'%;height:100%;background:'+zoneColor(Math.max(1,s.value))+';"></div></div>'+
+    line('Punto de partida', ZONE_BASE[s.base][0]+(s.baseEff? ' (+'+Math.round(s.baseEff)+')':''))+line('Reciente', Math.round(s.recent/10*100)+' pts · '+s.n14+' sesión'+(s.n14===1?'':'es')+' en 14 días')+line('Última vez', s.last ? timerHistDayLabel(s.last) : '—')+
+    '<div class="st-lbl">Mi punto de partida</div><div style="display:flex;flex-wrap:wrap;gap:8px;">'+ZONE_BASE.map(function(b,i){ return chip(s.base===i, b[0], 'zoneSetBase('+i+')'); }).join('')+'</div>'+
+    '<div class="st-sub" style="margin-top:6px;">Si ya vienes con una base en esta zona, márcala: cuenta como punto de partida y se va apagando si dejas de entrenarla.</div>'+
+    '<div class="st-lbl">Conectado con</div>'+pill(cn.rt.concat(cn.ex.map(function(k){return k;})).concat(cn.sk), 'Todavía nada. Conecta ejercicios, rutinas o habilidades.')+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="cbtn" style="flex:1;" onclick="zxPick(\''+z.id+'\')">Conectar ejercicios</button><button class="sbtn" style="flex:1;" onclick="removeOverlay(\'zone-sheet\');openZoneLog([\''+z.id+'\'])">Trabajé esta zona</button></div></div>');
+}
+function zoneSetBase(i){ if(!S.zoneBase) S.zoneBase = {}; S.zoneBase[ZS.id] = i; saveState(); zoneDraw(); render(); }
+// ── Anotación rápida ──
+var ZL = null;
+function openZoneLog(pre){
+  ZL = {z:(pre||[]).slice(), min:20, int:2, day:0}; removeOverlay('zone-log');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='zone-log'; ov.style.zIndex = 650; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('zone-log'); });
+  document.body.appendChild(ov); zlDraw();
+}
+function zlDraw(){
+  var ov = document.getElementById('zone-log'); if(!ov) return;
+  var chip = function(on, t, fn){ return '<button onclick="'+fn+'" style="padding:7px 12px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--ink-soft)')+';">'+t+'</button>'; };
+  var zch = function(g){ return ZONES.filter(function(z){return z.g===g;}).map(function(z){ var on = ZL.z.indexOf(z.id)>=0; return '<button onclick="zlTog(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:var(--ink);">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join(''); };
+  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:20px;">Anotar un entrenamiento</span><div class="st-sub">Marca qué zonas trabajaste y cuánto.</div></div><button class="st-x" onclick="removeOverlay(\'zone-log\')" aria-label="Cerrar">×</button></div>'+
+    '<div class="st-lbl" style="margin-top:10px;">Cuerpo</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+zch('m')+'</div>'+
+    '<div class="st-lbl">Duración</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+[10,20,30,45,60,90].map(function(m){ return chip(ZL.min===m, m+' min', 'ZL.min='+m+';zlDraw()'); }).join('')+'</div>'+
+    '<div class="st-lbl">Intensidad</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+INT_LEVELS.map(function(n,i){ return chip(ZL.int===i+1, n, 'ZL.int='+(i+1)+';zlDraw()'); }).join('')+'</div>'+
+    '<div class="st-lbl">Cuándo</div><div style="display:flex;gap:6px;">'+chip(ZL.day===0,'Hoy','ZL.day=0;zlDraw()')+chip(ZL.day===1,'Ayer','ZL.day=1;zlDraw()')+chip(ZL.day===2,'Antes de ayer','ZL.day=2;zlDraw()')+'</div>'+
+    '<button class="sbtn" style="width:100%;margin-top:18px;padding:14px;" onclick="zlSave()">Guardar</button></div>');
+}
+function zlTog(id){ var i = ZL.z.indexOf(id); if(i>=0) ZL.z.splice(i,1); else ZL.z.push(id); zlDraw(); }
+function zlSave(){
+  if(!ZL.z.length){ toast('Elige al menos una zona'); return; }
+  var d = new Date(); d.setDate(d.getDate()-ZL.day);
+  if(!S.zoneLog) S.zoneLog = []; S.zoneLog.push({id:uid(), zones:ZL.z.slice(), min:ZL.min, int:ZL.int, date:localDateStr(d), updatedAt:Date.now()});
+  saveState(); removeOverlay('zone-log'); render(); toast('✓ Entrenamiento anotado');
+}
+function mergeZoneData(cloud){
+  S.exZones = Object.assign({}, cloud.exZones||{}, S.exZones||{}); S.zoneBase = Object.assign({}, cloud.zoneBase||{}, S.zoneBase||{});
+  var m = {}; (S.zoneLog||[]).forEach(function(a){ m[a.id]=a; }); (cloud.zoneLog||[]).forEach(function(c){ var l = m[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) m[c.id]=c; }); S.zoneLog = Object.keys(m).map(function(k){return m[k];});
+}
+// ── Selector de zonas (varias) ──
+var ZP = null;
+function openZonesPicker(sel, cb, title){
+  ZP = {sel:(sel||[]).slice(), cb:cb}; removeOverlay('zone-picker');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='zone-picker'; ov.style.zIndex = 720; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('zone-picker'); });
+  ov.innerHTML = '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:19px;">'+esc(title||'Zonas del cuerpo')+'</span><div class="st-sub">Elige una o más zonas.</div></div><button class="st-x" onclick="removeOverlay(\'zone-picker\')" aria-label="Cerrar">×</button></div><div id="zp-list"></div><button class="sbtn" style="width:100%;margin-top:14px;" onclick="zpDone()">Listo</button></div>';
+  document.body.appendChild(ov); zpList();
+}
+function zpList(){
+  var box = document.getElementById('zp-list'); if(!box) return;
+  var grp = function(g, t){ return '<div class="st-lbl" style="margin-top:12px;">'+t+'</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+ZONES.filter(function(z){return z.g===g;}).map(function(z){ var on = ZP.sel.indexOf(z.id)>=0; return '<button onclick="zpTog(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:var(--ink);">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join('')+'</div>'; };
+  box.innerHTML = grp('m','Cuerpo');
+}
+function zpTog(id){ var i = ZP.sel.indexOf(id); if(i>=0) ZP.sel.splice(i,1); else ZP.sel.push(id); zpList(); }
+function zpDone(){ var cb = ZP.cb, a = ZP.sel.slice(); removeOverlay('zone-picker'); if(cb) cb(a); }
+// ── Desde una zona: qué ejercicios la trabajan ──
+var ZX = {id:'', q:''};
+function zxPick(zid){
+  ZX = {id:zid, q:''}; removeOverlay('zx-pick'); var z = zoneById(zid);
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='zx-pick'; ov.style.zIndex = 700; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('zx-pick'); });
+  ov.innerHTML = '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:18px;">Ejercicios de «'+z.name+'»</span><div class="st-sub">Marca los que la trabajan. Si no está, escríbelo y añádelo.</div></div><button class="st-x" onclick="removeOverlay(\'zx-pick\')" aria-label="Cerrar">×</button></div><input class="finp" placeholder="Buscar o escribir un ejercicio…" oninput="ZX.q=this.value;zxDraw()" style="margin-bottom:10px;"/><div id="zx-list"></div></div>';
+  document.body.appendChild(ov); zxDraw();
+}
+function zxDraw(){
+  var box = document.getElementById('zx-list'); if(!box) return; var q = skNorm(ZX.q), m = S.exZones||{}, all = exNames();
+  var rows = all.filter(function(e){ return !q || skNorm(e.name).indexOf(q)>=0; }).sort(function(a,b){ var x = (m[a.key]||[]).indexOf(ZX.id)>=0?0:1, y = (m[b.key]||[]).indexOf(ZX.id)>=0?0:1; return x-y || a.name.localeCompare(b.name,'es'); }).slice(0,80);
+  var html = rows.map(function(e){ var on = (m[e.key]||[]).indexOf(ZX.id)>=0; return '<button data-k="'+esc(e.key)+'" onclick="zxTog(this.dataset.k)" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--bg);border:none;border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;"><span style="width:20px;height:20px;border-radius:6px;border:2px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'transparent')+';color:#fff;font-size:13px;line-height:16px;text-align:center;">'+(on?'✓':'')+'</span><span style="flex:1;font-weight:600;font-size:13.5px;color:var(--ink);">'+esc(e.name)+'</span></button>'; }).join('');
+  if(ZX.q.trim() && !all.some(function(e){ return e.key===exKey(ZX.q); })) html += '<button onclick="zxAdd()" class="cbtn" style="width:100%;margin-top:4px;">+ Añadir «'+esc(ZX.q.trim())+'»</button>';
+  box.innerHTML = html || '<div class="st-sub" style="text-align:center;padding:16px 0;">Aún no hay ejercicios. Escribe uno arriba.</div>';
+}
+function zxTog(key){ if(!S.exZones) S.exZones = {}; var a = (S.exZones[key]||[]).slice(), i = a.indexOf(ZX.id); if(i>=0) a.splice(i,1); else a.push(ZX.id); if(a.length) S.exZones[key] = a; else delete S.exZones[key]; saveState(); zxDraw(); zoneDraw(); render(); }
+function zxAdd(){ var k = exKey(ZX.q); if(!k) return; if(!S.exZones) S.exZones = {}; S.exZones[k] = (S.exZones[k]||[]).concat([ZX.id]); ZX.q = ''; var i = document.querySelector('#zx-pick input'); if(i) i.value = ''; saveState(); zxDraw(); zoneDraw(); render(); }
+
 // Iniciales del ejercicio (máx. 3 letras): "Dominadas altas" → "DA". Solo cuentan letras:
 // se ignoran símbolos, números y emojis ("+ Press 45°" → "PR").
 function exInitials(name){
@@ -20744,7 +21086,7 @@ function exInitials(name){
 function exChipHTML(icon, color, name, size){
   size = size||34;
   var ini = exInitials(name), fs = Math.round(size*(ini.length>=3?0.30:0.38));
-  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:'+size+'px;height:'+size+'px;border-radius:'+Math.round(size*0.3)+'px;background:'+(color?colorForWhiteText(color):'var(--accent-fill,var(--accent))')+';color:#fff;flex-shrink:0;font-weight:800;font-size:'+fs+'px;letter-spacing:-.02em;">'+esc(ini)+'</span>';
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:'+size+'px;height:'+size+'px;border-radius:'+Math.round(size*0.3)+'px;background:'+(color?colorForWhiteText(color):'var(--accent-fill,var(--accent))')+';color:#fff;flex-shrink:0;font-weight:800;font-size:'+fs+'px;letter-spacing:-.02em;">'+(icon && EX_ICONS[icon] ? exIconSVG(icon, Math.round(size*0.58), '#fff') : esc(ini))+'</span>';
 }
 // Selector de color + ícono. prefix = inicio de la llamada JS, ej. "tteStyle(" → tteStyle('color','#hex')
 function stylePickerHTML(color, icon, prefix){
@@ -20753,7 +21095,7 @@ function stylePickerHTML(color, icon, prefix){
     var on = c===color;
     return '<button type="button" onclick="'+prefix+'\'color\',\''+c+'\')" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:2.5px solid '+(on?'var(--ink)':'var(--paper)')+';box-shadow:0 0 0 1.5px var(--line);cursor:pointer;padding:0;"></button>';
   }).join('')+'</div>'+
-  '';
+  iconPickerHTML(icon, prefix);
 }
 var _drag = null;
 function dragSibling(item, dir){
@@ -21098,6 +21440,7 @@ function saveTimerTplEditor(){
     else S.setLib.push({id:uid(), name:name, color:TTE.color, icon:TTE.icon, sets:sets, rounds:tm.rounds||1, restBetween:tm.restBetween||0, restBetweenRounds:tm.restBetweenRounds||0, updatedAt:Date.now()});
   } else {
     if(!S.timerTemplates) S.timerTemplates = [];
+    if(!TTE.id && !timerCanAdd()){ timerLimitTap(); return; }
     if(TTE.id) S.timerTemplates = S.timerTemplates.map(function(x){ return x.id===TTE.id ? Object.assign({},x,{name:name,timer:tm,updatedAt:Date.now()}) : x; });
     else S.timerTemplates.push({id:uid(), name:name, timer:tm, updatedAt:Date.now()});
   }
@@ -21241,6 +21584,7 @@ function brStep(label, val, unit, minus, plus, note){
 function brSaveTpl(kind, name, extra, timer, id){
   var o = Object.assign({id:id||uid(), name:name, kind:kind, timer:timer||{sets:[],rounds:1,restBetween:0,restBetweenRounds:0}, updatedAt:Date.now()}, extra);
   if(!S.timerTemplates) S.timerTemplates = [];
+  if(!(id && S.timerTemplates.some(function(x){return x.id===id;})) && !timerCanAdd()){ timerLimitTap(); return; }
   if(id && S.timerTemplates.some(function(x){return x.id===id;})) S.timerTemplates = S.timerTemplates.map(function(x){ return x.id===id ? o : x; });
   else S.timerTemplates.push(o);
   saveState(); render();
@@ -21852,6 +22196,8 @@ function grmSetMedia(setId, media){
 }
 function grmRemove(setId){ grmSetMedia(setId, null); } // el archivo se borra solo en la próxima limpieza si nadie más lo usa
 function grmPick(setId){
+  var _cur = (M && M.timer && M.timer.sets || []).find(function(x){ return x.id===setId; });
+  if(!isPremium() && limOn() && !(_cur && _cur.media) && grmCount()>=LIM.demos){ limGate(null,'Demostraciones al máximo','Tu plan gratuito guarda hasta '+LIM.demos+' demostraciones (video o GIF).'); return; }
   var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'video/*,image/gif,image/*';
   inp.style.display = 'none';
   inp.onchange = function(){
@@ -22251,6 +22597,7 @@ function shUniqueName(list, name){
   return name+' ('+n+')';
 }
 function shDoImport(kind, item, blobs){
+  if(kind==='routine' && !timerCanAdd()){ timerLimitTap(); return; }
   var map = {}, ids = Object.keys(blobs);
   Promise.all(ids.map(function(oid){ var nid = uid(); map[oid] = nid; return grmPut(nid, blobs[oid]); })).catch(function(){ map = {}; toast('No se pudieron guardar las demostraciones'); }).then(function(){
     shReplaceMedia(item, map);
@@ -23197,16 +23544,18 @@ function clItemsHTML(){
 function clAddButtonHTML(){
   var limited = !isPremium();
   var n = M.checklist.length;
-  var atMax = limited && n>=MAX_CHECKLIST_ITEMS_FREE;
+  var atMax = limited && clBlocked(M.task, n);
   return '<button onclick="mAddCL()" style="background:none;border:none;color:'+(atMax?'var(--muted-soft)':'var(--muted)')+';font-size:13px;cursor:pointer;padding:4px 0;">'+(atMax?'🔒 Agregar ítem':'+ Agregar ítem')+'</button>'+
     ((M.task&&M.task.period==='dia')?'<div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;">'+ico('clock',12,2)+'&nbsp;Temporizador por ítem'+infoBtn('cltimer')+'</div>':'')+
-    (limited?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+n+'/'+MAX_CHECKLIST_ITEMS_FREE+' ítems (plan gratuito)'+(atMax?' — <span onclick="openDonationInfo()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">ampliar</span>':'')+'</div>':'');
+    (limited?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+n+'/'+clMax(M.task)+' ítems (plan gratuito)'+(atMax?' — <span onclick="openDonationInfo()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">ampliar</span>':'')+'</div>':'');
 }
 function mAddCL(){
   // Pedido: plan gratuito tope de 10 ítems por checklist, Donante sin límite.
-  if(!isPremium() && M.checklist.length>=MAX_CHECKLIST_ITEMS_FREE){
-    toast('Máximo '+MAX_CHECKLIST_ITEMS_FREE+' ítems en el plan gratuito');
-    openDonationInfo();
+  if(clBlocked(M.task, M.checklist.length)){
+    if(limOn() && !M.task.adCl){
+      limGate('checklist_ext','Checklist al máximo',clLimitMsg(M.task),function(){ M.task.adCl=true; try{mRerenderCL();}catch(e){} },
+        'Mira un anuncio y añade '+LIM.checklistAd+' ítems más a esta tarea.');
+    } else { toast('Máximo '+clMax(M.task)+' ítems en el plan gratuito'); if(!limOn()) openDonationInfo(); }
     return;
   }
   M.checklist.push({id:uid(),text:'',done:false,qty:1,prog:0});mRerenderCL();
@@ -23519,7 +23868,7 @@ function mSave(){
   // específico.
   if(M.hasQty && M.hasCL) M.hasQty=false;
   var cl=M.hasCL?M.checklist.filter(function(i){return i.text.trim();}):[];
-  if(!isPremium() && cl.length>MAX_CHECKLIST_ITEMS_FREE) cl=cl.slice(0,MAX_CHECKLIST_ITEMS_FREE);
+  if(!isPremium() && !limOn() && cl.length>MAX_CHECKLIST_ITEMS_FREE) cl=cl.slice(0,MAX_CHECKLIST_ITEMS_FREE);
   var qty=M.hasQty?Math.max(2,M.qty):1;
   var done_=cl.length?checklistSatisfied({checklist:cl,clRule:M.clRule}):(qty>1?(M.task.prog||0)>=qty:!!M.task.done);
   // BUGFIX: si es una tarea simple (sin "Cantidad"), "prog" debe quedar en
@@ -26463,7 +26812,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.22.129';
+var APP_VERSION = '2026.10.24.131';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
