@@ -3253,7 +3253,7 @@ function flushXP(){
 // El modo pruebas (solo en este dispositivo) se activa tocando 7 veces la marca
 // "desarrollado por" al final de Yo, y deja usar todo lo marcado.
 // Registro de ciclo ya está habilitado para todos (se quitó de esta lista).
-var SOON_FEATURES = {hexagon:'Habilidades en gráfico', coleccion:'Colección', actividad:'Actividad con GPS', retos:'Retos', planmes:'Planificación mensual'};
+var SOON_FEATURES = {hexagon:'Habilidades en gráfico', coleccion:'Colección', actividad:'Actividad con GPS', retos:'Retos', planmes:'Planificación mensual', cycle:'Registro de ciclo', habilidades:'Habilidades', cuerpo:'Cuerpo', rutnivel:'Nivel de las rutinas', rutconex:'Conexión de rutinas con zonas y habilidades'};
 // Modo pruebas: manual (7 toques en "desarrollado por") o automático para la
 // cuenta de desarrollador (DEV_EMAILS). Es 100% local: NO depende de Firestore.
 function labOn(){ try{ if(typeof isDevUser==='function' && isDevUser()) return true; return localStorage.getItem('og6-lab')==='1'; }catch(e){ return false; } }
@@ -3979,6 +3979,8 @@ function renderSelBar(){
       '<button onclick="selBulkDeleteTasks()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
   } else if(SEL.type==='projects'){
     actionsHTML = '<button onclick="selBulkDeleteProjects()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
+  } else if(SEL.type==='regs'){
+    actionsHTML = '<button onclick="selBulkDeleteRegs()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
   } else if(SEL.type==='modes'){
     actionsHTML = '<button onclick="selBulkDeleteModes()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
   }
@@ -4112,6 +4114,31 @@ function selBulkDeleteModesConfirmed(btn){
   var cb = btn.closest('.conf-box'); if(cb) cb.remove();
   toast(ids.length+' modo'+(ids.length===1?'':'s')+' eliminado'+(ids.length===1?'':'s'));
   exitSelectMode();
+}
+
+// Acciones en lote — Registros
+function selBulkDeleteRegs(){
+  var n = SEL.ids.length, ents = 0;
+  SEL.ids.forEach(function(id){ var r = regById(id); if(r) ents += regEntries(r).length; });
+  var box = document.createElement('div'); box.className='conf-box';
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:8px;">Eliminar '+n+' registro'+(n===1?'':'s')+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;line-height:1.5;">Se borran sus '+ents+' entradas. Las tareas asociadas no se borran, solo dejan de estar ligadas. No se puede deshacer.</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="sbtn" style="background:var(--bad);" onclick="selBulkDeleteRegsConfirmed(this)">Eliminar</button>'+
+      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
+    '</div></div>';
+  document.body.appendChild(box);
+}
+function selBulkDeleteRegsConfirmed(btn){
+  var ids = SEL.ids.slice(), now = new Date().toISOString();
+  S.registries = (S.registries||[]).map(function(r){ return ids.indexOf(r.id)>=0 ? Object.assign({},r,{del:true,updatedAt:now}) : r; });
+  S.tasks = S.tasks.map(function(t){ return ids.indexOf(t.registryId)>=0 ? Object.assign({},t,{registryId:null}) : t; });
+  saveState();
+  playSound('delete'); vibrate(20);
+  var cb = btn.closest('.conf-box'); if(cb) cb.remove();
+  toast(ids.length+' registro'+(ids.length===1?'':'s')+' eliminado'+(ids.length===1?'':'s'));
+  exitSelectMode();
+  try{ refreshRegViews(); }catch(e){}
 }
 
 var _lastRenderNavKey = null; // ver nota dentro de render() sobre por qué existe
@@ -6940,8 +6967,17 @@ function renderRegistriesSection(){
   html += '<div data-drag-list data-drag-cb="regs">';
   list.forEach(function(r){
     var pe_ = r.kind==='finance' ? regEntries(r).filter(function(e){return e.status==='expected';}) : [], pc = pe_.length, pl = pe_.filter(function(e){return pendDiff(e)<0;}).length;
+    if(SEL.active && SEL.type==='regs'){
+      var _ck = SEL.ids.indexOf(r.id)!==-1;
+      html += '<div onclick="toggleSelect(\'regs\',\''+r.id+'\')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:'+(_ck?'var(--accent-bg)':'var(--paper)')+';border:1px solid '+(_ck?'var(--accent)':'var(--line-soft)')+';border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
+        '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(_ck?'var(--accent)':'var(--muted-soft)')+';background:'+(_ck?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(_ck?chkSVG():'')+'</div>'+
+        '<div style="width:34px;height:34px;border-radius:10px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
+        '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+regEntries(r).length+' entrada'+(regEntries(r).length===1?'':'s')+'</div></div></div>';
+      return;
+    }
     html += '<div data-drag-item data-id="'+r.id+'" style="'+(regLocked(r)?'opacity:.55;':'')+'display:flex;align-items:center;gap:6px;padding:10px 12px 10px 4px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;">'+gripHTML()+
-      '<div onclick="openRegistryView(\''+r.id+'\')" oncontextmenu="event.preventDefault();openQuickAdd(\''+r.id+'\');return false;" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;">'+
+      '<div onclick="if(_selLpFired){_selLpFired=false;return;}openRegistryView(\''+r.id+'\')" oncontextmenu="event.preventDefault();if(!_selLpFired)openQuickAdd(\''+r.id+'\');return false;" ontouchstart="selLpStart(\'regs\',\''+r.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'regs\',\''+r.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;">'+
       '<div style="width:38px;height:38px;border-radius:11px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
       '<div style="flex:1;min-width:0;">'+
         '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(regLocked(r)?'🔒 ':'')+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
@@ -9925,9 +9961,9 @@ function skLogSave(){
 function skLogDel(id){ skLogRemove(id); saveState(); skLogDraw(); skReopen(_skl.tid, _skl.aid); render(); }
 
 // ══ Habilidades en Enfoque + enlace ejercicio → habilidades + «Hoy sumaste» ══
-function setEnfSeg(v){ S._enfSeg = v; try{ localStorage.setItem('og6-enfseg', v); }catch(e){} render(); }
-function goHabilidades(){ S._enfSeg = 'hab'; if(S.timerPlacement==='seguimiento'){ S.tab = 'proyectos'; S._projView = 'timer'; } else S.tab = 'timer'; render(); }
-function enfSegHTML(){ var cur = S._enfSeg || 'rut'; return '<div style="margin-bottom:14px;">'+mSegHTML('enf-seg', [['rut','Rutinas'],['hab','Habilidades'],['cue','Cuerpo']], cur, 'setEnfSeg')+'</div>'; }
+function setEnfSeg(v){ if((v==='hab' && featureLocked('habilidades')) || (v==='cue' && featureLocked('cuerpo'))){ toast('Próximamente'); return; } S._enfSeg = v; try{ localStorage.setItem('og6-enfseg', v); }catch(e){} render(); }
+function goHabilidades(){ if(featureLocked('habilidades')){ toast('Próximamente'); return; } S._enfSeg = 'hab'; if(S.timerPlacement==='seguimiento'){ S.tab = 'proyectos'; S._projView = 'timer'; } else S.tab = 'timer'; render(); }
+function enfSegHTML(){ var cur = S._enfSeg || 'rut'; if((cur==='hab' && featureLocked('habilidades')) || (cur==='cue' && featureLocked('cuerpo'))) cur = 'rut'; return '<div style="margin-bottom:14px;">'+mSegHTML('enf-seg', [['rut','Rutinas'],['hab','Habilidades',featureLocked('habilidades')],['cue','Cuerpo',featureLocked('cuerpo')]], cur, 'setEnfSeg')+'</div>'; }
 function renderHabilidadesTab(){
   var html = '<div style="padding:16px 16px 90px;">'+enfSegHTML()+renderLevelTracksSection();
   html += '<div onclick="openExSkills()" style="display:flex;align-items:center;gap:12px;padding:12px;border:1.5px dashed var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Ejercicios y habilidades</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Elige a qué habilidades suma cada ejercicio, en cualquier rutina</div></div><span style="color:var(--muted);">›</span></div>';
@@ -9936,6 +9972,7 @@ function renderHabilidadesTab(){
 }
 function habLinkCardHTML(){
   var n = (S.levelTracks||[]).length;
+  if(featureLocked('habilidades')) return '<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;opacity:.6;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">🎯 Habilidades y seguimientos'+soonBadge()+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Próximamente</div></div></div>';
   return '<div class="card" onclick="goHabilidades()" style="margin-bottom:14px;cursor:pointer;display:flex;align-items:center;gap:10px;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">🎯 Habilidades y seguimientos</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px;">'+(n?n+' seguimiento'+(n===1?'':'s')+' · ':'')+'Ahora viven en Enfoque</div></div><span style="color:var(--muted);">›</span></div>';
 }
 // ── Ejercicios → habilidades ──
@@ -16695,7 +16732,7 @@ function tmHistKind(h){
   var tp = h.tplId ? timerTplAll().find(function(t){return t.id===h.tplId;}) : null; if(tp) return tmKindOf(tp);
   if(h.group==='Respiración') return 'breath'; if(h.kind==='estudio' || /estudio/i.test(h.group||'')) return 'estudio'; return 'ejercicio';
 }
-function tmLvOn(scope){ return !!(S.timerLv||{})[scope]; }
+function tmLvOn(scope){ return !featureLocked('rutnivel') && !!(S.timerLv||{})[scope]; }
 function tmLvKind(scope){ if(scope.indexOf('k:')===0) return scope.slice(2); var tp = timerTplAll().find(function(t){return t.id===scope.slice(2);}); return tp ? tmKindOf(tp) : 'ejercicio'; }
 function tmLvInfo(scope){
   var hs = (S.timerHistory||[]).filter(function(h){ return !h.del && (scope.indexOf('k:')===0 ? tmHistKind(h)===scope.slice(2) : h.tplId===scope.slice(2)); });
@@ -16705,6 +16742,7 @@ function tmLvInfo(scope){
   return {xp:xp, lvl:li.lvl, ratio:li.ratio, inLvl:li.inLvl, needed:li.needed, n:hs.length, kind:kind, name:names[Math.min(11,li.lvl-1)], next:names[Math.min(11,li.lvl)], sec:hs.reduce(function(a,h){return a+(h.sec||0);},0)};
 }
 function tmLvToggle(scope){
+  if(featureLocked('rutnivel')){ toast('Próximamente'); return; }
   if(!S.timerLv) S.timerLv = {}; S.timerLv[scope] = !S.timerLv[scope]; saveState();
   if(document.getElementById('tm-group')) timerGroupDraw(); if(document.getElementById('tm-lv') && S.timerLv[scope]) openTmLv(scope); else removeOverlay('tm-lv'); render();
   toast(S.timerLv[scope] ? 'Niveles activados' : 'Niveles desactivados');
@@ -16734,13 +16772,13 @@ function timerGroupDraw(){
   var opt = function(k,d){ var on = gm===k; return '<button onclick="setTimerGroupBy(\''+k+'\')" style="display:block;width:100%;text-align:left;background:'+(on?'var(--accent-bg)':'var(--bg)')+';border:1.5px solid '+(on?'var(--accent)':'transparent')+';border-radius:12px;padding:11px 12px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">'+(on?'✓ ':'')+TM_GROUP_LABELS[k]+'</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:1px;">'+d+'</span></button>'; };
   var ren = '';
   if(gm==='tipo'){
-    ren = ['breath','ejercicio','estudio'].map(function(k){ return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;"><input class="finp" maxlength="24" value="'+esc(tmSecName(k))+'" onchange="timerRenameGroup(\''+k+'\',this.value)" style="margin:0;flex:1;"/><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);white-space:nowrap;"><input type="checkbox" '+(tmLvOn('k:'+k)?'checked':'')+' onchange="tmLvToggle(\'k:'+k+'\')"/>Niveles</label></div>'; }).join('')+'<div class="st-sub" style="margin-top:6px;">Con «Niveles» el grupo suma experiencia y sube de nivel (opcional).</div>';
+    ren = ['breath','ejercicio','estudio'].map(function(k){ return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;"><input class="finp" maxlength="24" value="'+esc(tmSecName(k))+'" onchange="timerRenameGroup(\''+k+'\',this.value)" style="margin:0;flex:1;"/>'+(featureLocked('rutnivel')?'':'<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);white-space:nowrap;"><input type="checkbox" '+(tmLvOn('k:'+k)?'checked':'')+' onchange="tmLvToggle(\'k:'+k+'\')"/>Niveles</label>')+'</div>'; }).join('')+(featureLocked('rutnivel')?'':'<div class="st-sub" style="margin-top:6px;">Con «Niveles» el grupo suma experiencia y sube de nivel (opcional).</div>');
   } else if(gm==='objetivo'){
     var gs = {}; timerTplAll().forEach(function(t){ if(t.goal) gs[t.goal]=1; });
     ren = Object.keys(gs).length ? Object.keys(gs).map(function(g){ return '<input class="finp" maxlength="24" value="'+esc(g)+'" data-old="'+esc(g)+'" onchange="timerRenameGroup(\'g:\'+this.dataset.old,this.value)" style="margin-bottom:6px;"/>'; }).join('') : '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Aún no hay objetivos. Asigna uno desde ⋯ → Objetivo en cada rutina.</div>';
   } else ren = '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Los grupos toman el nombre de la habilidad asociada a cada rutina (⋯ → Habilidades).</div>';
   brPutSheet(ov, '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="serif" style="font-weight:700;font-size:18px;">Agrupar rutinas</span><button onclick="removeOverlay(\'tm-group\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    opt('tipo','Respiración, ejercicio, estudio')+opt('objetivo','Los objetivos que tú definas')+opt('habilidad','Según la habilidad que trabaja cada rutina')+
+    opt('tipo','Respiración, ejercicio, estudio')+opt('objetivo','Los objetivos que tú definas')+(featureLocked('rutconex')?'':opt('habilidad','Según la habilidad que trabaja cada rutina'))+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px;">Nombres de los grupos</div>'+ren+'</div>');
 }
 function setTimerGroupBy(k){ S.timerGroupBy = k; saveState(); timerGroupDraw(); render(); }
@@ -16764,8 +16802,8 @@ function toggleLibSec(k){ if(!S._libSecOpen) S._libSecOpen={}; S._libSecOpen[k]=
 function toggleTimerLib(){ S._timerLibOpen = !S._timerLibOpen; render(); }
 function renderTimerHome(){
   timerSeedDefaults();
-  if((S._enfSeg||(function(){ try{ return localStorage.getItem('og6-enfseg'); }catch(e){ return null; } })())==='cue'){ S._enfSeg = 'cue'; return renderCuerpoTab(); }
-  if((S._enfSeg||(function(){ try{ return localStorage.getItem('og6-enfseg'); }catch(e){ return null; } })())==='hab'){ S._enfSeg = 'hab'; return renderHabilidadesTab(); }
+  if((S._enfSeg||(function(){ try{ return localStorage.getItem('og6-enfseg'); }catch(e){ return null; } })())==='cue' && !featureLocked('cuerpo')){ S._enfSeg = 'cue'; return renderCuerpoTab(); }
+  if((S._enfSeg||(function(){ try{ return localStorage.getItem('og6-enfseg'); }catch(e){ return null; } })())==='hab' && !featureLocked('habilidades')){ S._enfSeg = 'hab'; return renderHabilidadesTab(); }
   var list = timerTplAll();
   var html = '<div style="padding:16px 16px 90px;">'+enfSegHTML();
   html += timerTopHTML();
@@ -16875,14 +16913,15 @@ function qcType(v){ var n=parseFloat(v); if(n>0){ QC_MIN=Math.min(600,n); qcDraw
 function tmPickZones(id){ var tp = timerTplAll().find(function(x){return x.id===id;}); if(!tp) return; openZonesPicker(tp.zones||[], function(a){ tp.zones = a; tp.updatedAt = Date.now(); saveState(); render(); }, 'Zonas de «'+tp.name+'»'); }
 function openTimerTplMenu(id){
   var tp = timerTplAll().find(function(x){return x.id===id;}); if(!tp) return;
+  var _lkC = featureLocked('rutconex'), _lkN = featureLocked('rutnivel');
   var box = document.createElement('div'); box.className='conf-box';
   var b = 'width:100%;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;';
   box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:14px;">'+esc(tp.name)+'</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerTplEditor(\''+id+'\')" style="'+b+'background:var(--accent);color:#fff;border:none;">Editar</button>'+
-    '<button onclick="this.closest(\'.conf-box\').remove();openTimerSkills(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Habilidades'+((tp.skills||[]).length?' ('+tp.skills.length+')':'')+'</button>'+
-    '<button onclick="this.closest(\'.conf-box\').remove();tmPickZones(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Zonas del cuerpo'+((tp.zones||[]).length?' ('+tp.zones.length+')':'')+'</button>'+
-    '<button onclick="this.closest(\'.conf-box\').remove();tmLvToggle(\'t:'+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Niveles: '+(tmLvOn('t:'+id)?'activados':'desactivados')+'</button>'+
+    '<button onclick="'+(_lkC?'toast(\'Próximamente\')':'this.closest(\'.conf-box\').remove();openTimerSkills(\''+id+'\')')+'" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);'+(_lkC?'opacity:.5;':'')+'">'+(_lkC?'🔒 ':'')+'Habilidades'+((tp.skills||[]).length?' ('+tp.skills.length+')':'')+'</button>'+
+    '<button onclick="'+(_lkC?'toast(\'Próximamente\')':'this.closest(\'.conf-box\').remove();tmPickZones(\''+id+'\')')+'" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);'+(_lkC?'opacity:.5;':'')+'">'+(_lkC?'🔒 ':'')+'Zonas del cuerpo'+((tp.zones||[]).length?' ('+tp.zones.length+')':'')+'</button>'+
+    '<button onclick="'+(_lkN?'toast(\'Próximamente\')':'this.closest(\'.conf-box\').remove();tmLvToggle(\'t:'+id+'\')')+'" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);'+(_lkN?'opacity:.5;':'')+'">'+(_lkN?'🔒 ':'')+'Niveles: '+(tmLvOn('t:'+id)?'activados':'desactivados')+'</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerIntensity(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Intensidad'+(tp.intensity?': '+INT_LEVELS[tp.intensity-1]:'')+'</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerGoal(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Objetivo'+(tp.goal?': '+esc(tp.goal):'')+'</button>'+
     '<div style="display:flex;gap:8px;"><button onclick="this.closest(\'.conf-box\').remove();moveTimerTpl(\''+id+'\',-1)" style="'+b+'background:var(--bg);color:var(--ink-soft);border:1.5px solid var(--line);">↑ Subir</button><button onclick="this.closest(\'.conf-box\').remove();moveTimerTpl(\''+id+'\',1)" style="'+b+'background:var(--bg);color:var(--ink-soft);border:1.5px solid var(--line);">↓ Bajar</button></div>'+
@@ -19985,6 +20024,7 @@ function crucialBtnStyle(){
 }
 function mSegHTML(id, items, active, fn){
   return '<div id="'+id+'" class="seg">'+items.map(function(i){
+    if(i[2]) return '<button type="button" class="seg-b" data-k="'+i[0]+'" onclick="toast(\'Próximamente\')" style="opacity:.45;">'+i[1]+'</button>';
     return '<button type="button" class="seg-b'+(i[0]===active?' on':'')+'" data-k="'+i[0]+'" onclick="'+fn+'(\''+i[0]+'\')">'+i[1]+'</button>';
   }).join('')+'</div>';
 }
@@ -26812,7 +26852,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.24.131';
+var APP_VERSION = '2026.10.24.132';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
