@@ -20914,43 +20914,108 @@ function exIconSVG(id, size, color, sw){
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+(color||'currentColor')+'" stroke-width="'+(sw||1.7)+'" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">'+ic[1]+'</svg>';
 }
 // ══ Mapa del cuerpo: zonas, iconos, conexión con ejercicios/rutinas/habilidades ══
-var Z_ARM_L = '<rect x="26" y="58" width="11" height="32" rx="5.5" transform="rotate(6 31 74)"/>', Z_ARM_R = '<rect x="83" y="58" width="11" height="32" rx="5.5" transform="rotate(-6 89 74)"/>';
-var Z_NECK = '<rect x="53" y="32" width="14" height="11" rx="5"/>';
-var Z_SHOULDER = '<ellipse cx="38" cy="52" rx="11" ry="8"/><ellipse cx="82" cy="52" rx="11" ry="8"/>';
-var Z_FORE = '<rect x="22" y="92" width="10" height="34" rx="5" transform="rotate(5 27 109)"/><rect x="88" y="92" width="10" height="34" rx="5" transform="rotate(-5 93 109)"/>';
-var Z_HAND = '<ellipse cx="25" cy="133" rx="6" ry="8"/><ellipse cx="95" cy="133" rx="6" ry="8"/>';
-var Z_CALF = '<rect x="45" y="176" width="12" height="38" rx="6"/><rect x="63" y="176" width="12" height="38" rx="6"/>';
-var Z_FOOT = '<ellipse cx="51" cy="224" rx="9" ry="5"/><ellipse cx="69" cy="224" rx="9" ry="5"/>';
+// Anatomía: cada zona es una lista de puntos (mitad izquierda) suavizada y reflejada.
+function zPath(pts){
+  var n = pts.length, f = function(v){ return Math.round(v*10)/10; }, d = 'M'+f(pts[0][0])+' '+f(pts[0][1]);
+  for(var i=0;i<n;i++){
+    var p0 = pts[(i-1+n)%n], p1 = pts[i], p2 = pts[(i+1)%n], p3 = pts[(i+2)%n];
+    var c1 = p1[2] ? [p1[0],p1[1]] : [p1[0]+(p2[0]-p0[0])/6, p1[1]+(p2[1]-p0[1])/6];
+    var c2 = p2[2] ? [p2[0],p2[1]] : [p2[0]-(p3[0]-p1[0])/6, p2[1]-(p3[1]-p1[1])/6];
+    d += 'C'+f(c1[0])+' '+f(c1[1])+' '+f(c2[0])+' '+f(c2[1])+' '+f(p2[0])+' '+f(p2[1]);
+  }
+  return d+'Z';
+}
+function zSymP(pts){ var d = 'M'+pts.map(function(p){return p[0]+' '+p[1];}).join('L')+'Z'; return '<path d="'+d+'"/><path d="'+d+'" transform="matrix(-1 0 0 1 120 0)"/>'; }
+function zAll(list){ return list.map(zSym).join(''); }
+function zAllP(list){ return list.map(zSymP).join(''); }
+function zLn(d, sw){ return '<g fill="none" stroke="var(--paper)" stroke-width="'+(sw||.8)+'" stroke-linecap="round" opacity=".8"><path d="'+d+'"/><path d="'+d+'" transform="matrix(-1 0 0 1 120 0)"/></g>'; }
+function zSym(pts){ var d = zPath(pts); return '<path d="'+d+'"/><path d="'+d+'" transform="matrix(-1 0 0 1 120 0)"/>'; }
+function zHandD(){
+  var W = [19.5,121.5], dv = [-.2,.98], pv = [.98,.2];
+  var T = function(u,v){ return [W[0]+u*pv[0]+v*dv[0], W[1]+u*pv[1]+v*dv[1]]; };
+  var out = [zPath([[-2.7,-1.6],[2.7,-1.6],[3.8,5],[4.5,9.2],[0,10],[-4.5,9.2],[-3.9,5]].map(function(q){return T(q[0],q[1]);}))];
+  [[-3.3,9.2,1.1],[-1.1,10.4,1.1],[1.1,9.6,1.1],[3.3,7.6,1.05]].forEach(function(f){
+    var u=f[0], L=f[1], w=f[2], v0=8.4;
+    out.push(zPath([[u-w,v0],[u-w,v0+L-w],[u,v0+L],[u+w,v0+L-w],[u+w,v0]].map(function(q){return T(q[0],q[1]);})));
+  });
+  out.push(zPath([[-2.6,1.6],[-4.2,3],[-6.2,6.5],[-7.2,10.8],[-8.2,12.2],[-9.2,10.8],[-8.6,6.2],[-6.6,2.2],[-4.4,.2]].map(function(q){return T(q[0],q[1]);})));
+  return out;
+}
+function zHandSym(){ return zHandD().map(function(d){ return '<path d="'+d+'"/><path d="'+d+'" transform="matrix(-1 0 0 1 120 0)"/>'; }).join(''); }
+var Z_SIL = zSym([[60,28,1],[53,28],[53,37],[46,40],[37,42],[30,44],[26,50],[24,60],[23,72],[22,86],[20,98],[17,110],[16,120.5,1],[23.5,120.5,1],[25.5,112],[28,104],[31,90],[33,78],[34,68,1],[38,76],[41,84],[43,92],[41,102],[39,112],[38,124],[38,138],[39,152],[41,166],[41,178],[39,192],[40,206],[43,218],[41,226],[40,234],[47,236],[53,236],[54,228],[54,214],[54,198],[55,180],[56,164],[58,146],[59,130],[60,122,1]])+zHandSym();
+var Z_HEAD = zSym([[60,1.6,1],[54.5,2.4],[50.6,7],[50,14],[51,20.5],[53.6,25.5],[57,28.4],[60,29,1]])+'<ellipse cx="49.4" cy="16.5" rx="1.7" ry="3.1"/><ellipse cx="70.6" cy="16.5" rx="1.7" ry="3.1"/>';
+// ── Músculos (mitad izquierda; el espejo se genera solo) ──
+var M_SCM = [[53.5,28],[56,28.5],[60,42,1],[58,44.5],[55,43.5],[53.5,36]];
+var M_NECKB = [[60,29,1],[55,29],[53.5,36],[56,38.5],[60,39,1]];
+var M_TRAP_F = [[53,37],[47,40],[39,42],[34,44],[41,46.5],[49,45.5],[54,42]];
+var M_TRAP_B = [[60,31,1],[53,33],[44,39],[34,45],[40,53],[45,62],[53,76],[60,88,1]];
+var M_DELT = [[41,44],[36,42.5],[30,44],[26,50],[24,58],[24,66],[26,73],[29,72],[31,66],[33,58],[36,52],[40,47]];
+var M_PEC = [[60,47,1],[52,46],[45,47],[40,50],[36,56],[35,63],[38,67],[44,70.5],[51,72],[56,70.5],[60,68,1]];
+var M_SERR = [[[37,70],[42,72.5],[43,76],[38,75]],[[38,76],[43,78],[44,82],[39.5,81]],[[40,82],[44.5,84],[45,88],[41.5,87]]];
+var M_OBL = [[44,86],[51.5,80],[52,92],[52,104],[54,113],[47,115],[41,114],[40,108],[42,100],[43,94]];
+var M_RECT = [[[59.2,73],[53,73.5],[52.5,81.5],[59.2,82]],[[59.2,83.2],[52.5,82.7],[52,91.5],[59.2,92]],[[59.2,93.2],[52,92.7],[52,101],[59.2,101.5]],[[59.2,102.7],[52.3,102.2],[53,110],[56,114.5],[59.2,116]]];
+var M_BIC = [[30,70],[27,72],[25,80],[24,87],[27,90],[30,88],[32,80],[32,72]];
+var M_BRQ = [[26,78],[23.5,80],[23,87],[25,89]];
+var M_TRI_L = [[32,71],[30,70],[27,73],[26,82],[25,90],[28,92],[31,88],[32,80]];
+var M_TRI_O = [[27,72],[24.5,74],[23.5,82],[23.5,89],[25.5,91],[26,82]];
+var M_FORE = [[[25,92],[21.5,92],[19,100],[17,108],[16.5,114],[18,113],[21,103],[24,95]],[[26,93],[29.5,93],[29,100],[26,110],[22.5,119.5],[18.5,119],[20,110],[23,100]]];
+var M_HAND = [[16,121],[13,130],[11,140],[12,146],[15,147],[18,140],[21,131],[22,122]];
+var M_VL = [[39,127],[44,125],[47,133],[47.5,148],[47,162],[45.5,174],[42,172],[40,162],[38.6,148],[38.4,136]];
+var M_RF = [[49,123],[52.5,125],[53.5,140],[52.5,156],[50,168],[47.8,166],[47.3,150],[47.3,134],[47.5,126]];
+var M_VM = [[53,153],[56,159],[56,167],[53,177],[48.5,177],[48,168],[50.5,166],[52.5,158]];
+var M_SART = [[43,118],[47,118.5],[58.5,150],[57,174],[53.5,174],[55,152]];
+var M_ADD = [[58.6,124],[56,125],[54.2,132],[54,142],[55,151],[57.2,150],[58.2,140]];
+var M_TFL = [[41,118],[46,117],[47,126],[43,128],[40,124]];
+var M_TIB = [[47,181],[50,181.5],[50,198],[49,214],[47,215],[46,200],[45.5,188]];
+var M_GAS_F = [[[45,180],[42,184],[40.5,194],[41.5,205],[44.5,212],[45.5,200],[45,188]],[[51,181],[53.5,186],[54,198],[53,210],[50.5,213],[50.5,198],[50.5,186]]];
+var M_FOOT = [[44,222],[41,230],[41,235],[47,236],[53,235],[53,228],[51,222],[47,220]];
+var M_LAT = [[60,101,1],[53,100],[46,96],[41,88],[38,78],[37,70],[43,74],[49,79],[54,86],[60,90,1]];
+var M_INF = [[[38,56],[45,60],[44,70],[38,70],[36,62]],[[36,68],[40,66],[41,74],[37,76]]];
+var M_ERE = [[59.2,100],[55,100],[53,108],[54,114],[59.2,114]];
+var M_GMAX = [[60,115,1],[53,113],[46,116],[41,121],[39,128],[41,136],[47,141],[54,141],[58,137],[60,130,1]];
+var M_GMED = [[47,109],[52,112.5],[46,115.5],[41.5,121],[40.5,115]];
+var M_BF = [[40,144],[46,142],[48,150],[48,162],[47,173],[43,172],[40.5,162],[39,152]];
+var M_ST = [[50,142],[56,142],[57,150],[55,162],[52,172],[49,172],[49,160],[49.5,148]];
+var M_GAS_B = [[[54,178],[53,184],[53.5,196],[51,206],[48.5,200],[48,188],[49,180]],[[44,178],[48,179],[48.5,190],[48,200],[45,206],[42,198],[41,187]]];
+var M_SOL = [[41.5,198],[45,205],[48,200],[51,205],[52,212],[50,218],[47.5,223],[44.5,220],[42.5,212]];
 var ZONES = [
-  {id:'cuello', name:'Cuello', g:'m', f:Z_NECK, b:Z_NECK, c:[60,40,.3]},
-  {id:'hombros', name:'Hombros', g:'m', f:Z_SHOULDER, b:Z_SHOULDER, c:[60,52,.17]},
-  {id:'pecho', name:'Pecho', g:'m', f:'<ellipse cx="50" cy="66" rx="11" ry="9"/><ellipse cx="70" cy="66" rx="11" ry="9"/>', c:[60,66,.2]},
-  {id:'espalda', name:'Espalda', g:'m', b:'<path d="M46 46H74L80 62L72 86H48L40 62Z"/>', c:[60,66,.2]},
-  {id:'biceps', name:'Bíceps', g:'m', f:Z_ARM_L+Z_ARM_R, c:[60,74,.17]},
-  {id:'triceps', name:'Tríceps', g:'m', b:Z_ARM_L+Z_ARM_R, c:[60,74,.17]},
-  {id:'antebrazos', name:'Antebrazos', g:'m', f:Z_FORE, b:Z_FORE, c:[60,110,.16]},
-  {id:'manos', name:'Manos y dedos', g:'m', f:Z_HAND, b:Z_HAND, c:[60,128,.17]},
-  {id:'core', name:'Abdomen y core', g:'m', f:'<rect x="46" y="78" width="28" height="36" rx="10"/>', c:[60,94,.2]},
-  {id:'lumbar', name:'Zona lumbar', g:'m', b:'<rect x="49" y="88" width="22" height="14" rx="5"/>', c:[60,92,.28]},
-  {id:'gluteos', name:'Glúteos', g:'m', b:'<ellipse cx="51" cy="112" rx="10" ry="9"/><ellipse cx="69" cy="112" rx="10" ry="9"/>', c:[60,112,.25]},
-  {id:'cuadriceps', name:'Cuádriceps', g:'m', f:'<rect x="44" y="116" width="15" height="56" rx="7.5"/><rect x="61" y="116" width="15" height="56" rx="7.5"/>', c:[60,145,.16]},
-  {id:'isquios', name:'Isquiotibiales', g:'m', b:'<rect x="44" y="124" width="15" height="48" rx="7.5"/><rect x="61" y="124" width="15" height="48" rx="7.5"/>', c:[60,148,.16]},
-  {id:'pantorrillas', name:'Pantorrillas', g:'m', f:Z_CALF, b:Z_CALF, c:[60,195,.16]},
-  {id:'pies', name:'Pies', g:'m', f:Z_FOOT, b:Z_FOOT, c:[60,222,.24]},
+  {id:'cuello', name:'Cuello', g:'m', f:zSym(M_SCM), b:zSym(M_NECKB), c:[60,36,.3]},
+  {id:'espalda', name:'Espalda', g:'m', b:zSym(M_LAT)+zAll(M_INF), c:[60,78,.2]},
+  {id:'trapecio', name:'Trapecio', g:'m', f:zSym(M_TRAP_F), b:zSym(M_TRAP_B)+zLn('M60 33V86')+zLn('M35.5 46.5C40 51 44 56 46.5 60',.6), c:[60,56,.17]},
+  {id:'hombros', name:'Hombros', g:'m', f:zSym(M_DELT)+zLn('M35 46C31 52 29 60 28 70',.6), b:zSym(M_DELT)+zLn('M35 46C31 52 29 60 28 70',.6), c:[60,58,.15]},
+  {id:'pecho', name:'Pecho', g:'m', f:zSym(M_PEC), c:[60,62,.2]},
+  {id:'biceps', name:'Bíceps', g:'m', f:zSym(M_BIC)+zSym(M_BRQ), c:[60,86,.15]},
+  {id:'triceps', name:'Tríceps', g:'m', b:zSym(M_TRI_L)+zSym(M_TRI_O), c:[60,86,.15]},
+  {id:'antebrazos', name:'Antebrazos', g:'m', f:zAll(M_FORE), b:zAll(M_FORE), c:[60,118,.14]},
+  {id:'manos', name:'Manos y dedos', g:'m', f:zHandSym(), b:zHandSym(), c:[60,136,.15]},
+  {id:'core', name:'Abdomen y core', g:'m', f:zAllP(M_RECT)+zAll(M_SERR), c:[60,96,.2]},
+  {id:'oblicuos', name:'Oblicuos', g:'m', f:zSym(M_OBL), c:[60,96,.2]},
+  {id:'lumbar', name:'Zona lumbar', g:'m', b:zSym(M_ERE), c:[60,107,.3]},
+  {id:'gluteos', name:'Glúteos', g:'m', f:zSym(M_TFL), b:zSym(M_GMAX)+zSym(M_GMED), c:[60,126,.22]},
+  {id:'cuadriceps', name:'Cuádriceps', g:'m', f:zSym(M_VL)+zSym(M_RF)+zSym(M_VM), c:[60,148,.15]},
+  {id:'aductores', name:'Aductores', g:'m', f:zSym(M_ADD), c:[60,138,.2]},
+  {id:'isquios', name:'Isquiotibiales', g:'m', b:zSym(M_BF)+zSym(M_ST), c:[60,158,.16]},
+  {id:'tibial', name:'Tibial anterior', g:'m', f:zSym(M_TIB), c:[60,200,.2]},
+  {id:'pantorrillas', name:'Pantorrillas', g:'m', f:zAll(M_GAS_F), b:zAll(M_GAS_B)+zSym(M_SOL), c:[60,198,.15]},
+  {id:'pies', name:'Pies', g:'m', f:zSym(M_FOOT)+zLn('M43 232L42.5 235M45.5 233L45.3 235.5M48 233.5L48 236',.5), b:zSym(M_FOOT), c:[60,229,.22]},
   {id:'cerebro', soon:true, name:'Cerebro', g:'o', ico:'<path d="M9 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5 3 3 0 0 0 2 4 3 3 0 0 0 5 1V5.5A2.5 2.5 0 0 0 9 5zM15 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5 3 3 0 0 1-2 4 3 3 0 0 1-5 1V5.5A2.5 2.5 0 0 1 15 5z"/><path d="M9 10h1.5M13.5 10H15M9 14h1.5M13.5 14H15"/>'},
   {id:'pulmones', soon:true, name:'Pulmones', g:'o', ico:'<path d="M12 4v8M12 11c-2.2 0-3.5 1.2-4.5 3.5L5.2 19c-.6 1.4.4 2.3 1.6 2.3H9c1.2 0 2-.7 2-2.3zM12 11c2.2 0 3.5 1.2 4.5 3.5l2.3 4.5c.6 1.4-.4 2.3-1.6 2.3H15c-1.2 0-2-.7-2-2.3z"/>'},
   {id:'corazon', soon:true, name:'Corazón', g:'o', ico:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'}
+
+
 ];
+var Z_DET_F = '<g fill="none" stroke="var(--muted)" stroke-width=".6" opacity=".35" stroke-linecap="round"><path d="M59.5 44.8C54 43.6 46 44 38 45"/><path d="M60.5 44.8C66 43.6 74 44 82 45"/><ellipse cx="60" cy="100.2" rx=".9" ry="1.5"/></g>';
 function zoneById(id){ return ZONES.find(function(z){return z.id===id;}); }
 function zoneIconMarkup(z){
   if(z.ico) return z.ico;
-  var v = z.f ? 'f' : 'b', c = z.c, base = ZONES.filter(function(x){return x[v] && x.id!==z.id;}).map(function(x){return x[v];}).join('');
-  return '<g transform="translate(12 12) scale('+(c[2]*2)+') translate(-'+c[0]+' -'+c[1]+')" fill="currentColor" stroke="none"><circle cx="60" cy="20" r="13" opacity=".18"/><g opacity=".2">'+base+'</g>'+z[v]+'</g>';
+  var v = z.f ? 'f' : 'b', c = z.c;
+  return '<g transform="translate(12 12) scale('+(c[2]*2)+') translate(-'+c[0]+' -'+c[1]+')" fill="currentColor" stroke="none"><g opacity=".2">'+Z_HEAD+Z_SIL+'</g>'+z[v]+'</g>';
 }
 ZONES.forEach(function(z){ EX_ICONS['z-'+z.id] = [z.name, zoneIconMarkup(z)]; });
 function zoneIconHTML(id, size, color){ return exIconSVG('z-'+id, size||20, color); }
 var EX_ICON_GROUPS = [
   ['Cuerpo', ZONES.filter(function(z){return z.g==='m';}).map(function(z){return 'z-'+z.id;})],
+  ['Órganos', ZONES.filter(function(z){return z.g==='o';}).map(function(z){return 'z-'+z.id;})],
   ['Deporte', ['dumbbell','kettlebell','glove','pushup','squat','bike','swim','yoga','rope','shoe','stretch','mountain','person']],
   ['Mente y trabajo', ['book','pencil','laptop','code','bulb','headphones','music','wave','leaf','coffee']],
   ['General', ['flame','bolt','heart','timer','target','trophy','star','flag','sun','moon','drop','plus','infinity','check']]
@@ -20965,9 +21030,9 @@ function iconPickerHTML(icon, prefix){
 function exZoneIds(name){ return ((S.exZones||{})[exKey(name)]||[]).filter(function(id){return !!zoneById(id);}); }
 function zoneNames(ids){ return (ids||[]).map(function(id){ var z = zoneById(id); return z ? z.name : ''; }).filter(Boolean).join(', '); }
 function zoneDefaultsFor(h){
-  var out = [];
+  var out = [], k = tmHistKind(h); if(k==='breath') out.push('pulmones'); if(k==='estudio') out.push('cerebro');
   var a = h.actId && (S.activities||[]).find(function(x){return x.id===h.actId;});
-  if(a){ var m = {trote:['cuadriceps','isquios','pantorrillas','gluteos'], caminata:['pantorrillas','cuadriceps','gluteos'], bici:['cuadriceps','pantorrillas']}; out = out.concat(m[a.type]||[]); }
+  if(a){ var m = {trote:['cuadriceps','isquios','pantorrillas','gluteos','corazon'], caminata:['pantorrillas','cuadriceps','gluteos'], bici:['cuadriceps','pantorrillas','corazon'], otro:['corazon']}; out = out.concat(m[a.type]||[]); }
   return out;
 }
 function zoneIdsForHist(h){
@@ -20985,17 +21050,19 @@ function zoneEvents(){
   (S.zoneLog||[]).forEach(function(l){ if(l.del) return; ev.push({date:l.date, z:l.zones||[], pts:Math.max(0.5, (l.min||15)/10*([0.75,1,1.3,1.6][(l.int||2)-1]||1))}); });
   return ev;
 }
-var ZONE_BASE = [['Sin base',0],['Básico',15],['Intermedio',30],['Avanzado',45]];
+var ZONE_LV = [['Sin definir',null],['Débil',10],['Básica',30],['Media',50],['Buena',70],['Muy desarrollada',90]];
+// Desarrollo = tu nivel base (lo declaras tú) que crece con lo que entrenas en la app (acumulado, no lo reciente) y baja despacio si la abandonas.
 function zoneStats(){
-  var ST = {}; ZONES.forEach(function(z){ ST[z.id] = {recent:0, total:0, n14:0, last:'', base:((S.zoneBase||{})[z.id]|0)}; });
+  var ST = {}; ZONES.forEach(function(z){ ST[z.id] = {total:0, n14:0, last:'', lvl:((S.zoneBase||{})[z.id]|0)}; });
   zoneEvents().forEach(function(e){
     var age = Math.max(0, exDaysAgo(e.date)), share = e.pts/Math.sqrt(Math.max(1,e.z.length));
-    e.z.forEach(function(id){ var s = ST[id]; if(!s) return; s.total += share; if(age<=120) s.recent += share*Math.pow(.5, age/10); if(age<=14) s.n14++; if(e.date>s.last) s.last = e.date; });
+    e.z.forEach(function(id){ var s = ST[id]; if(!s) return; s.total += share; if(age<=14) s.n14++; if(e.date>s.last) s.last = e.date; });
   });
   ZONES.forEach(function(z){
-    var s = ST[z.id], idle = s.last ? exDaysAgo(s.last) : 0, bf = ZONE_BASE[s.base] ? ZONE_BASE[s.base][1] : 0;
-    s.baseEff = bf*(idle<=30 ? 1 : Math.max(.4, Math.pow(.5, (idle-30)/90))); s.idle = idle;
-    s.value = Math.min(100, Math.round(s.baseEff + s.recent/10*100));
+    var s = ST[z.id], b = (ZONE_LV[s.lvl]||ZONE_LV[0])[1]||0, idle = s.last ? exDaysAgo(s.last) : 0;
+    var f = idle<=60 ? 1 : Math.max(.3, Math.pow(.5, (idle-60)/180)), gain = (100-b)*(1-Math.exp(-s.total/120))*f;
+    s.known = s.lvl>0 || s.total>0; s.base = b; s.gain = gain; s.idle = idle; s.hours = s.total*10/60;
+    s.value = s.known ? Math.max(1, Math.min(100, Math.round(b+gain))) : 0;
   });
   return ST;
 }
@@ -21004,26 +21071,28 @@ function zoneColor(v){
   var S3 = [[0,[240,214,160]],[50,[224,114,60]],[100,[168,52,28]]], i = v<=50 ? 0 : 1, a = S3[i], b = S3[i+1], t = (v-a[0])/(b[0]-a[0]);
   return 'rgb('+[0,1,2].map(function(k){ return Math.round(a[1][k]+(b[1][k]-a[1][k])*t); }).join(',')+')';
 }
-function zoneLabel(v){ return v<=0?'Sin trabajar':(v<25?'Poco':(v<55?'Moderada':(v<80?'Bien trabajada':'Muy trabajada'))); }
+function zoneLabel(v, known){ return !known?'Sin datos':(v<20?'Débil':(v<40?'Básica':(v<60?'Media':(v<80?'Buena':'Muy desarrollada')))); }
 function bodyMapHTML(st){
   var fig = function(view, dx, lab){
-    return '<g transform="translate('+dx+' 6)"><circle cx="60" cy="20" r="13" fill="var(--line)" opacity=".5"/>'+ZONES.filter(function(z){return z[view];}).map(function(z){ return '<g onclick="openZone(\''+z.id+'\')" style="cursor:pointer;" fill="'+zoneColor(st[z.id].value)+'" stroke="var(--paper)" stroke-width="1.6">'+z[view]+'</g>'; }).join('')+'<text x="60" y="246" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1.4" fill="var(--muted)" font-family="Inter,sans-serif">'+lab+'</text></g>';
+    return '<g transform="translate('+dx+' 4)"><g fill="var(--line)" opacity=".9" stroke="none">'+Z_HEAD+Z_SIL+'</g>'+(view==='f'?Z_DET_F:'')+ZONES.filter(function(z){return z[view];}).map(function(z){ return '<g onclick="openZone(\''+z.id+'\')" style="cursor:pointer;" fill="'+zoneColor(st[z.id].value)+'" stroke="var(--paper)" stroke-width=".8" stroke-linejoin="round">'+z[view]+((view==='f'&&z.fd)?z.fd:'')+((view==='b'&&z.bd)?z.bd:'')+'</g>'; }).join('')+'<text x="60" y="256" text-anchor="middle" font-size="9" font-weight="700" letter-spacing="1.4" fill="var(--muted)" font-family="Inter,sans-serif">'+lab+'</text></g>';
   };
-  return '<svg viewBox="0 0 250 256" width="100%" style="display:block;max-height:430px;">'+fig('f',0,'FRENTE')+fig('b',130,'ESPALDA')+'</svg>';
+  return '<svg viewBox="0 0 250 262" width="100%" style="display:block;max-height:460px;">'+fig('f',0,'FRENTE')+fig('b',130,'ESPALDA')+'</svg>';
 }
 function renderCuerpoTab(){
-  var st = zoneStats(), muscles = ZONES.filter(function(z){return z.g==='m';}), anyData = ZONES.some(function(z){ return st[z.id].value>0; });
-  var low = muscles.slice().sort(function(a,b){ return st[a.id].value-st[b.id].value || a.name.localeCompare(b.name,'es'); }).slice(0,3);
-  var organ = function(z){ var v = st[z.id].value; return '<button onclick="openZone(\''+z.id+'\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:14px;border:1px solid var(--line-soft);background:var(--bg);cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);"><span style="width:38px;height:38px;border-radius:50%;background:'+zoneColor(v)+';display:flex;align-items:center;justify-content:center;color:'+(v>40?'#fff':'var(--ink)')+';">'+exIconSVG('z-'+z.id,22)+'</span><span style="font-size:11.5px;font-weight:700;">'+z.name+'</span><span style="font-size:10px;color:var(--muted);">'+zoneLabel(v)+'</span></button>'; };
-  var ramp = '<div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:6px;font-size:10.5px;color:var(--muted);"><span>Sin trabajar</span><span style="width:120px;height:7px;border-radius:4px;background:linear-gradient(90deg,var(--line),rgb(240,214,160),rgb(224,114,60),rgb(168,52,28));"></span><span>Muy trabajada</span></div>';
+  var st = zoneStats(), muscles = ZONES.filter(function(z){return z.g==='m';});
+  var known = muscles.filter(function(z){ return st[z.id].known; });
+  var low = known.slice().sort(function(a,b){ return st[a.id].value-st[b.id].value || a.name.localeCompare(b.name,'es'); }).slice(0,3);
+  var organ = function(z){ var v = st[z.id].value; return '<button onclick="openZone(\''+z.id+'\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:14px;border:1px solid var(--line-soft);background:var(--bg);cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);"><span style="width:38px;height:38px;border-radius:50%;background:'+zoneColor(v)+';display:flex;align-items:center;justify-content:center;color:'+(v>40?'#fff':'var(--ink)')+';">'+exIconSVG('z-'+z.id,22)+'</span><span style="font-size:11.5px;font-weight:700;">'+z.name+'</span><span style="font-size:10px;color:var(--muted);">'+zoneLabel(v, st[z.id].known)+'</span></button>'; };
+  var ramp = '<div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:6px;font-size:10.5px;color:var(--muted);"><span>Menos desarrollada</span><span style="width:110px;height:7px;border-radius:4px;background:linear-gradient(90deg,rgb(240,214,160),rgb(224,114,60),rgb(168,52,28));"></span><span>Más desarrollada</span></div><div style="text-align:center;font-size:10.5px;color:var(--muted);margin-top:3px;">Gris = sin definir</div>';
   return '<div style="padding:16px 16px 90px;">'+enfSegHTML()+
-    '<div class="st-sub" style="margin-bottom:10px;">Cuánto has trabajado cada zona: lo de los últimos días, más tu punto de partida. Toca una zona para ver el detalle.</div>'+
+    '<div class="st-sub" style="margin-bottom:10px;">Qué tan desarrollada está cada zona: tu nivel base más lo que entrenas con el tiempo. Toca una zona para ver el detalle.</div>'+
     '<div class="card" style="padding:12px 8px 10px;margin-bottom:12px;">'+bodyMapHTML(st)+ramp+'</div>'+
-    (ZONES.some(function(z){return z.g==='o' && !z.soon;}) ? '<div style="display:flex;gap:8px;margin-bottom:14px;">'+ZONES.filter(function(z){return z.g==='o' && !z.soon;}).map(organ).join('')+'</div>' : '')+
-    (anyData ? '<div class="st-lbl" style="margin-top:6px;">Zonas por trabajar</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'+low.map(function(z){ return '<button onclick="openZone(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:16px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join('')+'</div>'
-      : '<div class="st-sub" style="margin-bottom:12px;">Aún no hay datos. Marca tu punto de partida en cada zona, anota un entrenamiento o conecta tus rutinas y ejercicios a las zonas (⋯ en una rutina › Zonas del cuerpo).</div>')+
-    '<button class="sbtn" style="width:100%;padding:14px;" onclick="openZoneLog([])">Anotar un entrenamiento</button>'+
-    '<div class="st-sub" style="margin-top:8px;text-align:center;">Para lo que hiciste sin rutina ni temporizador.</div></div>';
+    '<div style="display:flex;gap:8px;margin-bottom:14px;">'+ZONES.filter(function(z){return z.g==='o'&&!z.soon;}).map(organ).join('')+'</div>'+
+    (known.length ? '<div class="st-lbl" style="margin-top:6px;">Las más débiles</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">'+low.map(function(z){ return '<button onclick="openZone(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:16px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join('')+'</div>'
+      : '<div class="st-sub" style="margin-bottom:12px;">Aún no hay datos. Define tu nivel en cada zona o conecta tus rutinas y ejercicios (⋯ en una rutina › Zonas del cuerpo).</div>')+
+    '<button class="sbtn" style="width:100%;padding:14px;" onclick="openZoneBaseAll()">Definir mi nivel en cada zona</button>'+
+    '<button class="cbtn" style="width:100%;padding:13px;margin-top:8px;" onclick="openZoneLog([])">Anotar un entrenamiento</button>'+
+    '<div class="st-sub" style="margin-top:8px;text-align:center;">Lo anotado cuenta como entrenamiento aunque no uses rutina ni temporizador.</div></div>';
 }
 // ── Detalle de una zona ──
 var ZS = {id:''};
@@ -21043,15 +21112,30 @@ function zoneDraw(){
   var chip = function(on, t, fn){ return '<button onclick="'+fn+'" style="padding:8px 12px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+t+'</button>'; };
   var line = function(l, v){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line-soft);"><span style="color:var(--muted);">'+l+'</span><b style="color:var(--ink);">'+v+'</b></div>'; };
   var pill = function(arr, empty){ return arr.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+arr.map(function(n){ return '<span style="font-size:11.5px;padding:4px 9px;border-radius:12px;background:var(--bg);border:1px solid var(--line);color:var(--ink-soft);">'+esc(n)+'</span>'; }).join('')+'</div>' : '<div class="st-sub">'+empty+'</div>'; };
-  brPutSheet(ov, '<div class="sheet"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><span style="width:46px;height:46px;border-radius:14px;background:'+zoneColor(s.value)+';color:'+(s.value>40?'#fff':'var(--ink)')+';display:flex;align-items:center;justify-content:center;">'+exIconSVG('z-'+z.id,28)+'</span><div style="flex:1;"><span class="serif" style="font-weight:700;font-size:20px;">'+z.name+'</span><div class="st-sub" style="margin:0;">'+zoneLabel(s.value)+' · '+s.value+' / 100</div></div><button class="st-x" onclick="removeOverlay(\'zone-sheet\')" aria-label="Cerrar">×</button></div>'+
+  var hrs = s.hours<1 ? Math.round(s.hours*60)+' min' : (Math.round(s.hours*10)/10)+' h';
+  brPutSheet(ov, '<div class="sheet"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><span style="width:46px;height:46px;border-radius:14px;background:'+zoneColor(s.value)+';color:'+(s.value>40?'#fff':'var(--ink)')+';display:flex;align-items:center;justify-content:center;">'+exIconSVG('z-'+z.id,28)+'</span><div style="flex:1;"><span class="serif" style="font-weight:700;font-size:20px;">'+z.name+'</span><div class="st-sub" style="margin:0;">'+(s.known ? zoneLabel(s.value,true)+' · '+s.value+' / 100' : 'Sin definir')+'</div></div><button class="st-x" onclick="removeOverlay(\'zone-sheet\')" aria-label="Cerrar">×</button></div>'+
     '<div style="height:8px;background:var(--line-soft);border-radius:4px;overflow:hidden;margin-bottom:12px;"><div style="width:'+s.value+'%;height:100%;background:'+zoneColor(Math.max(1,s.value))+';"></div></div>'+
-    line('Punto de partida', ZONE_BASE[s.base][0]+(s.baseEff? ' (+'+Math.round(s.baseEff)+')':''))+line('Reciente', Math.round(s.recent/10*100)+' pts · '+s.n14+' sesión'+(s.n14===1?'':'es')+' en 14 días')+line('Última vez', s.last ? timerHistDayLabel(s.last) : '—')+
-    '<div class="st-lbl">Mi punto de partida</div><div style="display:flex;flex-wrap:wrap;gap:8px;">'+ZONE_BASE.map(function(b,i){ return chip(s.base===i, b[0], 'zoneSetBase('+i+')'); }).join('')+'</div>'+
-    '<div class="st-sub" style="margin-top:6px;">Si ya vienes con una base en esta zona, márcala: cuenta como punto de partida y se va apagando si dejas de entrenarla.</div>'+
-    '<div class="st-lbl">Conectado con</div>'+pill(cn.rt.concat(cn.ex.map(function(k){return k;})).concat(cn.sk), 'Todavía nada. Conecta ejercicios, rutinas o habilidades.')+
+    line('Nivel base', ZONE_LV[s.lvl][0])+line('Entrenamiento acumulado', s.total>0 ? hrs : '—')+line('Última vez', s.last ? timerHistDayLabel(s.last) : '—')+line('Sesiones en 14 días', s.n14)+
+    '<div class="st-lbl">Grado de desarrollo de esta zona</div><div style="display:flex;flex-wrap:wrap;gap:8px;">'+ZONE_LV.map(function(b,i){ return chip(s.lvl===i, b[0], 'zoneSetBase('+i+')'); }).join('')+'</div>'+
+    '<div class="st-sub" style="margin-top:6px;">Es tu punto de partida: qué tan fuerte, hábil o resistente eres aquí hoy. Lo que entrenes en la app lo va subiendo; si la dejas mucho tiempo, baja muy despacio.</div>'+
+    '<div class="st-lbl">Conectado con</div>'+pill(cn.rt.concat(cn.ex).concat(cn.sk), 'Todavía nada. Conecta ejercicios, rutinas o habilidades.')+
     '<div style="display:flex;gap:8px;margin-top:14px;"><button class="cbtn" style="flex:1;" onclick="zxPick(\''+z.id+'\')">Conectar ejercicios</button><button class="sbtn" style="flex:1;" onclick="removeOverlay(\'zone-sheet\');openZoneLog([\''+z.id+'\'])">Trabajé esta zona</button></div></div>');
 }
-function zoneSetBase(i){ if(!S.zoneBase) S.zoneBase = {}; S.zoneBase[ZS.id] = i; saveState(); zoneDraw(); render(); }
+function zoneSetBase(i){ if(!S.zoneBase) S.zoneBase = {}; if(i>0) S.zoneBase[ZS.id] = i; else delete S.zoneBase[ZS.id]; saveState(); zoneDraw(); render(); }
+// ── Nivel base de todas las zonas ──
+function openZoneBaseAll(){
+  removeOverlay('zone-base'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='zone-base'; ov.style.zIndex = 650; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('zone-base'); });
+  document.body.appendChild(ov); zbDraw();
+}
+function zbDraw(){
+  var ov = document.getElementById('zone-base'); if(!ov) return; var st = zoneStats();
+  var rows = ZONES.filter(function(z){return z.g==='m';}).map(function(z){
+    var lvl = st[z.id].lvl;
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--line-soft);"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="width:30px;height:30px;border-radius:9px;background:'+zoneColor(st[z.id].value)+';display:flex;align-items:center;justify-content:center;color:'+(st[z.id].value>40?'#fff':'var(--ink)')+';">'+exIconSVG('z-'+z.id,20)+'</span><b style="font-size:13.5px;flex:1;">'+z.name+'</b><span style="font-size:11px;color:var(--muted);">'+ZONE_LV[lvl][0]+'</span></div><div style="display:flex;gap:5px;">'+[1,2,3,4,5].map(function(i){ return '<button onclick="zbSet(\''+z.id+'\','+i+')" title="'+ZONE_LV[i][0]+'" style="flex:1;padding:8px 0;border-radius:9px;font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(lvl===i?'var(--accent)':'var(--line)')+';background:'+(lvl===i?'var(--accent-bg)':'transparent')+';color:'+(lvl===i?'var(--accent-text)':'var(--muted)')+';">'+i+'</button>'; }).join('')+'</div></div>';
+  }).join('');
+  brPutSheet(ov, '<div class="sheet" style="max-height:88vh;overflow:auto;"><div class="st-head"><span class="serif" style="font-weight:700;font-size:20px;">Mi nivel en cada zona</span><button class="st-x" onclick="removeOverlay(\'zone-base\')" aria-label="Cerrar">×</button></div><div class="st-sub">1 = débil · 2 = básica · 3 = media · 4 = buena · 5 = muy desarrollada. Toca de nuevo el mismo número para quitarlo.</div>'+rows+'<button class="sbtn" style="width:100%;margin-top:14px;" onclick="removeOverlay(\'zone-base\')">Listo</button></div>');
+}
+function zbSet(id, lvl){ if(!S.zoneBase) S.zoneBase = {}; if((S.zoneBase[id]|0)===lvl) delete S.zoneBase[id]; else S.zoneBase[id] = lvl; saveState(); zbDraw(); render(); }
 // ── Anotación rápida ──
 var ZL = null;
 function openZoneLog(pre){
@@ -21065,6 +21149,7 @@ function zlDraw(){
   var zch = function(g){ return ZONES.filter(function(z){return z.g===g;}).map(function(z){ var on = ZL.z.indexOf(z.id)>=0; return '<button onclick="zlTog(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:var(--ink);">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join(''); };
   brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:20px;">Anotar un entrenamiento</span><div class="st-sub">Marca qué zonas trabajaste y cuánto.</div></div><button class="st-x" onclick="removeOverlay(\'zone-log\')" aria-label="Cerrar">×</button></div>'+
     '<div class="st-lbl" style="margin-top:10px;">Cuerpo</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+zch('m')+'</div>'+
+    '<div class="st-lbl">Órganos</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+zch('o')+'</div>'+
     '<div class="st-lbl">Duración</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+[10,20,30,45,60,90].map(function(m){ return chip(ZL.min===m, m+' min', 'ZL.min='+m+';zlDraw()'); }).join('')+'</div>'+
     '<div class="st-lbl">Intensidad</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+INT_LEVELS.map(function(n,i){ return chip(ZL.int===i+1, n, 'ZL.int='+(i+1)+';zlDraw()'); }).join('')+'</div>'+
     '<div class="st-lbl">Cuándo</div><div style="display:flex;gap:6px;">'+chip(ZL.day===0,'Hoy','ZL.day=0;zlDraw()')+chip(ZL.day===1,'Ayer','ZL.day=1;zlDraw()')+chip(ZL.day===2,'Antes de ayer','ZL.day=2;zlDraw()')+'</div>'+
@@ -21092,7 +21177,7 @@ function openZonesPicker(sel, cb, title){
 function zpList(){
   var box = document.getElementById('zp-list'); if(!box) return;
   var grp = function(g, t){ return '<div class="st-lbl" style="margin-top:12px;">'+t+'</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+ZONES.filter(function(z){return z.g===g;}).map(function(z){ var on = ZP.sel.indexOf(z.id)>=0; return '<button onclick="zpTog(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:var(--ink);">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join('')+'</div>'; };
-  box.innerHTML = grp('m','Cuerpo');
+  box.innerHTML = grp('m','Cuerpo')+grp('o','Órganos');
 }
 function zpTog(id){ var i = ZP.sel.indexOf(id); if(i>=0) ZP.sel.splice(i,1); else ZP.sel.push(id); zpList(); }
 function zpDone(){ var cb = ZP.cb, a = ZP.sel.slice(); removeOverlay('zone-picker'); if(cb) cb(a); }
@@ -26852,7 +26937,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.24.132';
+var APP_VERSION = '2026.10.25.133';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
