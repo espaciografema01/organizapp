@@ -9413,11 +9413,12 @@ function actStartDraw(){
   brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:21px;">'+t.name+'</span><div class="st-sub">Distancia, ritmo y recorrido en tiempo real.</div></div><button class="st-x" onclick="removeOverlay(\'act-start\')" aria-label="Cerrar">×</button></div>'+
     '<div style="display:flex;gap:10px;margin:6px 0 4px;">'+typ+'</div>'+
     '<button onclick="actBegin()" style="width:100%;margin-top:20px;padding:17px;border:none;border-radius:16px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px '+c[1]+'44;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar</button>'+
-    '<div class="st-sub" style="text-align:center;margin-top:10px;">Usamos tu ubicación solo mientras dura la actividad. El recorrido queda en tu dispositivo.</div>'+
+    '<div class="st-sub" style="text-align:center;margin-top:10px;">Usamos tu ubicación solo mientras dura la actividad. El recorrido queda en tu dispositivo.<br>'+actBgHint()+'</div>'+
     '<details class="st-adv"><summary>Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
       '<button class="st-row" onclick="openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+(nsk?nsk+' elegida'+(nsk===1?'':'s'):'Opcional')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="removeOverlay(\'act-start\');openActHistory()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Todas mis actividades'+(n?' <span style="color:var(--muted);font-weight:600;">· '+n+'</span>':'')+'</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="actImportPick()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Importar un archivo GPX</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
+      '<button class="st-row" onclick="S.actVoice=!S.actVoice;saveState();actStartDraw()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Avisar por voz cada kilómetro</span><span style="font-size:12.5px;font-weight:700;color:'+(S.actVoice?'var(--accent-text)':'var(--muted)')+';">'+(S.actVoice?'Activado':'Apagado')+'</span></button>'+
       '<div style="display:flex;align-items:center;gap:10px;padding:6px 2px 0;font-size:12.5px;color:var(--ink-soft);"><span style="flex:1;line-height:1.4;">Mi peso, para estimar las calorías</span><input class="finp" type="number" inputmode="decimal" placeholder="kg" value="'+esc(S.bodyKg||'')+'" oninput="S.bodyKg=+this.value>0?+this.value:\'\';saveState()" style="width:80px;margin:0;text-align:right;"/></div>'+
     '</div></details></div>');
 }
@@ -9443,13 +9444,28 @@ function skpDone(){ var cb = _skp.cb, a = _skp.sel.slice(); removeOverlay('sk-pi
 function actBegin(){
   if(ACT){ toast('Ya hay una actividad en curso'); return; }
   var sel = window._actSel||{type:'trote',skills:[]};
-  ACT = {type:sel.type, skills:(sel.skills||[]).filter(function(id){return !!skFindAny(id);}), pts:[], dist:0, gain:0, movSec:0, startedAt:Date.now(), pausedAt:null, pausedTotal:0, last:null, lastAlt:null, state:'wait', err:'', tick:null, ptsN:0};
-  removeOverlay('act-start');
+  ACT = {type:sel.type, skills:(sel.skills||[]).filter(function(id){return !!skFindAny(id);}), pts:[], dist:0, gain:0, movSec:0, startedAt:Date.now(), pausedAt:null, pausedTotal:0, last:null, lastAlt:null, state:'wait', err:'', tick:null, ptsN:0, follow:true, kmDone:0, lapTxt:''};
+  removeOverlay('act-start'); actLaunch();
+}
+function actLaunch(){
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='act-run'; ov.style.cssText = 'background:#0d0f14;align-items:stretch;justify-content:stretch;z-index:900;';
   document.body.appendChild(ov); actRunDraw();
-  try{ if(Platform.isNative && Platform.keepAwake && Platform.keepAwake.available()) Platform.keepAwake.on(); else if('wakeLock' in navigator) navigator.wakeLock.request('screen').then(function(l){ _actWake = l; }).catch(function(){}); }catch(e){}
-  actGeoStart();
+  actWakeOn(); actGeoStart();
   ACT.tick = setInterval(actTick, 1000);
+}
+function actWakeOn(){
+  try{ if(Platform.isNative && Platform.keepAwake && Platform.keepAwake.available()) Platform.keepAwake.on(); else if('wakeLock' in navigator){ _actWake = null; navigator.wakeLock.request('screen').then(function(l){ _actWake = l; }).catch(function(){}); } }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){
+  if(!ACT) return;
+  if(document.hidden){ actBackup(); return; }
+  try{ if(!(Platform.isNative && Platform.keepAwake && Platform.keepAwake.available()) && (!_actWake || _actWake.released)) actWakeOn(); }catch(e){}
+  if(ACT.watch!=null){ try{ navigator.geolocation.clearWatch(ACT.watch); }catch(e){} ACT.watch = null; actGeoStart(); }
+  actRunUpdate();
+});
+function actBgHint(){
+  try{ if(Platform.isNative) return (Platform.geo && Platform.geo.available && Platform.geo.available()) ? 'Puedes apagar la pantalla: seguiremos registrando tu recorrido.' : 'Deja la pantalla encendida: este dispositivo aún no registra con la pantalla apagada.'; }catch(e){}
+  return 'Deja la app abierta y la pantalla encendida: al bloquearla, el navegador pausa la ubicación.';
 }
 function actGeoStart(){
   var onP = function(lat, lon, acc, alt, ts){ actOnPoint(lat, lon, acc, alt, ts||Date.now()); };
@@ -9471,17 +9487,24 @@ function actOnPoint(lat, lon, acc, alt, ts){
   if(acc>40){ ACT.err = 'Señal débil (±'+Math.round(acc)+' m)'; return; }
   ACT.err = ''; if(ACT.state==='wait') ACT.state = 'run';
   var p = [lat, lon, ts, (alt!=null && isFinite(alt)) ? Math.round(alt) : null], L = ACT.last;
-  if(!L){ ACT.pts.push(p); ACT.last = p; ACT.lastAlt = p[3]; return; }
+  if(!L){ if(ACT.pts.length) p[4] = 1; ACT.pts.push(p); ACT.last = p; ACT.lastAlt = p[3]; return; }
   var d = actHav(L, p), dt = (ts-L[2])/1000; if(dt<=0) return;
   var v = d/dt; if(v>actType(ACT.type).maxMs) return;      // salto imposible: se descarta
-  if(d<3) return;                                          // quieto / ruido
-  ACT.dist += d; if(v>0.4) ACT.movSec += Math.min(dt, 15);
+  if(d<Math.max(3, Math.min(acc||0,20)*0.5)) return;       // quieto / ruido
+  ACT.dist += d; ACT.movSec += v>0.5 ? dt : Math.min(dt, 15);
   if(p[3]!=null && ACT.lastAlt!=null){ var da = p[3]-ACT.lastAlt; if(Math.abs(da)>=3){ if(da>0) ACT.gain += da; ACT.lastAlt = p[3]; } } else if(p[3]!=null) ACT.lastAlt = p[3];
   ACT.pts.push(p); ACT.last = p; ACT.ptsN++;
-  if(ACT.ptsN%15===0) actBackup();
+  if(ACT.ptsN%5===0) actBackup();
+  var km = Math.floor(ACT.dist/1000); if(km>ACT.kmDone){ ACT.kmDone = km; try{ actLap(); }catch(e){} }
+}
+function actLap(){
+  var t = actType(ACT.type), sp = actSplits(ACT.pts, t.maxMs), n = sp.s.length; if(!n) return;
+  var sec = sp.s[n-1], mn = Math.min.apply(null, sp.s), val = t.unit==='kmh' ? (3600/sec).toFixed(1).replace('.',',')+' km/h' : actFmtPace(sec,1)+' /km';
+  ACT.lapTxt = 'Km '+n+' · '+val+(n>1 && sec<=mn ? ' · ¡tu más rápido!' : '');
+  if(S.actVoice){ try{ var u = new SpeechSynthesisUtterance('Kilómetro '+n+'. '+(t.unit==='kmh' ? 'Velocidad '+Math.round(3600/sec)+' kilómetros por hora' : 'Ritmo '+Math.floor(sec/60)+' minutos '+(sec%60)+' segundos')); u.lang = 'es-ES'; speechSynthesis.speak(u); }catch(e){} }
 }
 function actElapsed(){ if(!ACT) return 0; var end = ACT.pausedAt || Date.now(); return Math.max(0, (end-ACT.startedAt-ACT.pausedTotal)/1000); }
-function actTick(){ actRunUpdate(); }
+function actTick(){ actRunUpdate(); if(ACT && Date.now()-(ACT._bk||0)>15000){ ACT._bk = Date.now(); actBackup(); } }
 function actPause(){
   if(!ACT) return;
   if(ACT.state==='paused'){ ACT.pausedTotal += Date.now()-ACT.pausedAt; ACT.pausedAt = null; ACT.state = 'run'; ACT.last = null; }
@@ -9499,7 +9522,8 @@ function actRunDraw(){
       '<div style="display:flex;align-items:center;justify-content:space-between;"><span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:800;">'+tmIcon(ACT_ICO[t.id]||ACT_ICO.otro,20)+esc(t.name)+'</span><span id="act-sig" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:16px;background:rgba(255,255,255,.2);font-size:11.5px;font-weight:700;"></span></div>'+
       '<div style="text-align:center;margin-top:16px;"><div style="display:flex;justify-content:center;align-items:baseline;gap:8px;"><span id="act-dist" style="font-size:86px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1;">0,00</span><span style="font-size:20px;font-weight:700;opacity:.85;">km</span></div><div style="font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;opacity:.85;font-weight:600;margin-top:6px;">Distancia</div></div></div>'+
     '<div style="margin:-42px 16px 0;background:var(--paper);border-radius:22px;box-shadow:0 10px 28px rgba(0,0,0,.10);display:flex;flex-shrink:0;">'+met('act-time','Tiempo','0:00','<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')+div+met('act-pace','ritmo /km','--:--','<path d="M4 18a9 9 0 1116 0"/><path d="M12 18l4-6"/>')+div+met('act-x','kcal','0','<path d="M12 3s5 4 5 9a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3 0-6 1-8z"/>')+'</div>'+
-    '<div style="flex:1;min-height:0;margin:14px 16px;background:var(--paper);border:1px solid var(--line-soft);border-radius:22px;position:relative;overflow:hidden;"><canvas id="act-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas><div id="act-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font-size:12.5px;color:var(--muted);line-height:1.5;pointer-events:none;"></div></div>'+
+    '<div id="act-lap" style="display:none;margin:12px 16px 0;padding:9px 14px;border-radius:14px;background:var(--paper);border:1px solid var(--line-soft);font-size:12.5px;font-weight:700;color:var(--ink);text-align:center;flex-shrink:0;"></div>'+
+    '<div style="flex:1;min-height:0;margin:12px 16px;background:#ebe8e1;border:1px solid var(--line-soft);border-radius:22px;position:relative;overflow:hidden;"><canvas id="act-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas><button id="act-fit" onclick="actToggleFollow()" style="position:absolute;top:10px;right:10px;border:none;cursor:pointer;font-family:Inter,sans-serif;background:rgba(255,255,255,.94);color:#222;border-radius:14px;padding:7px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.18);">Ver todo</button><div id="act-empty" style="position:absolute;left:12px;right:12px;bottom:26px;display:none;text-align:center;padding:9px 12px;font-size:12.5px;color:#333;line-height:1.4;pointer-events:none;background:rgba(255,255,255,.92);border-radius:12px;"></div></div>'+
     '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;">'+
       '<button onclick="actPause()" aria-label="'+(paused?'Reanudar':'Pausar')+'" style="'+rb+'width:68px;height:68px;border-radius:50%;'+(paused?'background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;box-shadow:0 8px 20px '+c[1]+'55;':'background:var(--paper);color:'+c[1]+';border:1.5px solid var(--line);')+'">'+(paused?'<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>')+'</button>'+
       '<button onclick="actFinishAsk()" style="'+rb+'height:68px;padding:0 38px;border-radius:34px;background:#e0523c;color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px #e0523c44;"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>Terminar</button></div></div>';
@@ -9512,18 +9536,20 @@ function actRunUpdate(){
   else { set('act-pace', actFmtPace(ACT.movSec||el, km)); set('act-pace-l','ritmo /km'); }
   var kc = actKcal(ACT.type, km, +S.bodyKg||0); set('act-x', kc!=null ? kc : Math.round(ACT.gain)); set('act-x-l', kc!=null ? 'kcal (aprox.)' : 'desnivel + m');
   var sg = document.getElementById('act-sig'); if(sg){ var st = ACT.state==='paused' ? ['#ffffff','En pausa'] : (ACT.state==='wait' ? ['#ffe08a','Buscando señal'] : ['#b8ffcf','Grabando']); sg.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:'+st[0]+';"></span>'+st[1]; }
-  var em = document.getElementById('act-empty'); if(em){ em.textContent = ACT.err || (ACT.pts.length<2 ? (ACT.state==='wait' ? 'Buscando tu ubicación…' : 'Empieza a moverte y tu recorrido aparecerá aquí.') : ''); em.style.display = (ACT.err || ACT.pts.length<2) ? 'flex' : 'none'; }
-  var cv = document.getElementById('act-cv'); if(cv){ var w = cv.clientWidth||440, h = cv.clientHeight||300; if(cv.width!==w*2){ cv.width = w*2; cv.height = h*2; } var g = cv.getContext('2d'); g.clearRect(0,0,cv.width,cv.height);
-    g.strokeStyle = 'rgba(128,128,128,.13)'; g.lineWidth = 2; for(var x=0;x<cv.width;x+=64){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,cv.height); g.stroke(); } for(var y=0;y<cv.height;y+=64){ g.beginPath(); g.moveTo(0,y); g.lineTo(cv.width,y); g.stroke(); }
-    actDrawRoute(g, ACT.pts, {x:40,y:40,w:cv.width-80,h:cv.height-80}, c[1], 9, c[1]); }
+  var em = document.getElementById('act-empty'); if(em){ var msg = ACT.err || (ACT.pts.length<2 ? (ACT.state==='wait' ? 'Buscando tu ubicación…' : 'Empieza a moverte y tu recorrido aparecerá aquí.') : ''); em.textContent = msg; em.style.display = msg ? 'block' : 'none'; }
+  var lp = document.getElementById('act-lap'); if(lp){ lp.textContent = ACT.lapTxt||''; lp.style.display = ACT.lapTxt ? 'block' : 'none'; }
+  set('act-fit', ACT.follow===false ? 'Seguir' : 'Ver todo');
+  var cv = document.getElementById('act-cv'); if(cv) actMapDraw(cv, ACT.pts, {color:c[1], follow:ACT.follow!==false, live:true, zoom:16});
 }
-function actBackup(){ try{ if(ACT) localStorage.setItem('og6-act-live', JSON.stringify({type:ACT.type, skills:ACT.skills, pts:ACT.pts.slice(-4000), dist:ACT.dist, gain:ACT.gain, movSec:ACT.movSec, startedAt:ACT.startedAt, pausedTotal:ACT.pausedTotal, savedAt:Date.now()})); }catch(e){} }
+function actToggleFollow(){ if(!ACT) return; ACT.follow = ACT.follow===false; actRunUpdate(); }
+function actBackup(){ try{ if(ACT) localStorage.setItem('og6-act-live', JSON.stringify({type:ACT.type, skills:ACT.skills, pts:ACT.pts.slice(-6000), dist:ACT.dist, gain:ACT.gain, movSec:ACT.movSec, startedAt:ACT.startedAt, pausedTotal:ACT.pausedTotal, pausedAt:ACT.pausedAt, savedAt:Date.now()})); }catch(e){} }
 function actRecoverCheck(){
   try{
+    if(ACT) return;
     var raw = localStorage.getItem('og6-act-live'); if(!raw) return; var b = JSON.parse(raw);
-    if(!b || !b.pts || b.pts.length<5 || Date.now()-b.savedAt>6*3600e3){ localStorage.removeItem('og6-act-live'); return; }
+    if(!b || !b.pts || b.pts.length<3 || Date.now()-b.savedAt>6*3600e3){ localStorage.removeItem('og6-act-live'); return; }
     var box = document.createElement('div'); box.className='conf-box'; box.style.zIndex = 9000;
-    box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:17px;text-align:center;margin-bottom:8px;">Actividad sin terminar</div><div style="font-size:13px;color:var(--ink-soft);line-height:1.6;text-align:center;margin-bottom:14px;">Se interrumpió una actividad de '+esc(actType(b.type).name.toLowerCase())+' ('+actFmtKm(b.dist/1000)+' km). ¿Quieres guardarla?</div><div style="display:flex;flex-direction:column;gap:8px;"><button class="sbtn" onclick="this.closest(\'.conf-box\').remove();actRecover()">Guardar lo registrado</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove();localStorage.removeItem(\'og6-act-live\')">Descartar</button></div></div>';
+    box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:17px;text-align:center;margin-bottom:8px;">Actividad sin terminar</div><div style="font-size:13px;color:var(--ink-soft);line-height:1.6;text-align:center;margin-bottom:14px;">Se interrumpió una actividad de '+esc(actType(b.type).name.toLowerCase())+' ('+actFmtKm(b.dist/1000)+' km). ¿Qué quieres hacer?</div><div style="display:flex;flex-direction:column;gap:8px;"><button class="sbtn" onclick="this.closest(\'.conf-box\').remove();actResume()">Continuar la actividad</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove();actRecover()">Guardar lo registrado</button><button class="cbtn" style="color:var(--bad);" onclick="this.closest(\'.conf-box\').remove();localStorage.removeItem(\'og6-act-live\')">Descartar</button></div></div>';
     document.body.appendChild(box);
   }catch(e){}
 }
@@ -9533,6 +9559,16 @@ function actRecover(){
     var last = b.pts[b.pts.length-1], el = Math.max(b.movSec, (last[2]-b.startedAt-b.pausedTotal)/1000);
     actCreate({type:b.type, skills:b.skills||[], pts:b.pts, dist:b.dist, gain:b.gain, movSec:b.movSec, sec:el, startedAt:b.startedAt});
   }catch(e){ toast('No se pudo recuperar'); }
+}
+function actResume(){
+  if(ACT) return; var b = null; try{ b = JSON.parse(localStorage.getItem('og6-act-live')); }catch(e){}
+  if(!b || !b.pts || !b.pts.length){ toast('No se pudo recuperar'); return; }
+  var gap = Date.now()-b.savedAt;
+  ACT = {type:b.type, skills:b.skills||[], pts:b.pts, dist:b.dist||0, gain:b.gain||0, movSec:b.movSec||0, startedAt:b.startedAt, pausedAt:null, pausedTotal:b.pausedTotal||0, last:null, lastAlt:null, state:'wait', err:'', tick:null, ptsN:0, follow:true, kmDone:Math.floor((b.dist||0)/1000), lapTxt:''};
+  if(b.pausedAt){ ACT.pausedAt = b.pausedAt; ACT.state = 'paused'; }
+  else if(gap>15*60e3){ ACT.pausedTotal += gap; }
+  else { ACT.last = b.pts[b.pts.length-1]; ACT.lastAlt = ACT.last[3]; }
+  actLaunch();
 }
 function actFinishAsk(){
   if(!ACT) return;
@@ -9557,6 +9593,7 @@ function actCreate(o){
   var km = o.dist/1000, route = actSimplify(o.pts, 600).map(function(p){ return [Math.round(p[0]*1e5)/1e5, Math.round(p[1]*1e5)/1e5, Math.round((p[2]-o.startedAt)/1000), p[3]]; });
   var act = {id:uid(), ts:Date.now(), date:localDateStr(new Date(o.startedAt)), startedAt:o.startedAt, type:o.type, name:actType(o.type).name, sec:Math.round(o.sec), movSec:Math.round(o.movSec), km:Math.round(km*1000)/1000, gain:Math.round(o.gain), kg:+S.bodyKg||0, route:route, skills:(o.skills||[]).filter(function(id){return !!skFindAny(id);}), updatedAt:Date.now()};
   act.kcal = actKcal(act.type, km, act.kg);
+  try{ var _mx = actType(o.type).maxMs, sp = actSplits(o.pts, _mx); if(sp.s.length){ act.splits = sp.s; act.spG = sp.g; if(sp.rest) act.spRest = sp.rest; } var vm = actVmax(o.pts, _mx); if(vm) act.vmax = vm; }catch(e){}
   // también queda en el historial de Enfoque (cuenta para habilidades, constancia y XP)
   var h = {id:uid(), ts:act.ts, startedAt:o.startedAt, date:act.date, kind:'free', name:act.name, itemText:'', taskId:null, group:'Actividad', sec:act.sec, rounds:1, exercises:[], results:[], km:act.km, actId:act.id, updatedAt:Date.now()};
   if(act.skills.length) h.skills = act.skills.slice();
@@ -9568,6 +9605,105 @@ function actCreate(o){
   saveState(); render(); openActSummary(act.id);
   if(act.skills.length) setTimeout(function(){ showGains(h.id); }, 700);
   if(_rec.length) setTimeout(function(){ try{ playSound('achievement'); showRewardToast('¡Nuevo récord!', _rec.join(' · ')); }catch(e){} }, 500);
+}
+// ── Mapa con teselas (si no hay conexión, queda la cuadrícula y la ruta) ──
+var ACT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+var ACT_TILE_ATTR = '© OpenStreetMap · © CARTO';
+var _tc = {}, _tcN = 0;
+function actMx(lon, z){ return (lon+180)/360*256*Math.pow(2,z); }
+function actMy(lat, z){ var s = Math.sin(lat*Math.PI/180); s = Math.max(-0.9999, Math.min(0.9999, s)); return (0.5 - Math.log((1+s)/(1-s))/(4*Math.PI))*256*Math.pow(2,z); }
+function actTileImg(z, x, y, cv){
+  var k = z+'/'+x+'/'+y, e = _tc[k];
+  if(e){
+    if(e.ok) return e.img;
+    if(!e.bad){ if(e.cvs.indexOf(cv)<0) e.cvs.push(cv); return null; }
+    if(Date.now()-e.bad<20000) return null;
+    delete _tc[k]; _tcN--;
+  }
+  if(_tcN>300){ Object.keys(_tc).slice(0,100).forEach(function(q){ if(_tc[q].ok){ delete _tc[q]; _tcN--; } }); }
+  var img = new Image(); e = _tc[k] = {img:img, ok:false, bad:0, cvs:[cv]}; _tcN++;
+  img.onload = function(){ e.ok = true; e.cvs.forEach(actMapQueue); e.cvs = []; };
+  img.onerror = function(){ e.bad = Date.now(); e.cvs = []; };
+  img.src = ACT_TILE_URL.replace('{s}','abcd'.charAt((x+y)&3)).replace('{z}',z).replace('{x}',x).replace('{y}',y).replace('{r}',(window.devicePixelRatio||1)>=1.5?'@2x':'');
+  return null;
+}
+function actMapQueue(cv){
+  if(!cv || cv._rq || !cv.isConnected || !cv._mp) return; cv._rq = 1;
+  requestAnimationFrame(function(){ cv._rq = 0; if(cv.isConnected && cv._mp) actMapDraw(cv, cv._mp.pts, cv._mp.opt); });
+}
+function actMapDraw(cv, pts, opt){
+  if(!cv) return; opt = opt||{}; cv._mp = {pts:pts, opt:opt};
+  var dpr = 2, W = cv.clientWidth, H = cv.clientHeight; if(!W || !H) return;
+  if(cv.width!==W*dpr || cv.height!==H*dpr){ cv.width = W*dpr; cv.height = H*dpr; }
+  var g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  g.fillStyle = '#ebe8e1'; g.fillRect(0,0,W,H); g.strokeStyle = 'rgba(0,0,0,.06)'; g.lineWidth = 1;
+  for(var gx=0; gx<W; gx+=32){ g.beginPath(); g.moveTo(gx,0); g.lineTo(gx,H); g.stroke(); } for(var gy=0; gy<H; gy+=32){ g.beginPath(); g.moveTo(0,gy); g.lineTo(W,gy); g.stroke(); }
+  var P = (pts||[]).filter(function(p){ return p && isFinite(p[0]) && isFinite(p[1]); }); if(!P.length) return;
+  var z, cx, cy;
+  if(opt.follow){ z = opt.zoom||16; var e0 = P[P.length-1]; cx = actMx(e0[1],z); cy = actMy(e0[0],z); }
+  else {
+    var mnLa=90, mxLa=-90, mnLo=180, mxLo=-180; P.forEach(function(p){ if(p[0]<mnLa)mnLa=p[0]; if(p[0]>mxLa)mxLa=p[0]; if(p[1]<mnLo)mnLo=p[1]; if(p[1]>mxLo)mxLo=p[1]; });
+    var pad = opt.pad||36; for(z=opt.maxZ||17; z>3; z--){ if(actMx(mxLo,z)-actMx(mnLo,z) <= W-2*pad && actMy(mnLa,z)-actMy(mxLa,z) <= H-2*pad) break; }
+    cx = (actMx(mnLo,z)+actMx(mxLo,z))/2; cy = (actMy(mnLa,z)+actMy(mxLa,z))/2;
+  }
+  var left = cx-W/2, top = cy-H/2, n = Math.pow(2,z);
+  for(var ty=Math.floor(top/256); ty<=Math.floor((top+H)/256); ty++){ if(ty<0||ty>=n) continue;
+    for(var tx=Math.floor(left/256); tx<=Math.floor((left+W)/256); tx++){ var im = actTileImg(z, ((tx%n)+n)%n, ty, cv); if(im) g.drawImage(im, Math.round(tx*256-left), Math.round(ty*256-top), 256, 256); } }
+  var X = function(p){ return actMx(p[1],z)-left; }, Y = function(p){ return actMy(p[0],z)-top; }, lw = opt.lw||5, col = opt.color||'#169a3f';
+  var trace = function(){ g.beginPath(); P.forEach(function(p,i){ var q = P[i-1], gap = i>0 && ((p[2]<1e9 && (p[2]-q[2])>90) || (p[2]>1e9 && (p[2]-q[2])>90000)); if(i===0 || gap) g.moveTo(X(p),Y(p)); else g.lineTo(X(p),Y(p)); }); };
+  g.lineJoin = 'round'; g.lineCap = 'round'; trace(); g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = lw+4; g.stroke(); trace(); g.strokeStyle = col; g.lineWidth = lw; g.stroke();
+  var dot = function(p, r, f){ g.beginPath(); g.arc(X(p),Y(p),r+2,0,7); g.fillStyle = '#fff'; g.fill(); g.beginPath(); g.arc(X(p),Y(p),r,0,7); g.fillStyle = f; g.fill(); };
+  if(P.length>1) dot(P[0], lw*.9, '#2bb673');
+  var en = P[P.length-1]; if(opt.live){ g.beginPath(); g.arc(X(en),Y(en),lw*2.8,0,7); g.fillStyle = col+'33'; g.fill(); }
+  dot(en, lw*1.1, opt.live ? col : '#e0523c');
+  g.font = '600 9px Inter, sans-serif'; var tw = g.measureText(ACT_TILE_ATTR).width; g.fillStyle = 'rgba(255,255,255,.78)'; g.fillRect(0, H-15, tw+12, 15); g.fillStyle = '#444'; g.textAlign = 'left'; g.fillText(ACT_TILE_ATTR, 6, H-5);
+}
+// ── Parciales por kilómetro (tiempo en movimiento) ──
+function actSplits(pts, maxMs){
+  var s = [], g = [], cum = 0, tA = 0, t0 = 0, g0 = 0, gain = 0, n = pts.length, lastAlt = n ? pts[0][3] : null;
+  if(n<2) return {s:s, g:g, rest:null};
+  for(var i=1;i<n;i++){
+    var a = pts[i-1], b = pts[i]; if(b[4]===1){ lastAlt = b[3]; continue; }
+    var d = actHav(a,b), dt = (b[2]-a[2])/1000; if(!(dt>0)) continue; var v = d/dt;
+    if(b[3]!=null && lastAlt!=null){ var da = b[3]-lastAlt; if(Math.abs(da)>=3){ if(da>0) gain += da; lastAlt = b[3]; } } else if(b[3]!=null) lastAlt = b[3];
+    if(d<3 || v>maxMs) continue;
+    var de = v>0.5 ? dt : Math.min(dt,15), c0 = cum, tt = tA; cum += d; tA += de;
+    while(cum >= (s.length+1)*1000){ var B = (s.length+1)*1000, tb = tt + (B-c0)/d*de; s.push(Math.round(tb-t0)); g.push(Math.round(gain-g0)); t0 = tb; g0 = gain; }
+  }
+  var m = cum - s.length*1000;
+  return {s:s, g:g, rest: m>=100 ? {m:Math.round(m), s:Math.round(tA-t0), g:Math.round(gain-g0)} : null};
+}
+function actGetSplits(a){
+  if(a.splits) return {s:a.splits, g:a.spG||[], rest:a.spRest||null};
+  var R = a.route||[]; if(R.length<3) return null;
+  var sp = actSplits(R.map(function(p){ return [p[0],p[1],p[2]*1000,p[3]]; }), actType(a.type).maxMs); return sp.s.length ? sp : null;
+}
+function actVmax(pts, maxMs){
+  var best = 0, j = 0; if(!pts || pts.length<3) return 0;
+  for(var i=0;i<pts.length-1;i++){ if(j<=i) j = i+1; while(j<pts.length-1 && pts[j][2]-pts[i][2]<8000) j++; var dt = (pts[j][2]-pts[i][2])/1000; if(dt<8 || dt>40) continue; var v = actHav(pts[i],pts[j])/dt; if(v<=maxMs && v>best) best = v; }
+  return Math.round(best*36)/10;
+}
+function actSplitsHTML(a){
+  var sp = actGetSplits(a); if(!sp || !sp.s.length) return '';
+  var t = actType(a.type), c = actCol(a.type), kmh = t.unit==='kmh';
+  var rows = sp.s.map(function(sec,i){ return {l:String(i+1), sec:sec, m:1000}; });
+  if(sp.rest) rows.push({l:(sp.rest.m/1000).toFixed(2).replace('.',','), sec:sp.rest.s, m:sp.rest.m, part:true});
+  var vs = rows.map(function(r){ return r.m/Math.max(1,r.sec); }), vmax = Math.max.apply(null,vs), vmin = Math.min.apply(null,vs);
+  var full = rows.filter(function(r){return !r.part;}), fv = full.map(function(r){return r.m/Math.max(1,r.sec);}), bi = fv.indexOf(Math.max.apply(null,fv)), wi = full.length>2 ? fv.indexOf(Math.min.apply(null,fv)) : -1;
+  var val = function(r){ var v = r.m/Math.max(1,r.sec); return kmh ? (v*3.6).toFixed(1).replace('.',',') : actFmtPace(r.sec*1000/r.m,1); };
+  var body = rows.map(function(r,i){
+    var v = vs[i], w = (vmax-vmin)>vmax*0.02 ? 32+68*(v-vmin)/(vmax-vmin) : 100, best = !r.part && i===bi, bg = best ? 'linear-gradient(90deg,'+c[0]+','+c[1]+')' : c[0], op = best ? 1 : (r.part ? .35 : (i===wi ? .4 : .62));
+    return '<div style="display:flex;align-items:center;gap:10px;height:28px;"><span style="width:34px;text-align:right;font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;">'+r.l+'</span><div style="flex:1;"><div style="height:16px;width:'+w.toFixed(1)+'%;border-radius:8px;background:'+bg+';opacity:'+op+';"></div></div><span style="width:46px;text-align:right;font-size:13px;font-weight:'+(best?800:600)+';color:var(--ink);font-variant-numeric:tabular-nums;">'+val(r)+'</span></div>';
+  }).join('');
+  var sub = full.length>1 ? 'Más rápido: km '+full[bi].l+' · '+val(full[bi])+(kmh?' km/h':' /km') : '';
+  return '<div style="margin-bottom:16px;"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;"><span style="font-weight:800;font-size:14px;color:var(--ink);">Parciales por km</span><span style="font-size:11.5px;color:var(--muted);">'+(kmh?'km/h':'ritmo /km')+'</span></div>'+body+(sub?'<div style="font-size:11.5px;color:var(--muted);margin-top:6px;">'+sub+'</div>':'')+'</div>';
+}
+function actElevHTML(a){
+  var R = (a.route||[]).filter(function(p){ return p[3]!=null; }); if(R.length<6) return '';
+  var cum = [0], lo = 1e9, hi = -1e9; for(var i=0;i<R.length;i++){ if(i) cum.push(cum[i-1]+actHav(R[i-1],R[i])); if(R[i][3]<lo) lo = R[i][3]; if(R[i][3]>hi) hi = R[i][3]; }
+  if(hi-lo<6 || !(cum[cum.length-1]>0)) return '';
+  var W = 300, H = 64, tot = cum[cum.length-1], c = actCol(a.type)[1], line = R.map(function(p,i){ return (i?'L':'M')+(cum[i]/tot*W).toFixed(1)+' '+(H-6-(p[3]-lo)/(hi-lo)*(H-14)).toFixed(1); }).join('');
+  return '<div style="margin-bottom:16px;"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;"><span style="font-weight:800;font-size:14px;color:var(--ink);">Elevación</span><span style="font-size:11.5px;color:var(--muted);">'+lo+' – '+hi+' m</span></div><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:64px;display:block;"><defs><linearGradient id="act-eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+c+'" stop-opacity=".35"/><stop offset="1" stop-color="'+c+'" stop-opacity="0"/></linearGradient></defs><path d="'+line+'L'+W+' '+H+'L0 '+H+'Z" fill="url(#act-eg)"/><path d="'+line+'" fill="none" stroke="'+c+'" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg></div>';
 }
 // ── Dibujo de la ruta (reutilizado por la pantalla en vivo y las tarjetas) ──
 function actDrawRoute(ctx, pts, box, color, lw, dot){
@@ -9595,18 +9731,30 @@ function actStatsOf(a){
   return {km:actFmtKm(a.km), time:actFmtTime(a.sec), pace:pace, paceL:t.unit==='kmh'?'km/h':'/km', gain:a.gain||0, kcal:a.kcal};
 }
 function actSumDraw(){
-  var ov = document.getElementById('act-sum'); if(!ov||!ACTV) return; var a = ACTV.a, st = actStatsOf(a), ty = actType(a.type);
+  var ov = document.getElementById('act-sum'); if(!ov||!ACTV) return; var a = ACTV.a, st = actStatsOf(a), ty = actType(a.type), sp = actGetSplits(a);
   var chip = function(on, t, fn){ return '<button onclick="'+fn+'" style="padding:7px 12px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+t+'</button>'; };
   var cell = function(v,l){ return '<div style="background:var(--bg);border-radius:14px;padding:12px 6px;text-align:center;"><div style="font-weight:800;font-size:20px;color:var(--ink);letter-spacing:-.01em;">'+v+'</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-top:3px;font-weight:600;">'+l+'</div></div>'; };
+  var tl = function(l,v){ return '<div style="background:var(--bg);border-radius:14px;padding:11px 14px;"><div style="font-size:11px;color:var(--muted);font-weight:600;">'+l+'</div><div style="font-size:17px;font-weight:800;color:var(--ink);margin-top:2px;">'+v+'</div></div>'; };
+  var tiles = [tl('En movimiento', actFmtTime(a.movSec||a.sec))];
+  if(sp && sp.s.length){ var bs = Math.min.apply(null, sp.s); tiles.push(tl('Mejor km', ty.unit==='kmh' ? (3600/bs).toFixed(1).replace('.',',')+' km/h' : actFmtPace(bs,1)+' /km')); }
+  if(a.vmax) tiles.push(tl('Velocidad máx.', String(a.vmax).replace('.',',')+' km/h'));
+  if(a.gain>0) tiles.push(tl('Desnivel +', a.gain+' m'));
+  var al = (a.route||[]).filter(function(p){return p[3]!=null;}).map(function(p){return p[3];}); if(al.length>5) tiles.push(tl('Altitud máx.', Math.max.apply(null,al)+' m'));
+  var hasMap = a.route && a.route.length>=2;
   var keep = document.getElementById('act-name'), nm = keep ? keep.value : a.name;
   brPutSheet(ov, '<div class="sheet"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><span class="st-ico" style="background:var(--accent-bg);color:var(--accent-text);">'+tmIcon(ACT_ICO[ty.id]||ACT_ICO.otro,22)+'</span><div style="flex:1;min-width:0;"><input id="act-name" class="finp" maxlength="30" value="'+esc(nm)+'" onchange="actRename(this.value)" style="margin:0;font-weight:800;font-size:18px;border:none;padding:0;background:transparent;"/><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">'+esc(timerHistDayLabel(a.date))+'</div></div><button class="st-x" onclick="removeOverlay(\'act-sum\')" aria-label="Cerrar">×</button></div>'+
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'+cell(st.km,'km')+cell(st.time,'tiempo')+cell(st.pace,st.paceL)+cell(a.kcal!=null?a.kcal:st.gain, a.kcal!=null?'kcal':'desn. m')+'</div>'+
+    (hasMap ? '<div style="border-radius:16px;overflow:hidden;margin-bottom:14px;height:220px;border:1px solid var(--line-soft);"><canvas id="act-map" style="width:100%;height:100%;display:block;"></canvas></div>' : '<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;">La ruta está solo en el dispositivo donde se grabó.</div>')+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">'+tiles.join('')+'</div>'+
+    actSplitsHTML(a)+actElevHTML(a)+
+    '<div style="font-weight:800;font-size:14px;color:var(--ink);margin:4px 0 8px;">Imagen para compartir</div>'+
     '<div style="display:flex;justify-content:center;margin-bottom:14px;"><canvas id="act-card" style="max-width:100%;max-height:42vh;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.2);"></canvas></div>'+
     '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="actCardOut(false)">Descargar</button><button class="sbtn" style="flex:1.4;" onclick="actCardOut(true)">Compartir</button></div>'+
     '<details class="st-adv"><summary>Personalizar la tarjeta</summary><div style="padding-bottom:14px;"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'+[['clasico','Clásico'],['minimal','Minimal'],['franja','Franja']].map(function(d){return chip(ACTV.design===d[0], d[1], 'ACTV.design=\''+d[0]+'\';actSumDraw()');}).join('')+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+QC_SIZES.map(function(z,i){return chip(ACTV.size===i, z[0], 'ACTV.size='+i+';actSumDraw()');}).join('')+chip(ACTV.transparent,'Fondo transparente','ACTV.transparent=!ACTV.transparent;actSumDraw()')+chip(ACTV.mark,'Marca Gramifica','ACTV.mark=!ACTV.mark;actSumDraw()')+'</div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px;">Poner tus datos sobre una foto:</div><input type="file" accept="image/*" onchange="actCardPhoto(this)" style="font-size:12.5px;"/></div></details>'+
     '<details class="st-adv"><summary>Más opciones</summary><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:14px;"><button class="cbtn" onclick="actGpxOut()">Exportar GPX</button><button class="cbtn" onclick="openTimerHistToReg(\''+esc(a.histId||'')+'\')">Anotar en un registro</button><button class="cbtn" style="color:var(--bad);" onclick="actDelete(\''+a.id+'\')">Eliminar actividad</button></div></details></div>');
+  if(hasMap) actMapDraw(document.getElementById('act-map'), a.route, {color:actCol(a.type)[1], follow:false});
   actCardRender(document.getElementById('act-card'));
 }
 function actRename(v){ v = (v||'').trim().slice(0,30)||actType(ACTV.a.type).name; ACTV.a.name = v; ACTV.a.updatedAt = Date.now(); saveState(); actSumDraw(); }
@@ -27215,7 +27363,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.26.136';
+var APP_VERSION = '2026.10.26.137';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
