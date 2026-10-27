@@ -9484,6 +9484,7 @@ function actGeoStop(){
 function actOnPoint(lat, lon, acc, alt, ts){
   if(!ACT || ACT.state==='paused' || ACT.state==='done') return;
   if(!isFinite(lat) || !isFinite(lon)) return;
+  ACT.rx = (ACT.rx||0)+1; ACT.rxTs = Date.now();
   if(acc>40){ ACT.err = 'Señal débil (±'+Math.round(acc)+' m)'; return; }
   ACT.err = ''; if(ACT.state==='wait') ACT.state = 'run';
   var p = [lat, lon, ts, (alt!=null && isFinite(alt)) ? Math.round(alt) : null], L = ACT.last;
@@ -9536,7 +9537,7 @@ function actRunUpdate(){
   else { set('act-pace', actFmtPace(ACT.movSec||el, km)); set('act-pace-l','ritmo /km'); }
   var kc = actKcal(ACT.type, km, +S.bodyKg||0); set('act-x', kc!=null ? kc : Math.round(ACT.gain)); set('act-x-l', kc!=null ? 'kcal (aprox.)' : 'desnivel + m');
   var sg = document.getElementById('act-sig'); if(sg){ var st = ACT.state==='paused' ? ['#ffffff','En pausa'] : (ACT.state==='wait' ? ['#ffe08a','Buscando señal'] : ['#b8ffcf','Grabando']); sg.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:'+st[0]+';"></span>'+st[1]; }
-  var em = document.getElementById('act-empty'); if(em){ var msg = ACT.err || (ACT.pts.length<2 ? (ACT.state==='wait' ? 'Buscando tu ubicación…' : 'Empieza a moverte y tu recorrido aparecerá aquí.') : ''); em.textContent = msg; em.style.display = msg ? 'block' : 'none'; }
+  var em = document.getElementById('act-empty'); if(em){ var msg = ACT.err || (ACT.pts.length<2 ? (ACT.state==='wait' ? 'Buscando tu ubicación…' : 'Empieza a moverte y tu recorrido aparecerá aquí.') : ''); if(msg && ACT.pts.length<2) msg += ' ('+(ACT.native?'GPS nativo':'GPS del navegador')+' · señales recibidas: '+(ACT.rx||0)+')'; em.textContent = msg; em.style.display = msg ? 'block' : 'none'; }
   var lp = document.getElementById('act-lap'); if(lp){ lp.textContent = ACT.lapTxt||''; lp.style.display = ACT.lapTxt ? 'block' : 'none'; }
   set('act-fit', ACT.follow===false ? 'Seguir' : 'Ver todo');
   var cv = document.getElementById('act-cv'); if(cv) actMapDraw(cv, ACT.pts, {color:c[1], follow:ACT.follow!==false, live:true, zoom:16});
@@ -27363,7 +27364,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.26.137';
+var APP_VERSION = '2026.10.27.138';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
