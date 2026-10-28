@@ -96,6 +96,19 @@
       off: function(){ var P = plugin('KeepAwake'); return P ? P.allowSleep().catch(function(){}) : Promise.resolve(); }
     },
 
+    // Huella / rostro para el espacio oculto. Plugin @aparajita/capacitor-biometric-auth ('BiometricAuth').
+    // `available` pasa a true solo si el plugin existe Y el teléfono tiene huella/rostro registrados;
+    // si no, el espacio oculto sigue funcionando solo con código (PIN).
+    biometric: {
+      available: false,
+      verify: function(reason){
+        var P = plugin('BiometricAuth');
+        if(!P) return Promise.resolve(false);
+        return P.authenticate({reason: reason || 'Confirma tu identidad', androidTitle: 'Gramifica', androidSubtitle: reason || '', cancelTitle: 'Usar código', allowDeviceCredential: false})
+          .then(function(){ return true; }).catch(function(){ return false; });
+      }
+    },
+
     // Temporizador con pantalla bloqueada: servicio nativo (plugin propio GrTimer) que reproduce
     // sonidos WAV y vibra a horas programadas. Solo existe en la app nativa con el plugin instalado.
     timer: {
@@ -307,5 +320,10 @@
     })()
   };
 
-  window.Platform = Platform;
+    try{
+    var _bio = native && plugin('BiometricAuth');
+    if(_bio && _bio.checkBiometry) _bio.checkBiometry().then(function(r){ Platform.biometric.available = !!(r && r.isAvailable); }).catch(function(){});
+  }catch(e){}
+
+window.Platform = Platform;
 })();

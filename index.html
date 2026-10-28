@@ -1357,7 +1357,7 @@ async function syncWithCloud(){
         bonusTaskLimit: S.bonusTaskLimit||0,
         registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
         timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, zoneLog: S.zoneLog||[],
-        exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
+        hiddenTasks: S.hiddenTasks||[], hid: S.hid||{}, exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
         timerCfg: S.timerCfg||{},
         autoReset: S.autoReset||{},
@@ -1470,6 +1470,8 @@ function applySyncResult(cloud, useCloud){
       if(cloud.streak) S.streak = cloud.streak;
       if(cloud.theme) S.theme = cloud.theme;
       if(Array.isArray(cloud.tasks)) S.tasks = cloud.tasks;
+      if(Array.isArray(cloud.hiddenTasks)) S.hiddenTasks = cloud.hiddenTasks;
+      if(cloud.hid) S.hid = cloud.hid;
       if(Array.isArray(cloud.tasks) && cloud.tasks.length){ S.welcomeDone = true; try{ removeOverlay('welcome-ov'); }catch(e){} }
       if(cloud.rewardedTaskIds) S.rewardedTaskIds = cloud.rewardedTaskIds;
       if(cloud.bajaEnergia) S.bajaEnergia = cloud.bajaEnergia;
@@ -1767,7 +1769,7 @@ function pushToCloud(){
       bonusTaskLimit: S.bonusTaskLimit||0,
       registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
         timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, zoneLog: S.zoneLog||[],
-        exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
+        hiddenTasks: S.hiddenTasks||[], hid: S.hid||{}, exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
       timerCfg: S.timerCfg||{},
       autoReset: S.autoReset||{},
@@ -1827,17 +1829,13 @@ function uniqColors(a){ return a.filter(function(c,i){ return a.indexOf(c)===i; 
 var SYM_COLORS = ["#c97842","#a85e3a","#8b4830","#6b3a2a","#4a2820","#3a1f18","#5d3a25","#8b6234"];
 // SYM_COLORS fue pensado para fondos claros. En temas con fondo oscuro/saturado
 // (como Terracota), esos tonos oscuros casi no se ven — usamos el acento del tema.
+// Cada fase del día tiene su propio color de cielo (claro / oscuro según el tema).
+var LV_PHASE_COL = {light:['#5b6aa8','#dd6f55','#c48a12','#8a4f9e'], dark:['#a3b3f2','#ff9d82','#f4c95d','#cf9be6']};
+function lvPhase(lvl){ return Math.max(0,(lvl||1)-1)%4; }
+function lvCycle(lvl){ return Math.floor(Math.max(0,(lvl||1)-1)/4); }
 function getLevelColor(lvl){
-  if(S.theme==='terracota' || S.theme==='dark' || S.theme==='galaxia'){
-    var accentColors = {
-      terracota:['#ffcaa8','#ffd6ba','#ffc199','#ffb98f','#ffdcc4','#ffab7a','#ffc199','#ffb98f'],
-      dark:['#5bb0b5','#7cc4c8','#3f9499','#9ad3d6','#5bb0b5','#7cc4c8','#3f9499','#9ad3d6'],
-      galaxia:['#d4a847','#e0b95c','#c99a3a','#d4a847','#e0b95c','#c99a3a','#d4a847','#e0b95c']
-    };
-    var arr = accentColors[S.theme];
-    return arr[(lvl-1)%arr.length];
-  }
-  return SYM_COLORS[(lvl-1)%SYM_COLORS.length];
+  var dk = (S.theme==='terracota' || S.theme==='dark' || S.theme==='galaxia');
+  return LV_PHASE_COL[dk?'dark':'light'][lvPhase(lvl)];
 }
 // LVL_NAMES reemplazado por getLevelName() — ver arriba
 var ACCENT="#c97842";
@@ -1850,30 +1848,22 @@ var ACCENT="#c97842";
 //
 var TEXTS = {
 
-  // ── Mensajes al subir de nivel — uno distinto por cada nivel ─────────────
-  // Si subes a un nivel mayor a los listados, se cicla desde el nivel 1.
-  // Cada mensaje admite los placeholders {nivel} y {nombre} (nombre del símbolo)
+  // ── Mensajes al subir de nivel — uno por nivel (ciclo del día) ─────────────
+  // Niveles 1-4 Descenso→Crepúsculo · 5-8 «Nuevo» · 9-12 «Gran». Del 13 en adelante
+  // se repite la fase del «Gran» ciclo (ver levelUpMsg). El nombre del nivel se muestra aparte.
   levelUp: [
-    // Nivel 1
-    "Plantaste tu primera semilla. Cada tarea que cuides será agua para que crezca.",
-    // Nivel 2
-    "Brotó lo que sembraste. Lo difícil ya empezó: seguir apareciendo.",
-    // Nivel 3
-    "Tu planta ya tiene hojas propias. La constancia se nota aunque nadie la mire.",
-    // Nivel 4
-    "Un árbol joven: raíces firmes y ramas que ya dan sombra. Sostenerte se vuelve natural.",
-    // Nivel 5
-    "Chispa encendida. Vas más allá de la constancia: empiezas a elegir con intención.",
-    // Nivel 6
-    "Llama viva. Tu disciplina ilumina lo que antes parecía imposible.",
-    // Nivel 7
-    "Una luz que ya puedes llevar contigo. Tu foco orienta el día.",
-    // Nivel 8
-    "Tu brújula ya no oscila: sabes hacia dónde vas y cómo sostener el camino.",
-    // Nivel 9
-    "Sol propio. Tu energía ordena el día en vez de depender de él.",
-    // Nivel 10
-    "La estrella del orden. Llegaste a la cima del primer ciclo; lo que sigue es más amplio.",
+    "Todo empieza bajando de las ideas a lo concreto: una tarea hecha vale más que cien planes.",
+    "Llegó la primera luz: lo que hacías a ratos ya empieza a tener forma de hábito.",
+    "Sin sombras largas: lo que haces y lo que quieres coinciden. Buen momento para mirar lo recorrido.",
+    "Cierras tu primer ciclo. Lo que termina no se pierde: queda hecho y te prepara para lo que sigue.",
+    "Vuelves al comienzo con otra mirada: ya sabes lo que cuesta empezar, y que se puede.",
+    "El segundo día se parece al primero, pero tú no: tu constancia ya llega antes que tú.",
+    "Tu foco es parejo: lo importante ocupa el lugar que le corresponde.",
+    "Cierras el segundo ciclo con más fondo que el primero. Descansa: mañana vuelve la luz.",
+    "Bajas otra vez, ahora con todo lo aprendido. Lo difícil ya es costumbre.",
+    "La luz llega más temprano: empezar ya no cuesta como antes.",
+    "Tu hora más alta: constancia, foco y sentido van al mismo paso.",
+    "Cierras un recorrido largo. Mira atrás sin apuro: todo eso lo hiciste tú."
   ],
 
   // Título del modal de subida de nivel — admite {nivel}
@@ -2032,31 +2022,22 @@ function lvlInfo(xp){
 }
 
 // ── Nombres de nivel ──────────────────────────────────────────────────────
+// Ciclo del día (eterno retorno): Descenso → Aurora → Mediodía → Crepúsculo.
+// 1.er ciclo: nombres simples · 2.º: «Nuevo/Nueva» · 3.º en adelante: «Gran» (con número desde el 4.º ciclo).
+var LV_PHASES = ['Descenso','Aurora','Mediodía','Crepúsculo'];
 function getLevelName(lvl){
-  if(lvl<=1)  return 'Caótica curiosidad';
-  if(lvl===2) return 'Caóticamente intentando';
-  if(lvl===3) return 'Despistadamente constante';
-  if(lvl===4) return 'Constante';
-  if(lvl===5) return 'Más allá de la constancia…';
-  if(lvl===6) return 'Enfocada-mente';
-  if(lvl===7) return 'Estudiante del orden celestial';
-  if(lvl===8) return 'Maestría en neguentropía';
-  if(lvl===9) return 'Gran Maestría';
-  if(lvl===10)return 'Gurú del orden';
-  if(lvl<=12) return 'Ayudante de la arquitectura cósmica';
-  if(lvl<=14) return 'Arquitectura cósmica avanzada';
-  if(lvl<=17) return 'Arquitectura cósmica superior';
-  if(lvl<=21) return 'Arquitectura multidimensional';
-  return 'Gran Arquitecto/a';
+  var p = lvPhase(lvl), c = lvCycle(lvl), nm = LV_PHASES[p];
+  if(c===0) return nm;
+  if(c===1) return (p===1?'Nueva ':'Nuevo ')+nm;
+  return 'Gran '+nm+(c>=3 ? ' '+_toRoman(c-1) : '');
 }
 
 // ── Emblemas de nivel ─────────────────────────────────────────────────────
-// Sistema de insignias por rangos (como las ligas/rangos de los juegos y apps de
-// hábitos): el MARCO cambia por rango y el EMBLEMA central por nivel.
-//   Niveles 1-4   marco circular        · semilla → brote → planta → árbol
-//   Niveles 5-9   marco de escudo       · chispa → llama → antorcha → brújula → sol
-//   Niveles 10-14 marco hexagonal doble · estrella → estrella orbital → constelación
-//   Niveles 15+   medallón de gala      · galaxia → átomo cósmico → mandala
+// Insignias del ciclo del día: el MARCO cambia por ciclo y el EMBLEMA por fase.
+//   Ciclo 1 (niv. 1-4)  marco circular   · Descenso → Aurora → Mediodía → Crepúsculo
+//   Ciclo 2 (niv. 5-8)  marco de escudo  · mismos emblemas (Nuevo…)
+//   Ciclo 3 (niv. 9-12) marco hexagonal doble (Gran…)
+//   Ciclo 4+ (niv. 13+) medallón de gala (Gran … II, III…)
 // SVG 24×24 monocromo (se tinta con `col`); usa solo relleno/trazo con opacidad
 // para dar profundidad, sin depender de variables CSS (sirve también en tarjetas).
 function symSVG(lvl, col, sw){
@@ -2065,13 +2046,14 @@ function symSVG(lvl, col, sw){
   var f = 'fill="'+col+'" stroke="none"';
   var thin = 'stroke="'+col+'" stroke-width="'+(sw*0.6).toFixed(2)+'" fill="none" stroke-linecap="round" stroke-linejoin="round"';
   var frame, i, a, pts;
-  if(lvl<=4){
+  var cyc = lvCycle(lvl);
+  if(cyc===0){
     frame = '<circle cx="12" cy="12" r="10.6" '+f+' opacity=".10"/><circle cx="12" cy="12" r="10.6" '+s+'/><circle cx="12" cy="12" r="8.6" '+thin+' opacity=".4"/>';
-  } else if(lvl<=9){
+  } else if(cyc===1){
     frame = '<path d="M12 1.8L20.2 4.8V11.5C20.2 16.6 16.6 20.2 12 22.2C7.4 20.2 3.8 16.6 3.8 11.5V4.8Z" '+f+' opacity=".10"/>'+
       '<path d="M12 1.8L20.2 4.8V11.5C20.2 16.6 16.6 20.2 12 22.2C7.4 20.2 3.8 16.6 3.8 11.5V4.8Z" '+s+'/>'+
       '<path d="M12 4.1L18 6.3V11.4C18 15.1 15.4 17.9 12 19.5C8.6 17.9 6 15.1 6 11.4V6.3Z" '+thin+' opacity=".4"/>';
-  } else if(lvl<=14){
+  } else if(cyc===2){
     frame = '<path d="M12 1.5L20.6 6.75V17.25L12 22.5L3.4 17.25V6.75Z" '+f+' opacity=".10"/>'+
       '<path d="M12 1.5L20.6 6.75V17.25L12 22.5L3.4 17.25V6.75Z" '+s+'/>'+
       '<path d="M12 4.2L18.3 8V16L12 19.8L5.7 16V8Z" '+thin+' opacity=".45"/>';
@@ -2080,42 +2062,21 @@ function symSVG(lvl, col, sw){
     for(i=0;i<24;i++){ a=i*15*Math.PI/180; ticks+='<line x1="'+(12+9.6*Math.cos(a)).toFixed(2)+'" y1="'+(12+9.6*Math.sin(a)).toFixed(2)+'" x2="'+(12+10.9*Math.cos(a)).toFixed(2)+'" y2="'+(12+10.9*Math.sin(a)).toFixed(2)+'" '+thin+'/>'; }
     frame = '<circle cx="12" cy="12" r="9" '+f+' opacity=".10"/><circle cx="12" cy="12" r="9" '+s+'/><circle cx="12" cy="12" r="7.2" '+thin+' opacity=".4"/>'+ticks;
   }
-  var g = '';
-  var star4 = 'M12 5.5L13.6 10.4L18.5 12L13.6 13.6L12 18.5L10.4 13.6L5.5 12L10.4 10.4Z';
-  var flame = 'M12 5C13 8 16.5 9.5 16.5 13.5C16.5 16.3 14.5 18.3 12 18.3C9.5 18.3 7.5 16.3 7.5 13.5C7.5 11.5 8.6 10.2 9.6 9.2C9.8 10.6 10.6 11.2 11.2 11.2C11 9 11 7 12 5Z';
-  function star5(R,r,rot){ var p=''; for(var k=0;k<10;k++){ var rr=k%2?r:R, th=(-90+rot+k*36)*Math.PI/180; p+=(12+rr*Math.cos(th)).toFixed(2)+','+(12+rr*Math.sin(th)).toFixed(2)+' '; } return p.trim(); }
-  if(lvl===1){        // semilla
-    g = '<path d="M12 7.2C15 9.8 15 14.2 12 16.8C9 14.2 9 9.8 12 7.2Z" '+f+' opacity=".9"/><path d="M12 16.8V18.6" '+s+'/>';
-  } else if(lvl===2){ // brote
-    g = '<path d="M12 18V11.5" '+s+'/><path d="M12 13C8.8 13 7.6 11 7.6 9C10 9 12 10.3 12 13Z" '+f+'/><path d="M12 11.2C12 8.8 13.8 7.3 16.4 7.3C16.4 9.7 14.8 11.2 12 11.2Z" '+f+' opacity=".85"/>';
-  } else if(lvl===3){ // planta
-    g = '<path d="M12 18.4V8.6" '+s+'/><path d="M12 15.6C9 15.6 7.5 13.7 7.5 11.7C10 11.7 12 12.9 12 15.6Z" '+f+'/><path d="M12 13C12 10.6 13.9 9 16.5 9C16.5 11.4 14.7 13 12 13Z" '+f+' opacity=".85"/><path d="M12 9.6C10.6 8.5 10.6 6.9 12 5.7C13.4 6.9 13.4 8.5 12 9.6Z" '+f+'/>';
-  } else if(lvl===4){ // árbol
-    g = '<path d="M12 18.6V13.4" '+s+'/><circle cx="12" cy="10" r="3.7" '+f+' opacity=".95"/><circle cx="9" cy="12.3" r="2.7" '+f+' opacity=".8"/><circle cx="15" cy="12.3" r="2.7" '+f+' opacity=".8"/>';
-  } else if(lvl===5){ // chispa
-    g = '<path d="'+star4+'" '+f+'/>';
-  } else if(lvl===6){ // llama
-    g = '<path d="'+flame+'" '+f+'/><path d="M12 18.3C10.6 18.3 9.8 17.3 9.8 16.1C9.8 14.7 11 13.9 12 12.7C13 13.9 14.2 14.7 14.2 16.1C14.2 17.3 13.4 18.3 12 18.3Z" '+thin+' opacity=".55"/>';
-  } else if(lvl===7){ // antorcha
-    g = '<g transform="translate(3.2 -0.2) scale(.74)"><path d="'+flame+'" '+f+'/></g><path d="M12 14.2V18.6" '+s+'/><path d="M10 18.6H14" '+s+'/>';
-  } else if(lvl===8){ // brújula
-    g = '<path d="'+star4+'" '+f+'/><g transform="rotate(45 12 12) translate(3.6 3.6) scale(.7)"><path d="'+star4+'" '+thin+' opacity=".7"/></g>';
-  } else if(lvl===9){ // sol
-    var rays='';
-    for(i=0;i<8;i++){ a=i*45*Math.PI/180; rays+='<line x1="'+(12+5.2*Math.cos(a)).toFixed(2)+'" y1="'+(12+5.2*Math.sin(a)).toFixed(2)+'" x2="'+(12+7.4*Math.cos(a)).toFixed(2)+'" y2="'+(12+7.4*Math.sin(a)).toFixed(2)+'" '+s+'/>'; }
-    g = '<circle cx="12" cy="12" r="3.3" '+f+'/>'+rays;
-  } else if(lvl===10){ // estrella
-    g = '<polygon points="'+star5(7.2,3.1,0)+'" '+f+'/>';
-  } else if(lvl<=12){  // estrella orbital
-    g = '<polygon points="'+star5(4.6,2,0)+'" '+f+'/><ellipse cx="12" cy="12" rx="7.6" ry="2.8" transform="rotate(-25 12 12)" '+thin+' opacity=".8"/>';
-  } else if(lvl<=14){  // constelación
-    g = '<path d="M7 16L10.5 8.5L16.5 11L14 17Z" '+thin+' opacity=".7"/><circle cx="7" cy="16" r="1.5" '+f+'/><circle cx="10.5" cy="8.5" r="1.9" '+f+'/><circle cx="16.5" cy="11" r="1.5" '+f+'/><circle cx="14" cy="17" r="1.2" '+f+' opacity=".8"/>';
-  } else if(lvl<=17){  // galaxia
-    g = '<path d="M12 12C14.3 9.6 13.2 6.8 10.6 6.5C7.6 6.2 6.2 9.2 7.4 12C8.8 15.2 12.8 16.2 15.4 14.2" '+s+'/><circle cx="12" cy="12" r="1.5" '+f+'/>';
-  } else if(lvl<=21){  // átomo cósmico
-    g = '<ellipse cx="12" cy="12" rx="6.2" ry="2.4" '+thin+'/><ellipse cx="12" cy="12" rx="6.2" ry="2.4" transform="rotate(60 12 12)" '+thin+'/><ellipse cx="12" cy="12" rx="6.2" ry="2.4" transform="rotate(120 12 12)" '+thin+'/><circle cx="12" cy="12" r="1.7" '+f+'/>';
-  } else {             // mandala del Gran Arquitecto
-    g = '<polygon points="12,5.2 17.9,15.4 6.1,15.4" '+thin+'/><polygon points="12,18.8 6.1,8.6 17.9,8.6" '+thin+'/><circle cx="12" cy="12" r="2.2" '+f+'/>';
+  // Emblema por fase del día (mismo glifo en cada ciclo; cambia el marco).
+  var ph = lvPhase(lvl), g = '', k, a;
+  if(ph===0){          // Descenso: una escalera que baja, con alguien (punto) en el primer peldaño
+    g = '<path d="M7.2 8.8H10V11.9H13.2V15H16.8V17.4H7.2Z" '+f+' opacity=".16"/><path d="M7.2 8.8H10V11.9H13.2V15H16.8" '+s+'/><circle cx="8.6" cy="6.3" r="1.45" '+f+'/>';
+  } else if(ph===1){   // Aurora: medio sol que asoma con rayos
+    var rays = '';
+    [-150,-120,-90,-60,-30].forEach(function(an){ var c1 = Math.cos(an*Math.PI/180), s1 = Math.sin(an*Math.PI/180); rays += '<line x1="'+(12+5.6*c1).toFixed(2)+'" y1="'+(15.4+5.6*s1).toFixed(2)+'" x2="'+(12+7.6*c1).toFixed(2)+'" y2="'+(15.4+7.6*s1).toFixed(2)+'" '+s+'/>'; });
+    g = '<path d="M8.2 15.4A3.8 3.8 0 0 1 15.8 15.4Z" '+f+'/>'+rays+'<path d="M6.8 15.4H17.2" '+s+'/>';
+  } else if(ph===2){   // Mediodía: sol en lo alto, sin sombra
+    var r2 = '';
+    for(k=0;k<8;k++){ a = k*45*Math.PI/180; r2 += '<line x1="'+(12+4.9*Math.cos(a)).toFixed(2)+'" y1="'+(12+4.9*Math.sin(a)).toFixed(2)+'" x2="'+(12+6.7*Math.cos(a)).toFixed(2)+'" y2="'+(12+6.7*Math.sin(a)).toFixed(2)+'" '+s+'/>'; }
+    g = '<circle cx="12" cy="12" r="3.1" '+f+'/>'+r2;
+  } else {             // Crepúsculo: el sol se hunde, aparece la primera estrella
+    g = '<path d="M8.3 15.4A4 4 0 0 1 15.7 15.4Z" '+f+'/><path d="M6.8 15.4H17.2" '+s+'/><path d="M9 17.6H15" '+thin+' opacity=".7"/><path d="M10.4 19.4H13.6" '+thin+' opacity=".45"/>'+
+        '<path d="M15.9 6.4L16.5 8.1L18.2 8.7L16.5 9.3L15.9 11L15.3 9.3L13.6 8.7L15.3 8.1Z" '+f+'/><circle cx="8.6" cy="9.2" r=".8" '+f+' opacity=".7"/>';
   }
   return frame+g;
 }
@@ -2537,7 +2498,10 @@ function iconBadgeHTML(content, size){
 // k=1 es un OR puro, con k=N es lo mismo que 'all'. Esta es la ÚNICA función
 // que decide esto; isDone(), tRatio(), mSave() y tapCL/stepCL/setCLProg
 // pasan siempre por acá para no duplicar la regla en cinco lugares.
-function taskNeedsTimerPart(t){ return !!(t && t.hasTimer && t.timer && t.timer.sets && t.timer.sets.length && t.checklist && t.checklist.length); }
+// Si los ítems tienen su propia rutina, esas rutinas son las partes: la rutina general de la tarea
+// no se suma como una parte extra (antes dejaba el avance en 67 % aunque todo estuviera hecho).
+function itemHasRoutine(i){ return !!(i && i.timer && i.timer.sec>0); }
+function taskNeedsTimerPart(t){ return !!(t && t.hasTimer && t.timer && t.timer.sets && t.timer.sets.length && t.checklist && t.checklist.length && !t.checklist.some(itemHasRoutine)); }
 function checklistSatisfied(t){
   var cl = t.checklist||[];
   if(!cl.length) return null;
@@ -2597,6 +2561,7 @@ function tRatio(t){
 function loadState(){
   try{
     var t=localStorage.getItem('og6-tasks');if(t)S.tasks=JSON.parse(t);
+    try{ var _ht=localStorage.getItem('og6-hidden-tasks'); if(_ht) S.hiddenTasks=JSON.parse(_ht)||[]; var _hc=localStorage.getItem('og6-hid'); if(_hc) S.hid=JSON.parse(_hc)||{}; }catch(e){}
     var m=localStorage.getItem('og6-modes');if(m)S.modes=JSON.parse(m);
     var be=localStorage.getItem('og6-baja');if(be)S.bajaEnergia=Object.assign({},S.bajaEnergia,JSON.parse(be));
     var a=localStorage.getItem('og6-active');if(a)S.activeMode=JSON.parse(a);
@@ -2651,6 +2616,7 @@ function loadState(){
     try{var rg=localStorage.getItem('og6-registries');if(rg)S.registries=JSON.parse(rg)||[];}catch(e){}
     try{var ttp=localStorage.getItem('og6-timertemplates');if(ttp)S.timerTemplates=JSON.parse(ttp)||[];}catch(e){}
     try{var col=localStorage.getItem('og6-collection');if(col)S.collection=JSON.parse(col)||[];}catch(e){}
+    try{var _cs=localStorage.getItem('og6-colsheet');if(_cs)S.colSheet=JSON.parse(_cs)||{};}catch(e){}
     try{var ab2=localStorage.getItem('og6-actbests');if(ab2)S.actBests=JSON.parse(ab2)||{};}catch(e){}
     try{var es2=localStorage.getItem('og6-exskills');if(es2)S.exSkills=JSON.parse(es2)||{};}catch(e){}
     try{var sc2=localStorage.getItem('og6-skcfg');if(sc2)S.skCfg=JSON.parse(sc2)||{};}catch(e){}
@@ -2819,7 +2785,7 @@ window.addEventListener('pagehide', flushSaveState);
 window.addEventListener('beforeunload', flushSaveState);
 function _saveStateNow(){
   try{
-    _lsSet('og6-tasks',JSON.stringify(S.tasks));
+    _lsSet('og6-tasks',JSON.stringify(S.tasks)); _lsSet('og6-hidden-tasks',JSON.stringify(S.hiddenTasks||[])); _lsSet('og6-hid',JSON.stringify(S.hid||{}));
     _lsSet('og6-modes',JSON.stringify(S.modes));
     _lsSet('og6-baja',JSON.stringify(S.bajaEnergia));
     _lsSet('og6-active',JSON.stringify(S.activeMode));
@@ -2866,7 +2832,7 @@ function _saveStateNow(){
     _lsSet('og6-medals',JSON.stringify(S.medals||[]));
     _lsSet('og6-registries',JSON.stringify(S.registries||[]));
     _lsSet('og6-timertemplates',JSON.stringify(S.timerTemplates||[]));
-    _lsSet('og6-collection',JSON.stringify(S.collection||[]));
+    _lsSet('og6-collection',JSON.stringify(S.collection||[])); _lsSet('og6-colsheet',JSON.stringify(S.colSheet||{}));
     _lsSet('og6-activities',JSON.stringify(S.activities||[]));
     _lsSet('og6-challenges',JSON.stringify(S.challenges||[]));
     _lsSet('og6-sklog',JSON.stringify(S.skLog||[]));
@@ -3037,6 +3003,7 @@ var ICO_PATHS={
   link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   dots:'<circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/>',
   chev:'<polyline points="6 9 12 15 18 9"/>',
+  lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   star:'<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8L3.5 9.7l5.9-.8z" fill="currentColor"/>',
   trash:'<path d="M4 7h16M9 7V4.5h6V7M6.5 7l.8 12.5h9.4L17.5 7M10 11v5M14 11v5"/>',
   edit:'<path d="M15.5 5.5l3 3M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z"/>',
@@ -3549,18 +3516,18 @@ function showXPToast(pts){
 }
 
 // ── Level up modal ─────────────────────────────────────────────────────────
+function levelUpMsg(lvl){ var L = TEXTS.levelUp; return L[lvl<=L.length ? lvl-1 : L.length-4+((lvl-1)%4)]; }
 function showLevelUp(lvl){
   var col=getLevelColor(lvl);
   var levelName=getLevelName(lvl);
-  var customMsg=TEXTS.levelUp[(lvl-1)%TEXTS.levelUp.length];
+  var customMsg=levelUpMsg(lvl);
   var box=document.createElement('div');
   box.className='lvl-up';box.id='lvl-up-modal';
   box.innerHTML='<div class="lvl-up-box">'+
-    '<div class="lvl-up-emoji">🎉</div>'+
     '<div class="lvl-up-title">'+fillText(TEXTS.levelUpTitle,{nivel:lvl})+'</div>'+
     '<div style="font-size:12px;color:'+col+';font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:4px;">'+esc(levelName)+'</div>'+
     '<div class="lvl-up-sym">'+
-      '<svg width="80" height="80" viewBox="0 0 24 24">'+symSVG(lvl,col,1.2)+'</svg>'+
+      '<svg width="116" height="116" viewBox="0 0 24 24" style="filter:drop-shadow(0 6px 14px '+col+'44);">'+symSVG(lvl,col,1.2)+'</svg>'+
     '</div>'+
     '<div class="lvl-up-msg">'+esc(customMsg)+'</div>'+
     '<button class="lvl-up-btn" onclick="closeLevelUp()">'+TEXTS.levelUpButton+'</button>'+
@@ -3921,12 +3888,7 @@ function selLpStart(type, id, ev){
   clearTimeout(_selLpTimer);
   _selLpTimer = setTimeout(function(){
     _selLpFired = true;
-    var tk = type==='tasks' ? S.tasks.find(function(x){return x.id===id;}) : null;
-    if(tk && tk.period==='dia' && !S._reorder){
-      vibrate(15);
-      var yy = _selLpY;
-      openTaskMenu(id, {target:{getBoundingClientRect:function(){return {bottom:yy-30};}}});
-    } else enterSelectMode(type, id);
+    vibrate(15); enterSelectMode(type, id);
   }, 480);
 }
 function selLpMove(ev){
@@ -3975,6 +3937,7 @@ function renderSelBar(){
     });
     actionsHTML =
       (allDia ? '<button onclick="selBulkSetCategory()" title="Asignar categoría" style="'+selBarBtnStyle()+'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 22H4v-7l9.41-9.41a2 2 0 0 1 2.83 0l4.35 4.35a2 2 0 0 1 0 2.83Z"/><path d="M7.5 7.5 3 3"/></svg></button>' : '')+
+      (allDia ? '<button onclick="selBulkMove(-1)" title="Subir" style="'+selBarBtnStyle()+'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button><button onclick="selBulkMove(1)" title="Bajar" style="'+selBarBtnStyle()+'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>' : '')+
       (allDia ? '<button onclick="selBulkMoveDay()" title="Mover a otro día" style="'+selBarBtnStyle()+'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></button>' : '')+
       '<button onclick="selBulkDeleteTasks()" title="Eliminar" style="'+selBarBtnStyle('var(--bad)')+'">'+trashIcon+'</button>';
   } else if(SEL.type==='projects'){
@@ -3993,6 +3956,21 @@ function renderSelBar(){
 }
 
 // Acciones en lote — Tareas
+// Sube o baja un paso las tareas elegidas (como bloque) dentro de su día y categoría.
+function selBulkMove(dir){
+  if((S.hoySort||'manual')!=='manual'){ toast('Para reordenar, el orden de la lista debe ser Manual (Yo › Pantalla Hoy)'); return; }
+  var sel = {}; SEL.ids.forEach(function(id){ sel[id] = true; });
+  var groups = {};
+  S.tasks.forEach(function(t){ if(t.period!=='dia') return; var k = taskWeekdayThisWeek(t)+'|'+_taskCatKey(t); (groups[k] = groups[k]||[]).push(t.id); });
+  var moved = false, swap = function(a, b){ var x = S.tasks.findIndex(function(t){return t.id===a;}), y = S.tasks.findIndex(function(t){return t.id===b;}); var tmp = S.tasks[x]; S.tasks[x] = S.tasks[y]; S.tasks[y] = tmp; moved = true; };
+  Object.keys(groups).forEach(function(k){
+    var g = groups[k];
+    if(dir<0){ for(var i=1;i<g.length;i++){ if(sel[g[i]] && !sel[g[i-1]]){ swap(g[i], g[i-1]); var tm = g[i]; g[i] = g[i-1]; g[i-1] = tm; } } }
+    else { for(var j=g.length-2;j>=0;j--){ if(sel[g[j]] && !sel[g[j+1]]){ swap(g[j], g[j+1]); var tn = g[j]; g[j] = g[j+1]; g[j+1] = tn; } } }
+  });
+  if(!moved){ toast(dir<0?'Ya están arriba':'Ya están abajo'); return; }
+  playSound('tick'); saveState(); render();
+}
 function selBulkDeleteTasks(){
   var n = SEL.ids.length;
   var box=document.createElement('div');box.className='conf-box';
@@ -4343,7 +4321,7 @@ function renderV2Header(){
 
   hdr.innerHTML =
     '<div id="v2-hdr-left">'+
-      '<div style="display:flex;flex-direction:column;gap:2px;" onmousedown="_lpStart()" onmouseup="_lpEnd()" onmouseleave="_lpEnd()" ontouchstart="_lpStart()" ontouchend="_lpEnd()">'+
+      '<div style="display:flex;flex-direction:column;gap:2px;" onclick="hidTap()" onmousedown="_lpStart()" onmouseup="_lpEnd()" onmouseleave="_lpEnd()" ontouchstart="_lpStart()" ontouchend="_lpEnd()">'+
         '<div style="display:flex;align-items:baseline;gap:1px;line-height:1;">'+
           '<span class="logo-bracket" style="font-size:26px;color:var(--accent-text);font-family:\'Cormorant Garamond\',serif;font-weight:300;font-style:italic;line-height:.85;">[</span>'+
           '<span class="logo-letters" style="font-size:18px;font-weight:800;letter-spacing:-.04em;color:var(--ink);font-family:\'Cormorant Garamond\',serif;">Gr.</span>'+
@@ -4744,24 +4722,17 @@ function openHoyMenu(event){
   menu._t = Date.now(); menu._noAuto = true;
   var sort = S.hoySort||'manual', dens = S.listDensity||'normal', wkOn = S.showWeeklyMessage!==false;
   menu._main = [
-    {label:'Orden de la lista', icon:ico('sort',15), sub:[
-      {label:'Manual', check:sort==='manual', action:"setHoySort('manual')"},
-      {label:'Por hora', check:sort==='hora', action:"setHoySort('hora')"},
-      {label:'Cruciales primero', check:sort==='crucial', action:"setHoySort('crucial')"}]},
-    {label:S.hideDone?'Mostrar tareas hechas':'Ocultar tareas hechas', icon:ico(S.hideDone?'eye':'eyeoff',15), action:'toggleHideDone()'},
     {label:'Densidad', icon:ico('rows',15), sub:[
       {label:'Compacta', check:dens==='compact', action:"setListDensity('compact')"},
       {label:'Normal', check:dens==='normal', action:"setListDensity('normal')"},
       {label:'Cómoda', check:dens==='cozy', action:"setListDensity('cozy')"}]},
-    {label:'Plegar o desplegar categorías', icon:ico('folder',15), action:'toggleAllCatSections()'},
     {divider:true},
     {label:'Reordenar tareas', icon:ico('sort',15), action:'startReorder()'},
     {divider:true},
     {label:'Recordatorio de la semana', icon:ico('chat',15), sub:[
       {label:'Escribir o editar…', action:'openWeeklyMessageEditor()'},
       {label:wkOn?'Ocultar la franja':'Mostrar la franja', action:'toggleShowWeeklyMessage()'}]},
-    {label:'Reiniciar tareas de hoy…', icon:ico('reset',15), action:'askResetToday()'},
-    {label:'Configurar categorías…', icon:ico('folder',15), action:'goToCategoryConfig()'}
+    {label:'Reiniciar tareas de hoy…', icon:ico('reset',15), action:'askResetToday()'}
   ];
   taskMenuDraw(menu, menu._main, false);
   document.body.appendChild(menu);
@@ -6210,7 +6181,7 @@ function faqItems(){
       ['¿Cómo veo la semana anterior?', 'En Hoy, desliza hacia la izquierda desde el lunes (o toca la flecha de día anterior): la app te pregunta si quieres ver la semana anterior, solo para mirar, con lo que marcaste y lo que no, día por día.'],
       ['¿Qué pasa si reinicio la semana el fin de semana?', 'Pasas a ver la semana siguiente: los días muestran sus fechas y aparece la etiqueta "próxima semana". El lunes todo coincide solo.'],
       ['¿Cómo cobro a fin de mes o en N días?', 'En la tarea, sección Registro, elige "¿Cuándo se cobra o paga?". Al completarla, el movimiento queda como esperado con esa fecha. Si ya había un esperado, se abre una ventanilla directa para confirmarlo o dejarlo pendiente y que la app te pregunte de nuevo en unos días.'],
-      ['¿Puedo combinar checklist y temporizador?', 'Sí. La tarea se completa cuando terminas el temporizador y los ítems del checklist. En el temporizador puedes guardar tu avance y continuar más tarde el mismo día, anotar cuánto hiciste en cada ejercicio (y el peso) y agregar ejercicios guardados con el botón +.'],
+      ['¿Puedo combinar checklist y rutina?', 'Sí. La tarea se completa cuando terminas la rutina y los ítems del checklist (si cada ítem tiene su propia rutina, basta con completar los ítems). En la rutina puedes guardar tu avance y continuar más tarde el mismo día, anotar cuánto hiciste en cada ejercicio (y el peso) y agregar ejercicios guardados con el botón +.'],
       ['¿Qué es la Constancia por tarea?', 'En Yo → Estadísticas: un mapa de calor con una celda por semana para cada tarea diaria recurrente (hecha, no hecha o ignorada). Puedes elegir si las semanas ignoradas cuentan como no hechas o no afectan tu cumplimiento ni tu racha. Se va llenando desde que empiezas a completar la tarea.'],
       ['¿Qué hace "Ignorar esta semana"?', 'En una tarea diaria, desde su ⋯: la deja en pausa solo durante la semana en curso (se ve atenuada, no se puede marcar y no cuenta en el porcentaje del día, el umbral de racha ni el calendario: se calculan solo con las tareas habilitadas). Se reactiva sola la semana siguiente, o antes con "Reactivar esta semana".'],
       ['¿Qué hay en el botón de opciones de Hoy?', 'Es el botón con ícono de ajustes, a la derecha de los filtros (Todas / Pendientes / categorías): Reordenar tareas, mostrar u ocultar el recordatorio de la semana, y un atajo a Yo → Personalización → Categorías para elegir cómo se pliegan las categorías.'],
@@ -6828,9 +6799,10 @@ var REG_TEMPLATES = {
   libre:   {label:'Libre',    labelHint:'Concepto (opcional)',            metrics:[]}
 };
 var REG_MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-function regList(){ return (S.registries||[]).filter(function(r){return !r.del;}); }
+function regListAll(){ return (S.registries||[]).filter(function(r){return !r.del;}); }
+function regList(){ return regListAll().filter(function(r){return !r.hidden;}); }
 function regEntries(r){ return (r.entries||[]).filter(function(e){return !e.del;}); }
-function regById(id){ return regList().find(function(r){return r.id===id;}) || null; }
+function regById(id){ return regListAll().find(function(r){return r.id===id;}) || null; }
 function regIcon(r,sz){ return '<span style="display:inline-flex;vertical-align:-3px;color:'+(r.color||'var(--accent-text)')+';">'+ico(r.kind==='finance'?'coin':(r.kind==='habit'?'check':'trend'),sz||19,1.8)+'</span>'; }
 function fmtShortDate(d){ if(!d) return ''; var p=d.split('-'); return parseInt(p[2],10)+' '+REG_MONTHS[parseInt(p[1],10)-1]; }
 function parseNumInput(str){
@@ -6876,7 +6848,7 @@ function trackLockedTap(){
   limGate('track_slot','Seguimiento bloqueado','Tu cupo de seguimientos es '+maxLevelTrackSlots()+'. Los datos siguen guardados.', null,
     'Mira un anuncio para sumar un cupo durante '+((adFeatureCfg('track_slot')||{}).days||7)+' días.');
 }
-function regCountedList(){ return regList().filter(function(r){return r.kind!=='cycle';}); }
+function regCountedList(){ return regListAll().filter(function(r){return r.kind!=='cycle';}); }
 function canCreateRegistry(kind){ return regCountedList().length < registryCap(); }
 function canCreateAnyRegistry(){ return canCreateRegistry(); }
 
@@ -6925,7 +6897,7 @@ function miniSpark(vals,color,bars){
 }
 function regSpark(r){
   if(r.kind==='cycle') return '';
-  var es=regEntries(r); if(es.length<2 && r.kind!=='habit') return '';
+  var es=regEntries(r); if(pzOn(r)) return ''; if(es.length<2 && r.kind!=='habit') return '';
   if(r.kind==='habit'){
     var m=habitMap(r), v=[], d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-13);
     for(var i=0;i<14;i++){ v.push(m[localDateStr(d)]===true?1:0); d.setDate(d.getDate()+1); }
@@ -6945,6 +6917,7 @@ function regQuickBtn(r){
   if(regLocked(r)) return '<button onclick="event.stopPropagation();regLockedTap()" aria-label="Bloqueado" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line);background:var(--bg);cursor:pointer;">🔒</button>';
   if(r.kind==='cycle') return '<button onclick="event.stopPropagation();cyDay(\''+r.id+'\',\''+todayStr()+'\')" aria-label="Anotar hoy" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);font-size:20px;">+</button>';
   var base='flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  if(pzOn(r)) return '<button onclick="event.stopPropagation();pzResetOpen(\''+r.id+'\')" aria-label="Reinicio" style="'+base+'border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);">'+ico('reset',17,2)+'</button>';
   if(r.kind==='habit'){
     var on=habitMap(r)[todayStr()]===true;
     return '<button onclick="event.stopPropagation();habitSet(\''+r.id+'\',\''+todayStr()+'\','+(on?'null':'true')+')" aria-label="'+(on?'Quitar marca de hoy':'Marcar hoy como cumplido')+'" style="'+base+'border:1.5px solid '+r.color+';background:'+(on?r.color:'transparent')+';color:'+(on?'#fff':r.color)+';">'+ico('check2',18,2.4)+'</button>';
@@ -6953,27 +6926,168 @@ function regQuickBtn(r){
 }
 function regOverviewHTML(list){
   var chips=[];
-  var habits=list.filter(function(r){return r.kind==='habit';});
-  if(habits.length){ var n=habits.filter(function(r){return habitMap(r)[todayStr()]===true;}).length; chips.push(['Hábitos de hoy', n+' de '+habits.length, n===habits.length]); }
+  var habits=list.filter(function(r){return r.kind==='habit' && !pzOn(r);});
+  if(habits.length){ var n=habits.filter(function(r){return habitMap(r)[todayStr()]===true;}).length; chips.push(['Constancia de hoy', n+' de '+habits.length, n===habits.length]); }
   var mk=todayStr().slice(0,7), byCur={};
   list.filter(function(r){return r.kind==='finance';}).forEach(function(r){ var c=r.currency||'$'; regEntries(r).forEach(function(e){ if(e.status==='expected'||e.date.slice(0,7)!==mk) return; byCur[c]=(byCur[c]||0)+(e.dir==='in'?e.amount:-e.amount); }); });
   Object.keys(byCur).forEach(function(c){ chips.push(['Neto del mes', fmtMoney(byCur[c],c), byCur[c]>=0]); });
   if(!chips.length) return '';
   return '<div style="display:flex;gap:8px;margin-bottom:12px;">'+chips.slice(0,3).map(function(c){ return '<div style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--line-soft);border-radius:12px;padding:9px 11px;"><div style="font-size:10.5px;color:var(--muted);">'+c[0]+'</div><div style="font-size:15px;font-weight:800;color:'+(c[2]?'var(--ink)':'var(--bad)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+c[1]+'</div></div>'; }).join('')+'</div>';
 }
+// ── Espacio oculto: registros y tasks que no aparecen en ninguna vista ─────────────
+// Las tasks ocultas se guardan aparte (S.hiddenTasks) para que ninguna pantalla, estadística o aviso las vea.
+// Los registros llevan r.hidden y regList() los excluye. Se entra con 5 toques rápidos al logo (+ PIN o huella opcional).
+var HID_TAPS = [];
+function hidTap(){
+  var n = Date.now(); HID_TAPS = HID_TAPS.filter(function(x){return n-x<2500;}); HID_TAPS.push(n);
+  if(HID_TAPS.length>=5){ HID_TAPS = []; hidOpen(); }
+}
+function hidCfg(){ return S.hid || {}; }
+function hidSha(str){
+  try{ var enc = new TextEncoder().encode(str); return crypto.subtle.digest('SHA-256', enc).then(function(b){ return Array.prototype.map.call(new Uint8Array(b),function(x){return ('0'+x.toString(16)).slice(-2);}).join(''); }); }
+  catch(e){ return Promise.resolve('p'+str); }
+}
+function hidBioOK(){ return !!(Platform && Platform.biometric && Platform.biometric.available); }
+function hidOpen(){
+  var c = hidCfg();
+  if(!c.pin){ hidScreen(); return; }
+  if(c.bio && hidBioOK()){
+    Promise.resolve(Platform.biometric.verify('Entrar al espacio oculto')).then(function(ok){ if(ok) hidScreen(); else hidPinPad(); }).catch(function(){ hidPinPad(); });
+    return;
+  }
+  hidPinPad();
+}
+function hidPinPad(){
+  removeOverlay('hid-pin');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='hid-pin'; ov.style.zIndex = 900;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('hid-pin'); });
+  ov.innerHTML = '<div class="sheet" style="text-align:center;"><div class="serif" style="font-weight:700;font-size:18px;margin-bottom:12px;">Código</div>'+
+    '<input id="hid-pin-in" class="finp" type="password" inputmode="numeric" maxlength="8" autocomplete="off" style="text-align:center;letter-spacing:.4em;font-size:20px;max-width:200px;margin:0 auto 12px;" onkeydown="if(event.key===\'Enter\')hidPinCheck()"/>'+
+    '<div id="hid-pin-err" style="font-size:12px;color:var(--bad);min-height:16px;margin-bottom:8px;"></div>'+
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'hid-pin\')">Cancelar</button><button class="sbtn" style="flex:1;" onclick="hidPinCheck()">Entrar</button></div></div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ var i=document.getElementById('hid-pin-in'); if(i) i.focus(); }, 120);
+}
+function hidPinCheck(){
+  var v = (document.getElementById('hid-pin-in')||{}).value||'', c = hidCfg();
+  hidSha((c.salt||'')+v).then(function(h){
+    if(h===c.pin){ removeOverlay('hid-pin'); hidScreen(); }
+    else { var e=document.getElementById('hid-pin-err'); if(e) e.textContent='Código incorrecto'; var i=document.getElementById('hid-pin-in'); if(i){ i.value=''; i.focus(); } }
+  });
+}
+function hidHiddenRegs(){ return regListAll().filter(function(r){return r.hidden;}); }
+function hidScreenBody(){
+  var c = hidCfg(), regs = hidHiddenRegs(), tasks = S.hiddenTasks||[];
+  var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:19px;display:flex;align-items:center;gap:8px;">'+ico('lock',18,1.8)+' Espacio oculto</span><button onclick="removeOverlay(\'hid-ov\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px;">Lo que ocultes no aparece en Hoy, estadísticas, avisos ni al compartir. Para ocultar algo usa «Ocultar» en su menú o en sus ajustes avanzados.</div>';
+  h += mSecLabel('Registros ocultos')+(regs.length ? regs.map(function(r){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;">'+
+      '<div onclick="openRegistryView(\''+r.id+'\')" style="flex:1;min-width:0;cursor:pointer;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+esc(regSummaryLine(r))+'</div></div>'+
+      '<button class="cbtn" style="padding:6px 10px;font-size:12px;" onclick="hidSetReg(\''+r.id+'\',false)">Mostrar</button></div>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">Ninguno.</div>');
+  h += mSecLabel('Tasks ocultas')+(tasks.length ? tasks.map(function(t){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--paper);border:1px solid var(--line-soft);border-radius:12px;margin-bottom:8px;">'+
+      '<div style="flex:1;min-width:0;font-weight:600;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text||'')+'</div>'+
+      '<button class="cbtn" style="padding:6px 10px;font-size:12px;" onclick="hidSetTask(\''+t.id+'\',false)">Mostrar</button></div>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">Ninguna.</div>');
+  h += '<details class="st-adv"><summary>Acceso y seguridad</summary><div style="padding-bottom:12px;font-size:12.5px;color:var(--ink-soft);line-height:1.5;">'+
+    '<div style="margin-bottom:10px;">Gesto de acceso: <b>5 toques rápidos al logo</b> (arriba a la izquierda).</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button class="cbtn" onclick="hidSetPin()">'+(c.pin?'Cambiar código':'Poner código')+'</button>'+
+      (c.pin?'<button class="cbtn" onclick="hidClearPin()">Quitar código</button>':'')+
+    '</div>'+
+    (c.pin && hidBioOK() ? '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;"><input type="checkbox" '+(c.bio?'checked':'')+' onchange="hidToggleBio(this.checked)" style="width:18px;height:18px;accent-color:var(--accent);"/> Usar huella o rostro</label>' : '')+
+  '</div></details>';
+  return h;
+}
+function hidScreen(){
+  removeOverlay('hid-ov');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='hid-ov'; ov.style.zIndex = 880;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('hid-ov'); });
+  ov.innerHTML = '<div class="sheet" id="hid-sheet" style="max-height:88vh;overflow-y:auto;">'+hidScreenBody()+'</div>';
+  document.body.appendChild(ov);
+}
+function hidRedraw(){ var s=document.getElementById('hid-sheet'); if(s) s.innerHTML=hidScreenBody(); }
+function hidSetPin(){
+  promptName('Nuevo código (4 a 8 dígitos)', '', function(v){
+    v = String(v||'').trim();
+    if(!/^\d{4,8}$/.test(v)){ toast('Usa de 4 a 8 dígitos'); return; }
+    var salt = uid();
+    hidSha(salt+v).then(function(h){ S.hid = Object.assign({}, S.hid||{}, {pin:h, salt:salt}); saveState(); hidRedraw(); toast('Código guardado'); });
+  });
+}
+function hidClearPin(){ S.hid = {}; saveState(); hidRedraw(); toast('Código quitado'); }
+function hidToggleBio(on){ S.hid = Object.assign({}, S.hid||{}, {bio:!!on}); saveState(); }
+function hidSetReg(id, on){
+  var r = regListAll().find(function(x){return x.id===id;}); if(!r) return;
+  r.hidden = !!on; r.updatedAt = new Date().toISOString(); saveState(); render(); hidRedraw();
+  toast(on?'Registro oculto':'Registro visible de nuevo');
+}
+function hidSetTask(id, on){
+  if(on){
+    var t = S.tasks.find(function(x){return x.id===id;}); if(!t) return;
+    S.tasks = S.tasks.filter(function(x){return x.id!==id;});
+    S.hiddenTasks = (S.hiddenTasks||[]).concat([t]);
+    try{ scheduleNotifications(); }catch(e){}
+    toast('Task oculta');
+  } else {
+    var h = (S.hiddenTasks||[]).find(function(x){return x.id===id;}); if(!h) return;
+    S.hiddenTasks = (S.hiddenTasks||[]).filter(function(x){return x.id!==id;});
+    S.tasks = S.tasks.concat([h]); toast('Task visible de nuevo');
+  }
+  saveState(); render(); hidRedraw();
+}
 function regSummaryLine(r){
   if(r.kind==='cycle') return cySummary(r);
   var es = regEntries(r);
+  if(pzOn(r)) return pzSummary(r);
   if(!es.length) return 'Sin registros todavía';
   if(r.kind==='finance'){
     var mk = todayStr().slice(0,7), inc=0, out=0, pend=0;
     es.forEach(function(e){ if(e.status==='expected'){ pend++; return; } if(e.date.slice(0,7)===mk){ if(e.dir==='in') inc+=e.amount; else out+=e.amount; } });
     return 'Este mes: '+fmtMoney(inc-out, r.currency);
   }
+  if(pzOn(r)) return pzSummary(r);
   if(r.kind==='habit'){ var hs=habitStreaks(habitMap(r)); return 'Racha: '+hs.cur+' día'+(hs.cur===1?'':'s')+' · mejor: '+hs.best; }
   var last = es.slice().sort(function(a,b){return (b.date+(b.ts||0)).toString().localeCompare((a.date+(a.ts||0)).toString());})[0];
   var parts = (r.metrics||[]).filter(function(m){return last.values && last.values[m.id]!=null;}).map(function(m){return fmtNum(last.values[m.id])+' '+m.unit;});
   return 'Último: '+(last.label?last.label+' · ':'')+(parts.join(' · ')||fmtShortDate(last.date));
+}
+function regRowHTML(r){
+  var html = '';
+  var pe_ = r.kind==='finance' ? regEntries(r).filter(function(e){return e.status==='expected';}) : [], pc = pe_.length, pl = pe_.filter(function(e){return pendDiff(e)<0;}).length;
+  if(SEL.active && SEL.type==='regs'){
+    var _ck = SEL.ids.indexOf(r.id)!==-1;
+    return '<div onclick="toggleSelect(\'regs\',\''+r.id+'\')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:'+(_ck?'var(--accent-bg)':'var(--paper)')+';border:1px solid '+(_ck?'var(--accent)':'var(--line-soft)')+';border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
+      '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(_ck?'var(--accent)':'var(--muted-soft)')+';background:'+(_ck?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(_ck?chkSVG():'')+'</div>'+
+      '<div style="width:34px;height:34px;border-radius:10px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
+      '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+regEntries(r).length+' entrada'+(regEntries(r).length===1?'':'s')+'</div></div></div>';
+  }
+  html += '<div data-drag-item data-id="'+r.id+'" style="'+(regLocked(r)?'opacity:.55;':'')+'display:flex;align-items:center;gap:6px;padding:10px 12px 10px 4px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;">'+gripHTML()+
+    '<div onclick="if(_selLpFired){_selLpFired=false;return;}openRegistryView(\''+r.id+'\')" oncontextmenu="event.preventDefault();if(!_selLpFired)openQuickAdd(\''+r.id+'\');return false;" ontouchstart="selLpStart(\'regs\',\''+r.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'regs\',\''+r.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;">'+
+    '<div style="width:38px;height:38px;border-radius:11px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
+    '<div style="flex:1;min-width:0;">'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(regLocked(r)?'🔒 ':'')+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(regSummaryLine(r))+'</div>'+
+    '</div>'+regSpark(r)+'</div>'+regQuickBtn(r)+
+  '</div>';
+  return html;
+}
+
+var REG_SECS = [['money','Dinero'],['marks','Medidas'],['const','Constancia']];
+function regSecOf(r){ return r.kind==='finance'?'money':(r.kind==='habit'?'const':'marks'); }
+function regSecOpen(k){ try{ var m=JSON.parse(localStorage.getItem('og6-regsec')||'{}'); return m[k]!==false; }catch(e){ return true; } }
+function regSecToggle(k){ try{ var m=JSON.parse(localStorage.getItem('og6-regsec')||'{}'); m[k]=!regSecOpen(k); localStorage.setItem('og6-regsec',JSON.stringify(m)); }catch(e){} render(); }
+function regSectionsHTML(list){
+  var html='', multi = REG_SECS.filter(function(sc){ return list.some(function(r){return regSecOf(r)===sc[0];}); }).length>1;
+  REG_SECS.forEach(function(sc){
+    var items = list.filter(function(r){return regSecOf(r)===sc[0];}); if(!items.length) return;
+    var open = !multi || regSecOpen(sc[0]);
+    if(multi) html += '<div onclick="regSecToggle(\''+sc[0]+'\')" style="display:flex;align-items:center;justify-content:space-between;margin:14px 2px 8px;cursor:pointer;font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);"><span>'+sc[1]+' · '+items.length+'</span><span style="display:inline-flex;transform:rotate('+(open?'0':'-90')+'deg);transition:transform .15s;">'+ico('chev',14,2)+'</span></div>';
+    if(open) html += '<div data-drag-list data-drag-cb="regs">'+items.map(regRowHTML).join('')+'</div>';
+  });
+  return html;
 }
 function renderRegistriesSection(){
   var list = regList();
@@ -6991,28 +7105,7 @@ function renderRegistriesSection(){
       '<div style="font-size:12px;color:var(--muted);line-height:1.6;">Anota gastos e ingresos, o marcas<br>como kilos, kilómetros o tiempos.</div>'+
     '</div>';
   }
-  html += '<div data-drag-list data-drag-cb="regs">';
-  list.forEach(function(r){
-    var pe_ = r.kind==='finance' ? regEntries(r).filter(function(e){return e.status==='expected';}) : [], pc = pe_.length, pl = pe_.filter(function(e){return pendDiff(e)<0;}).length;
-    if(SEL.active && SEL.type==='regs'){
-      var _ck = SEL.ids.indexOf(r.id)!==-1;
-      html += '<div onclick="toggleSelect(\'regs\',\''+r.id+'\')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:'+(_ck?'var(--accent-bg)':'var(--paper)')+';border:1px solid '+(_ck?'var(--accent)':'var(--line-soft)')+';border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
-        '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(_ck?'var(--accent)':'var(--muted-soft)')+';background:'+(_ck?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(_ck?chkSVG():'')+'</div>'+
-        '<div style="width:34px;height:34px;border-radius:10px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
-        '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+'</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+regEntries(r).length+' entrada'+(regEntries(r).length===1?'':'s')+'</div></div></div>';
-      return;
-    }
-    html += '<div data-drag-item data-id="'+r.id+'" style="'+(regLocked(r)?'opacity:.55;':'')+'display:flex;align-items:center;gap:6px;padding:10px 12px 10px 4px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+r.color+';border-radius:12px;margin-bottom:8px;">'+gripHTML()+
-      '<div onclick="if(_selLpFired){_selLpFired=false;return;}openRegistryView(\''+r.id+'\')" oncontextmenu="event.preventDefault();if(!_selLpFired)openQuickAdd(\''+r.id+'\');return false;" ontouchstart="selLpStart(\'regs\',\''+r.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'regs\',\''+r.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;">'+
-      '<div style="width:38px;height:38px;border-radius:11px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
-      '<div style="flex:1;min-width:0;">'+
-        '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(regLocked(r)?'🔒 ':'')+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(regSummaryLine(r))+'</div>'+
-      '</div>'+regSpark(r)+'</div>'+regQuickBtn(r)+
-    '</div>';
-  });
-  html += '</div>';
+  html += regSectionsHTML(list);
   html += colRowHTML() + planRowsHTML();
   if(!cyReg()){
     var _lk = featureLocked('cycle');
@@ -7084,7 +7177,7 @@ function regEditorBodyHTML(){
   var KIND_INFO = {
     finance:['Finanzas','Plata que entra y sale','Ej: sueldo, arriendo, compras'],
     metrics:['Marcas','Números que quieres mejorar','Ej: kilos, kilómetros, tiempos'],
-    habit:['Hábitos','Un sí o no por día','Ej: meditar, tomar agua']
+    habit:['Constancia','Sostener un hábito o pausar algo','Ej: meditar, o días sin fumar']
   };
   if(RE.isNew){
     var kinds = ['finance','habit'].filter(function(k){ return canCreateRegistry(k); });
@@ -7099,14 +7192,14 @@ function regEditorBodyHTML(){
   } else {
     html += '<div style="display:flex;align-items:center;font-size:12px;color:var(--muted);margin:-2px 0 14px;">Tipo: <b style="color:var(--ink);margin-left:4px;">'+KIND_INFO[r.kind==='finance'?'finance':(r.kind==='habit'?'habit':'metrics')][0]+'</b>'+infoBtn('regkind')+'</div>';
   }
-  var namePh = isFin ? 'Ej: Mis finanzas, Ahorro viaje' : (r.kind==='habit' ? 'Ej: Meditar, Tomar agua' : 'Ej: Escalada, Gimnasio, Carrera');
+  var namePh = isFin ? 'Ej: Mis finanzas, Ahorro viaje' : (r.kind==='habit' ? 'Ej: Meditar, Sin fumar' : 'Ej: Escalada, Gimnasio, Carrera');
   html += (RE.isNew?'<div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;">2. Ponle un nombre</div>':'')+
     '<input id="re-name" class="finp" type="text" placeholder="'+namePh+'" value="'+esc(r.name||'')+'" oninput="RE.reg.name=this.value;" style="margin-bottom:16px;"/>';
   if(isFin){
     html += mSecLabel('Símbolo de moneda')+
       '<input id="re-cur" class="finp" type="text" maxlength="4" value="'+esc(r.currency||'$')+'" oninput="RE.reg.currency=this.value||\'$\';" style="width:80px;margin-bottom:16px;"/>';
   } else if(r.kind==='habit'){
-    html += '<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:16px;">Cada día marcas si lo cumpliste o no. No necesitas configurar nada más.'+infoBtn('reghabit')+'</div>';
+    html += rePzModeHTML(r);
   } else {
     if(RE.isNew){
       html += mSecLabel('Atajo: empezar desde un ejemplo')+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">'+
@@ -7135,8 +7228,9 @@ function regEditorBodyHTML(){
           [['high','↑ Más alto es mejor'],['low','↓ Más bajo es mejor'],['none','— Sin récord']].map(function(o){return '<option value="'+o[0]+'"'+((m.better||'high')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>';
       }).join('')+'<div style="height:12px;"></div>';
     }
+    html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);margin:2px 0 14px;cursor:pointer;"><input type="checkbox" '+(r.hidden?'checked':'')+' onchange="RE.reg.hidden=this.checked" style="width:18px;height:18px;accent-color:var(--accent);"/> Ocultar este registro</label>';
     if(r.kind==='metrics') html += mSecLabel('Dificultad extra')+'<div id="re-mods">'+reModsHTML()+'</div><div style="height:14px;"></div>';
-    html += mSecLabel('Metas')+'<div id="re-goals">'+reGoalsHTML()+'</div><div style="height:14px;"></div>';
+    if(pzOn(r)) html += rePzAdvHTML(r); else html += mSecLabel('Metas')+'<div id="re-goals">'+reGoalsHTML()+'</div><div style="height:14px;"></div>';
     if(isFin){
       html += mSecLabel('Movimientos recurrentes','regrec')+'<div id="re-rec">'+reRecHTML()+'</div><div style="height:14px;"></div>'+
         mSecLabel('Presupuesto mensual','regbud')+'<div id="re-bud">'+reBudHTML()+'</div><div style="height:14px;"></div>';
@@ -7372,23 +7466,139 @@ function findTaskEntry(reg, t, itemId){
 function maybeOpenRegEntryForTask(taskId, extra){
   var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.registryId) return;
   var reg = regById(t.registryId); if(!reg) return;
+  if(pzOn(reg)) return;
   if(reg.kind==='habit'){ habitSet(reg.id, taskEntryDate(t), true, {taskId:t.id}); toast('Hábito marcado: sí'); return; }
   var ex = findTaskEntry(reg, t, extra && extra.itemId);
-  if(ex && ex.status!=='expected') return;
-  // Finanzas: si ya hay un ingreso/gasto ESPERADO que corresponde a esta tarea (aunque se haya anotado
-  // desde el registro, sin enlazarlo a la tarea), se pregunta solo por ese: obtenido o postergar.
-  if(!ex && reg.kind==='finance'){
+  // Finanzas: una misma tarea puede acumular VARIOS pendientes (p. ej. al reiniciarse la semana vuelve a
+  // quedar un pago por confirmar). Se busca primero el pendiente más antiguo, aunque otro ciclo ya esté confirmado.
+  if(reg.kind==='finance'){
     var tx = ((extra&&extra.label)||t.text||'').trim().toLowerCase();
     var _td = taskEntryDate(t);
     var pend = regEntries(reg).filter(function(e){ return e.status==='expected' && e.date<=_td && (!e.taskId || e.taskId===t.id) && !(e.itemId&&!(extra&&extra.itemId)) && (e.taskId===t.id || (e.label||'').trim().toLowerCase()===tx); })
       .sort(function(a,b){ return (a.date||'')<(b.date||'')?-1:1; });
-    if(pend.length) ex = pend[0];
-  }
+    if(pend.length && (!ex || ex.status!=='expected')) ex = pend[0];
+    else if(ex && ex.status!=='expected') return;
+  } else if(ex && ex.status!=='expected') return;
   if(ex){ openExpectedQuick(reg.id, ex.id, t.id); return; }
   openRegEntryForTask(taskId, true, extra);
 }
 // ── Hábitos sí / no ────────────────────────────────────────────────────────
 function habitMap(reg){ var m = {}; regEntries(reg).forEach(function(e){ m[e.date] = !!e.yes; }); return m; }
+// ── Constancia · modo "Pausar": días seguidos sin algo, con metas y reinicios ──
+var PZ_TIERS = [['nano','Nanometa',1],['micro','Micrometa',3],['meso','Mesometa',7],['gran','Gran meta',30],['hiper','Hipermeta',100]];
+function pzOn(r){ return !!r && r.kind==='habit' && r.mode==='pause'; }
+function pzDay(d){ return new Date(d+'T12:00:00'); }
+function pzDiff(a,b){ return Math.round((pzDay(b)-pzDay(a))/86400000); }
+function pzAdd(d,n){ var x=pzDay(d); x.setDate(x.getDate()+n); return localDateStr(x); }
+function pzStart(r){ return r.pzStart || (r.createdAt ? String(r.createdAt).slice(0,10) : todayStr()); }
+function pzResets(r){ return regEntries(r).filter(function(e){return e.reset;}).sort(function(a,b){return (a.date+(a.ts||0)).toString().localeCompare((b.date+(b.ts||0)).toString());}); }
+function pzRuns(r){
+  var runs=[], from=pzStart(r);
+  pzResets(r).forEach(function(e){
+    runs.push({from:from, to:e.date, days:Math.max(0,pzDiff(from,e.date)), open:false, reset:e});
+    from = pzAdd(e.date, Math.max(1,e.lapse||1)-1);
+  });
+  var t=todayStr();
+  runs.push({from:from, to:t, days:Math.max(0,pzDiff(from,t)), open:true});
+  return runs;
+}
+function pzGoal(r){ var g=r.pz||{}; if(g.days>0) return g.days; var t=PZ_TIERS.find(function(x){return x[0]===g.tier;}); return t?t[2]:0; }
+function pzTierFor(days){ var out=null; PZ_TIERS.forEach(function(t){ if(days>=t[2]) out=t; }); return out; }
+function pzCur(r){ var a=pzRuns(r); return a[a.length-1].days; }
+function pzBest(r){ return pzRuns(r).reduce(function(m,x){return Math.max(m,x.days);},0); }
+// ¿El reinicio respetó la tolerancia? null = sin tolerancia definida.
+function pzVerdict(r, e){
+  var g=r.pz||{}; if(!g.tol || g.tol==='none') return null;
+  var L=Math.max(1,e.lapse||1), rs=pzResets(r), i=rs.findIndex(function(x){return x.id===e.id;}), prev=i>0?Math.max(1,rs[i-1].lapse||1):null;
+  if(g.tol==='max') return L<=(g.tolMax||1);
+  if(g.tol==='less') return prev==null ? true : L<prev;
+  return null;
+}
+function pzSummary(r){
+  var c=pzCur(r), g=pzGoal(r), t=pzTierFor(c);
+  return c+' día'+(c===1?'':'s')+(g?' · meta '+g:'')+(t?' · '+t[1]:'');
+}
+function pzViewHTML(reg){
+  var runs=pzRuns(reg), cur=runs[runs.length-1].days, g=pzGoal(reg), best=pzBest(reg), resets=pzResets(reg), tier=pzTierFor(cur);
+  var col=reg.color||'var(--accent)', pct=g?Math.min(100,Math.round(cur/g*100)):0;
+  var html='<div style="background:var(--bg);border-radius:16px;padding:18px 14px;text-align:center;margin-bottom:12px;">'+
+    '<div class="serif" style="display:block;font-size:54px;font-weight:800;line-height:1;color:'+col+';text-align:center;">'+cur+'</div>'+
+    '<div style="font-size:12.5px;color:var(--ink-soft);margin-top:4px;">día'+(cur===1?'':'s')+' seguido'+(cur===1?'':'s')+(tier?' · <b>'+tier[1]+'</b>':'')+'</div>'+
+    (g?'<div style="height:7px;border-radius:4px;background:var(--line);margin:14px 6px 6px;overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:4px;"></div></div>'+
+      '<div style="font-size:11.5px;color:var(--muted);">'+(cur>=g?'Meta de '+g+' día'+(g===1?'':'s')+' lograda':'Meta: '+g+' día'+(g===1?'':'s')+' · faltan '+(g-cur))+'</div>':'')+
+  '</div>';
+  html+='<div style="display:flex;gap:6px;margin-bottom:12px;">'+PZ_TIERS.map(function(t){
+    var on=best>=t[2], nowOn=cur>=t[2];
+    return '<div style="flex:1;min-width:0;text-align:center;padding:8px 2px;border-radius:10px;border:1.5px solid '+(nowOn?col:'var(--line-soft)')+';background:'+(on?col+'22':'transparent')+';opacity:'+(on?1:.55)+';"><div style="font-size:12px;font-weight:800;color:var(--ink);">'+t[2]+'</div><div style="font-size:9px;color:var(--muted);margin-top:1px;">'+t[1].replace(' meta','')+'</div></div>';
+  }).join('')+'</div>';
+  html+='<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+    '<div style="flex:1;background:var(--bg);border-radius:12px;padding:9px 11px;"><div style="font-size:10.5px;color:var(--muted);">Mejor racha</div><div style="font-size:15px;font-weight:800;color:var(--ink);">'+best+' d</div></div>'+
+    '<div style="flex:1;background:var(--bg);border-radius:12px;padding:9px 11px;"><div style="font-size:10.5px;color:var(--muted);">Reinicios</div><div style="font-size:15px;font-weight:800;color:var(--ink);">'+resets.length+'</div></div>'+
+    '<div style="flex:1;background:var(--bg);border-radius:12px;padding:9px 11px;"><div style="font-size:10.5px;color:var(--muted);">Desde</div><div style="font-size:15px;font-weight:800;color:var(--ink);">'+fmtShortDate(pzStart(reg))+'</div></div></div>';
+  html+='<button onclick="pzResetOpen(\''+reg.id+'\')" style="width:100%;background:transparent;color:var(--ink);border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:16px;">Reinicio</button>';
+  html+='<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Historial</div>';
+  html+=runs.slice().reverse().map(function(x){
+    var v = x.reset ? pzVerdict(reg,x.reset) : null;
+    var right = x.reset ? '<button onclick="pzResetDel(\''+reg.id+'\',\''+x.reset.id+'\')" aria-label="Quitar reinicio" style="background:none;border:none;color:var(--muted-soft);font-size:18px;cursor:pointer;line-height:1;">×</button>' : '';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line-soft);font-size:12.5px;">'+
+      '<span style="flex:1;min-width:0;color:var(--ink);"><b>'+x.days+' día'+(x.days===1?'':'s')+'</b> <span style="color:var(--muted);">· '+fmtShortDate(x.from)+' → '+(x.open?'hoy':fmtShortDate(x.to))+'</span>'+
+      (x.reset && (x.reset.lapse||1)>1 ? '<div style="font-size:11px;color:var(--muted);">Reinicio de '+x.reset.lapse+' días'+(v===null?'':(v?' · dentro de tu límite':' · sobre tu límite'))+'</div>' : (v===false?'<div style="font-size:11px;color:var(--muted);">Sobre tu límite</div>':''))+'</span>'+right+'</div>';
+  }).join('');
+  return html;
+}
+function pzResetOpen(regId){
+  var reg=regById(regId); if(!reg) return;
+  var g=reg.pz||{}, tol=g.tol&&g.tol!=='none', rs=pzResets(reg), prev=rs.length?Math.max(1,rs[rs.length-1].lapse||1):null;
+  var hint = g.tol==='max' ? 'Tu límite: '+(g.tolMax||1)+' día'+((g.tolMax||1)===1?'':'s') : (g.tol==='less' ? (prev?'Menos que la vez anterior ('+prev+' d)':'Primera vez: sin comparación') : '');
+  removeOverlay('pz-reset');
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='pz-reset'; ov.style.zIndex=640;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('pz-reset'); });
+  ov.innerHTML='<div class="sheet"><div class="serif" style="font-weight:700;font-size:18px;margin-bottom:12px;">Reinicio</div>'+
+    mSecLabel('Fecha')+'<input id="pz-date" type="date" class="finp" value="'+todayStr()+'" max="'+todayStr()+'" style="margin-bottom:14px;"/>'+
+    (tol ? mSecLabel('¿Cuántos días duró?')+'<input id="pz-lapse" type="number" inputmode="numeric" min="1" value="1" class="finp" style="width:90px;margin-bottom:4px;"/><div style="font-size:11.5px;color:var(--muted);margin-bottom:14px;">'+hint+'</div>' : '')+
+    '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px;">Se guarda tu racha anterior y el contador parte de nuevo.</div>'+
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'pz-reset\')">Cancelar</button><button class="sbtn" style="flex:1;" onclick="pzResetSave(\''+regId+'\')">Reiniciar</button></div></div>';
+  document.body.appendChild(ov);
+}
+function pzResetSave(regId){
+  var reg=regById(regId); if(!reg) return;
+  var d=(document.getElementById('pz-date')||{}).value||todayStr(); if(d>todayStr()) d=todayStr();
+  var li=document.getElementById('pz-lapse'), lapse=li?Math.max(1,Math.round(+li.value)||1):1;
+  var e={id:uid(), date:d, ts:Date.now(), reset:true, lapse:lapse, yes:false};
+  reg.entries=(reg.entries||[]).concat([e]); reg.updatedAt=new Date().toISOString();
+  saveState(); removeOverlay('pz-reset'); refreshRegViews();
+  var v=pzVerdict(reg,e); toast(v===false?'Reinicio registrado · sobre tu límite':'Reinicio registrado');
+}
+function pzResetDel(regId, id){
+  var reg=regById(regId); if(!reg) return;
+  reg.entries=(reg.entries||[]).map(function(e){ return e.id===id ? Object.assign({},e,{del:true, ts:Date.now()}) : e; });
+  reg.updatedAt=new Date().toISOString(); saveState(); refreshRegViews(); toast('Reinicio quitado');
+}
+// Editor
+function reSetMode(k){ RE.reg.mode = k==='pause'?'pause':'do'; if(k==='pause' && !RE.reg.pz) RE.reg.pz={tier:'micro'}; if(k==='pause' && !RE.reg.pzStart) RE.reg.pzStart=todayStr(); reRerender(); }
+function rePzTier(k){ RE.reg.pz = Object.assign({},RE.reg.pz||{},{tier:k}); delete RE.reg.pz.days; reRerender(); }
+function rePzDays(v){ var n=Math.round(+v); RE.reg.pz = Object.assign({},RE.reg.pz||{}); if(n>0) RE.reg.pz.days=n; else delete RE.reg.pz.days; }
+function rePzTol(k){ RE.reg.pz = Object.assign({},RE.reg.pz||{},{tol:k}); reRerender(); }
+function rePzTolMax(v){ RE.reg.pz = Object.assign({},RE.reg.pz||{},{tolMax:Math.max(1,Math.round(+v)||1)}); }
+function rePzStart(v){ if(v) RE.reg.pzStart=v; }
+function rePzModeHTML(r){
+  var pause = r.mode==='pause', g=r.pz||{};
+  var h = mSecLabel('Modo')+mSegHTML('re-mode',[['do','Sostener'],['pause','Pausar']], pause?'pause':'do','reSetMode')+
+    '<div style="font-size:12px;color:var(--ink-soft);line-height:1.5;margin:8px 0 16px;">'+(pause?'Cuenta los días seguidos sin hacer algo. Si ocurre, haces un reinicio y se guarda tu racha.':'Cada día marcas si lo cumpliste o no. No necesitas configurar nada más.')+infoBtn('reghabit')+'</div>';
+  if(pause){
+    h += mSecLabel('Meta')+'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">'+PZ_TIERS.map(function(t){ var on=!g.days && g.tier===t[0];
+      return '<button type="button" onclick="rePzTier(\''+t[0]+'\')" style="padding:7px 11px;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--bg)')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+t[1]+' · '+t[2]+' d</button>'; }).join('')+'</div><div style="height:10px;"></div>'+
+    mSecLabel('Desde cuándo')+'<input type="date" class="finp" value="'+(r.pzStart||todayStr())+'" max="'+todayStr()+'" onchange="rePzStart(this.value)" style="margin-bottom:16px;"/>';
+  }
+  return h;
+}
+function rePzAdvHTML(r){
+  var g=r.pz||{}, tol=g.tol||'none';
+  return mSecLabel('Meta propia')+'<input type="number" inputmode="numeric" min="1" class="finp" placeholder="días (opcional)" value="'+(g.days||'')+'" oninput="rePzDays(this.value)" style="width:150px;margin-bottom:14px;"/>'+
+    mSecLabel('Límite de cada reinicio')+mSegHTML('re-ptol',[['none','Sin límite'],['max','Máximo'],['less','Menos que antes']],tol,'rePzTol')+
+    (tol==='max'?'<div style="display:flex;align-items:center;gap:8px;margin:8px 0 0;font-size:12.5px;color:var(--ink-soft);">Hasta <input type="number" inputmode="numeric" min="1" class="finp" value="'+(g.tolMax||2)+'" oninput="rePzTolMax(this.value)" style="width:70px;margin:0;"/> días</div>':'')+
+    '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin:8px 0 14px;">'+(tol==='less'?'Cada reinicio debería durar menos que el anterior.':(tol==='max'?'Al reiniciar, te pregunto cuántos días duró.':'Opcional: pon un tope a lo que dura cada reinicio.'))+'</div>';
+}
 function habitStreaks(map){
   var d = new Date(); d.setHours(12,0,0,0);
   if(map[localDateStr(d)]!==true) d.setDate(d.getDate()-1); // hoy aún sin marcar no corta la racha
@@ -8514,8 +8724,9 @@ function regHistListHTML(reg){
     var d = new Date(g.date+'T12:00:00'), sub = '';
     if(reg.kind==='finance'){
       // subtotal del día con TODAS sus entradas (aunque el corte de "ver más" las parta)
-      var net = all.filter(function(e){return e.date===g.date;}).reduce(function(a,e){return a+(e.dir==='in'?e.amount:-e.amount);},0);
-      sub = '<span style="color:'+(net>=0?'var(--good)':'var(--bad)')+';font-weight:700;">'+(net>=0?'+':'−')+fmtMoney(Math.abs(net),reg.currency).replace('−','')+'</span>';
+      var _cf = all.filter(function(e){return e.date===g.date && e.status!=='expected';});
+      var net = _cf.reduce(function(a,e){return a+(e.dir==='in'?e.amount:-e.amount);},0);
+      sub = !_cf.length ? '<span style="font-weight:600;">esperado</span>' : '<span style="color:'+(net>=0?'var(--good)':'var(--bad)')+';font-weight:700;">'+(net>=0?'+':'−')+fmtMoney(Math.abs(net),reg.currency).replace('−','')+'</span>';
     } else if(reg.kind==='metrics' && g.list.length>1){ sub = g.list.length+' registros'; }
     html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:12px 0 0;padding:0 2px 4px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);"><span>'+REG_DOW[d.getDay()]+' · '+fmtDateY(g.date)+'</span><span style="letter-spacing:0;text-transform:none;font-size:11.5px;">'+sub+'</span></div>'+
       g.list.map(function(e){ return regEntryRowHTML(reg,e,h); }).join('');
@@ -8658,7 +8869,7 @@ function regViewBodyHTML(reg){
         '<button onclick="removeOverlay(\'reg-view\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
       '</div>'+
     '</div>'+
-    '<button onclick="openRegEntry(\''+reg.id+'\',{})" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:14px;">+ Agregar '+(reg.kind==='finance'?'movimiento':(reg.kind==='habit'?'día':'registro'))+'</button>';
+    (pzOn(reg)?'':'<button onclick="openRegEntry(\''+reg.id+'\',{})" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-bottom:14px;">+ Agregar '+(reg.kind==='finance'?'movimiento':(reg.kind==='habit'?'día':'registro'))+'</button>');
   var tab = (S._regTab && S._regTab[reg.id]) || '';
   var entries = regEntryRowsHTML(reg);
   if(reg.kind==='finance'){
@@ -8668,6 +8879,7 @@ function regViewBodyHTML(reg){
     return top + regTabsHTML(reg,[['resumen','Resumen'],['analisis','Análisis'],['movs','Historial'+(pend?' · '+pend:'')]],tab)+
       (tab==='resumen' ? parts.summary : tab==='analisis' ? parts.analysis : regPendingHTML(reg)+'<div style="height:6px;"></div>'+entries);
   }
+  if(pzOn(reg)) return top + pzViewHTML(reg);
   if(reg.kind==='habit'){
     if(['resumen','entradas'].indexOf(tab)===-1) tab = 'resumen';
     return top + regTabsHTML(reg,[['resumen','Resumen'],['entradas','Historial']],tab) + (tab==='resumen' ? habitStatsHTML(reg) : entries);
@@ -9167,9 +9379,20 @@ function mergeCollection(cloud){
   S.collection = Object.keys(map).map(function(k){return map[k];});
 }
 var COL = {type:'libro', open:null};
+var COL_COLORS = {libro:'#7a6ad8',pelicula:'#d86a8a',serie:'#4a9cf7',museo:'#c48a12',otro:'#7d8a96'};
 function colRowHTML(){
-  var n = colLive().length, lk = featureLocked('coleccion');
-  return '<div '+(lk?'':'onclick="openCollection()" ')+'style="display:flex;align-items:center;gap:12px;padding:11px 12px;border:1.5px dashed var(--line);border-radius:12px;margin-bottom:8px;'+(lk?'opacity:.55;':'cursor:pointer;')+'"><div style="width:38px;height:38px;border-radius:11px;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--accent-text);">'+ico('book',20,1.7)+'</div><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Colección'+(lk?' '+soonBadge():'')+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(n?n+' elemento'+(n===1?'':'s'):'Libros, películas, museos y tus citas')+'</div></div></div>';
+  var lk = featureLocked('coleccion'), live = colLive();
+  var types = COL_TYPES.filter(function(t){ return live.some(function(x){return x.type===t[0];}); });
+  var head = '<div style="display:flex;align-items:center;margin:16px 2px 8px;font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">Listas'+(lk?' '+soonBadge():'')+'</div>';
+  if(!types.length) types = [COL_TYPES[0]];
+  return head + types.map(function(t){
+    var items = live.filter(function(x){return x.type===t[0];}), col = COL_COLORS[t[0]]||'#7d8a96';
+    var cur = items.filter(function(x){return x.status==='curso';}).length, done = items.filter(function(x){return x.status==='listo';}).length;
+    var sub = items.length ? (cur?cur+' en curso · ':'')+done+' terminado'+(done===1?'':'s') : 'Libros, películas, museos y tus citas';
+    return '<div '+(lk?'':'onclick="COL.type=\''+t[0]+'\';openCollection()" ')+'style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--paper);border:1px solid var(--line-soft);border-left:4px solid '+col+';border-radius:12px;margin-bottom:8px;'+(lk?'opacity:.55;':'cursor:pointer;')+'">'+
+      '<div style="width:38px;height:38px;border-radius:11px;background:'+col+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:'+col+';">'+ico('book',20,1.7)+'</div>'+
+      '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">'+(items.length?t[1]:'Colección')+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+sub+'</div></div></div>';
+  }).join('');
 }
 function openCollection(){
   if(featureLocked('coleccion')){ toast('Próximamente'); return; }
@@ -9191,6 +9414,84 @@ function colDraw(){
     (rows || '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:22px 0;line-height:1.6;">Aún no hay nada aquí.</div>')+
     '<button class="sbtn" style="width:100%;margin-top:6px;" onclick="openColItem(null)">+ Agregar</button></div>');
 }
+// ── Colección ↔ tasks: una task (o cada ítem de su checklist) puede ligarse a un elemento de la colección.
+// Al completarla se ofrece una ventanilla opcional (página, cita, valoración…) con campos configurables.
+var COL_FIELDS = [['done','Marcar como terminado'],['pages','Página en la que quedé'],['rating','Valoración'],['quote','Agregar una cita'],['note','Nota']];
+function colSheetCfg(){ var c = S.colSheet || {}, o = {}; COL_FIELDS.forEach(function(f){ o[f[0]] = c[f[0]]!==false; }); return o; }
+function colFieldsFor(type){
+  var m = {libro:['pages','done','rating','quote','note'], pelicula:['done','rating','note'], serie:['done','rating','note'], museo:['rating','quote','note'], otro:['done','rating','note']};
+  return m[type] || m.otro;
+}
+function mColSectionHTML(){
+  if(featureLocked('coleccion')) return '';
+  var t = M.task, live = colLive().filter(function(x){return x.status!=='listo' || x.id===t.colId;});
+  if(!live.length && !t.colId) return '';
+  var chip = function(on, txt, fn){ return '<button type="button" onclick="'+fn+'" style="padding:5px 11px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+txt+'</button>'; };
+  var h = mSecLabel('Colección')+'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+chip(!t.colId,'Ninguna','mSetCol(null)')+
+    live.slice(0,14).map(function(x){ return chip(t.colId===x.id, esc(x.title), 'mSetCol(\''+x.id+'\')'); }).join('')+'</div>';
+  if(t.colId){
+    var tg = function(on, label, fn){ return '<div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:10px;padding:9px 12px;margin-bottom:6px;"><div style="flex:1;font-size:12.5px;font-weight:600;color:var(--ink);">'+label+'</div><button type="button" class="tog" onclick="'+fn+'" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button></div>'; };
+    h += tg(t.colAsk!==false, 'Preguntar al completar', 'mColToggle(\'colAsk\')');
+    if(M.hasCL) h += tg(!!t.colPerItem, 'Preguntar por cada ítem del checklist', 'mColToggle(\'colPerItem\')');
+    h += '<div style="height:8px;"></div>';
+  } else h += '<div style="height:8px;"></div>';
+  return '<div id="m-col-sec">'+h+'</div>';
+}
+function mColRedraw(){ var b=document.getElementById('m-col-sec'); if(b){ var p=b.parentNode, tmp=document.createElement('div'); tmp.innerHTML=mColSectionHTML(); if(tmp.firstChild) p.replaceChild(tmp.firstChild,b); } }
+function mSetCol(id){ M.task.colId = id||null; if(!id){ M.task.colPerItem=false; M.task.colAsk=true; } mColRedraw(); }
+function mColToggle(k){ var cur = k==='colAsk' ? M.task.colAsk!==false : !!M.task.colPerItem; M.task[k] = !cur; mColRedraw(); }
+var CS = null;
+function colMaybeSheet(taskId, itemId){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.colId || t.colAsk===false || featureLocked('coleccion')) return;
+  if(itemId ? !t.colPerItem : (t.colPerItem && (t.checklist||[]).length)) return;
+  var it = colItem(t.colId); if(!it) return;
+  var cfg = colSheetCfg(), f = colFieldsFor(it.type).filter(function(k){return cfg[k];});
+  if(!f.length) return;
+  CS = {id:it.id, taskId:taskId, d:{pagesRead:it.pagesRead||'', done:false, rating:it.rating||0, quote:'', qpage:'', note:''}, open:false};
+  removeOverlay('col-sheet');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='col-sheet'; ov.style.zIndex = 650;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('col-sheet'); });
+  document.body.appendChild(ov); colSheetDraw();
+}
+function colSheetDraw(){
+  var ov = document.getElementById('col-sheet'); if(!ov||!CS) return;
+  var it = colItem(CS.id); if(!it){ removeOverlay('col-sheet'); return; }
+  var d = CS.d, cfg = colSheetCfg(), f = colFieldsFor(it.type), show = function(k){ return cfg[k] && f.indexOf(k)>=0; };
+  var lbl = function(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px;">'+t+'</div>'; };
+  var h = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(it.title)+'</span>'+
+    '<button onclick="CS.open=!CS.open;colSheetDraw()" aria-label="Personalizar" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;display:flex;">'+ico('gear',19,1.8)+'</button></div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Todo es opcional.</div>';
+  if(CS.open){
+    h += '<div style="background:var(--bg);border-radius:12px;padding:10px 12px;margin:8px 0;"><div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Qué preguntar</div>'+
+      COL_FIELDS.filter(function(x){return f.indexOf(x[0])>=0;}).map(function(x){ return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);padding:4px 0;cursor:pointer;"><input type="checkbox" '+(cfg[x[0]]?'checked':'')+' onchange="colSheetCfgSet(\''+x[0]+'\',this.checked)" style="width:17px;height:17px;accent-color:var(--accent);"/> '+x[1]+'</label>'; }).join('')+'</div>';
+  }
+  if(show('pages')) h += lbl('Página en la que quedé')+'<div style="display:flex;align-items:center;gap:8px;"><input class="finp" type="number" inputmode="numeric" value="'+esc(d.pagesRead)+'" oninput="CS.d.pagesRead=this.value" style="width:110px;margin:0;"/>'+(it.pages?'<span style="font-size:12px;color:var(--muted);">de '+esc(it.pages)+'</span>':'')+'</div>';
+  if(show('done')) h += '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink);margin-top:12px;cursor:pointer;"><input type="checkbox" '+(d.done?'checked':'')+' onchange="CS.d.done=this.checked" style="width:18px;height:18px;accent-color:var(--accent);"/> Lo terminé</label>';
+  if(show('rating')) h += lbl('Valoración')+'<div style="display:flex;gap:6px;">'+[1,2,3,4,5].map(function(n){ return '<button onclick="CS.d.rating=(CS.d.rating=='+n+'?0:'+n+');colSheetDraw()" style="background:none;border:none;font-size:26px;cursor:pointer;line-height:1;padding:2px;color:'+(n<=d.rating?'var(--accent)':'var(--line)')+';">★</button>'; }).join('')+'</div>';
+  if(show('quote')) h += lbl('Cita')+'<textarea class="finp" rows="2" placeholder="Escribe o pega una cita…" oninput="CS.d.quote=this.value" style="width:100%;box-sizing:border-box;font-family:Inter,sans-serif;">'+esc(d.quote)+'</textarea>'+(it.type==='libro'?'<input class="finp" placeholder="Página (opcional)" value="'+esc(d.qpage)+'" oninput="CS.d.qpage=this.value" style="width:140px;"/>':'');
+  if(show('note')) h += lbl('Nota')+'<textarea class="finp" rows="2" placeholder="¿Qué te dejó?" oninput="CS.d.note=this.value" style="width:100%;box-sizing:border-box;font-family:Inter,sans-serif;">'+esc(d.note)+'</textarea>';
+  h += '<div style="display:flex;gap:8px;margin-top:16px;"><button class="cbtn" style="flex:1;" onclick="removeOverlay(\'col-sheet\')">Omitir</button><button class="sbtn" style="flex:1;" onclick="colSheetSave()">Guardar</button></div></div>';
+  var keep = ov.querySelector('textarea:focus'); if(keep) return; // no redibujar mientras escribe
+  brPutSheet(ov, h);
+}
+function colSheetCfgSet(k, on){ S.colSheet = Object.assign({}, S.colSheet||{}); S.colSheet[k] = !!on; saveState(); colSheetDraw(); }
+function colSheetSave(){
+  var it = colItem(CS.id); if(!it){ removeOverlay('col-sheet'); return; }
+  var d = CS.d, cfg = colSheetCfg(), f = colFieldsFor(it.type), has = function(k){ return cfg[k] && f.indexOf(k)>=0; };
+  var prevPg = +it.pagesRead||0, wasDone = it.status==='listo';
+  if(has('pages') && +d.pagesRead>0){ it.pagesRead = Math.round(+d.pagesRead); if(it.pages && it.pagesRead>=+it.pages) d.done = true; }
+  if(has('rating') && d.rating) it.rating = d.rating;
+  if(has('quote') && (d.quote||'').trim()){ (it.quotes = it.quotes||[]).push({id:uid(), text:d.quote.trim().slice(0,600), page:(d.qpage||'').trim(), date:todayStr()}); }
+  if(has('note') && (d.note||'').trim()) it.note = ((it.note?it.note+'\n':'')+d.note.trim()).slice(-1500);
+  if(d.done && has('done') || (d.done && it.pages && it.pagesRead>=+it.pages)){ it.status='listo'; if(!it.end) it.end=todayStr(); if(it.pages && !it.pagesRead) it.pagesRead = it.pages; }
+  else if(it.status==='pend'){ it.status='curso'; if(!it.start) it.start=todayStr(); }
+  if(it.skill && skFindAny(it.skill)){
+    var dv = it.type==='libro' && it.pages ? Math.max(0,(+it.pagesRead||0)-prevPg) : ((it.status==='listo' && !wasDone) ? 1 : 0);
+    if(dv>0) skLogAdd(it.skill, dv, todayStr(), 'col:'+it.id);
+  }
+  colTouch(it); try{ chalSync(); }catch(e){}
+  removeOverlay('col-sheet'); try{ var cv=document.getElementById('col-view'); if(cv) colDraw(); }catch(e){} render(); toast('✓ Guardado en tu colección');
+}
 var CI = null;
 function openColItem(id){
   var ex = id ? colItem(id) : null;
@@ -9209,6 +9510,7 @@ function colItemDraw(){
     '<input class="finp" placeholder="'+(isBook?'Autor':(d.type==='museo'?'Ciudad o lugar':'Director o creador'))+'" maxlength="60" value="'+esc(d.author)+'" oninput="CI.d.author=this.value"/>'+
     lbl('Estado')+'<div style="display:flex;gap:6px;flex-wrap:wrap;">'+COL_STATUS.map(function(x){return chip(d.status===x[0], x[1], 'CI.d.status=\''+x[0]+'\';colItemDraw()');}).join('')+'</div>'+
     (isBook?'<div style="display:flex;gap:10px;margin-top:4px;"><label style="flex:1;font-size:11.5px;color:var(--muted);">Páginas<input class="finp" type="number" inputmode="numeric" value="'+esc(d.pages)+'" oninput="CI.d.pages=this.value"/></label><label style="flex:1;font-size:11.5px;color:var(--muted);">Leídas<input class="finp" type="number" inputmode="numeric" value="'+esc(d.pagesRead)+'" oninput="CI.d.pagesRead=this.value"/></label></div>':'')+
+    lbl('Nota')+'<textarea class="finp" rows="2" maxlength="1500" placeholder="Opcional" oninput="CI.d.note=this.value" style="width:100%;box-sizing:border-box;">'+esc(d.note||'')+'</textarea>'+
     lbl('Mi valoración')+'<div style="display:flex;gap:6px;">'+[1,2,3,4,5].map(function(n){ return '<button onclick="CI.d.rating=(CI.d.rating==='+n+'?0:'+n+');colItemDraw()" style="background:none;border:none;font-size:26px;cursor:pointer;color:'+(n<=d.rating?'#d1a23a':'var(--line)')+';padding:0 2px;">★</button>'; }).join('')+'</div>'+
     '<button class="cbtn" style="width:100%;text-align:left;margin-top:12px;" onclick="openSkPicker(CI.d.skill?[CI.d.skill]:[], function(a){CI.d.skill=a[0]||\'\';colItemDraw();}, \'Habilidad que trabaja\')">'+(CI.d.skill&&skFindAny(CI.d.skill)?'Habilidad: '+esc(skFindAny(CI.d.skill).a.name):'Habilidad que trabaja (opcional)')+'</button>'+
     lbl('Citas ('+(d.quotes||[]).length+')')+'<div id="ci-quotes">'+colQuotesHTML()+'</div>'+
@@ -13706,7 +14008,7 @@ function clSegBarHTML(t, r){
 function clRingHTML(ratio, done, onclick, prog, size){
   size = size || 26;
   var cls = 'chk'+(done?' done':(ratio>0?' partial':''));
-  var st = 'width:'+size+'px;height:'+size+'px;'+((!done&&ratio>0)?'--p:'+Math.round(ratio*100)+'%;':'');
+  var st = 'width:'+size+'px;height:'+size+'px;border-radius:50%;'+((!done&&ratio>0)?'--p:'+Math.round(ratio*100)+'%;':'');
   var inner = done ? miniChkSVG() : ((prog>0)?'<span style="font-size:10px;font-weight:800;color:var(--accent-text);line-height:1;">'+prog+'</span>':'');
   return '<div class="'+cls+'" style="'+st+'"'+(onclick?' onclick="'+onclick+'" role="button"':'')+'>'+inner+'</div>';
 }
@@ -13723,6 +14025,7 @@ function taskHTML(t,showPeriod){
   var done=isDone(t),r=tRatio(t);
   var hasQty=(t.qty||1)>1,hasCL=t.checklist&&t.checklist.length>0;
   var hasTimer = !!(t.hasTimer && t.timer && t.timer.sets && t.timer.sets.length);
+  var hasPlay = hasTimer || (t.checklist||[]).some(function(i){ return !i.done && itemHasRoutine(i); });
   var clDone=hasCL?t.checklist.filter(function(i){return i.done;}).length:0;
   // Pedido: si el checklist usa la regla "con algunos alcanza" (K de N), el
   // contador de la fila muestra "hechos/K" en vez de "hechos/N total" —
@@ -13766,7 +14069,7 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
           '</div>';
       } else {
         clHTML+='<div class="cl-row" onclick="tapCL(\''+t.id+'\',\''+item.id+'\')">'+
-          '<div class="cl-box'+(item.done?' done':'')+'">'+(item.done?miniChkSVG():'')+'</div>'+
+          clRingHTML(item.done?1:0, item.done, '', 0, 28)+
           '<span style="font-size:13px;color:'+(item.done?'var(--muted-soft)':'var(--ink-soft)')+';text-decoration:'+(item.done?'line-through':'none')+';">'+linkedMark+esc(item.text)+'</span>'+itemTmPlayHTML(t,item)+
           '</div>';
       }
@@ -13809,7 +14112,7 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       // Botón de temporizador (pedido): abre la pantalla de ejecución con
       // sets/descansos. La casilla de la izquierda sigue funcionando normal
       // para marcarla a mano, sin usar el temporizador — no son excluyentes.
-      (hasTimer?'<button onclick="event.stopPropagation();openTimerRun(\''+t.id+'\')" title="'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'Continuar temporizador':'Iniciar temporizador')+'" style="background:'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'var(--ink)':'var(--accent)')+';border:none;color:#fff;font-size:12px;padding:0;width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="15" height="15" style="margin-left:1px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.5-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z"/></svg></button>':'')+
+      (hasPlay?'<button onclick="event.stopPropagation();openTaskPlay(\''+t.id+'\')" title="'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'Continuar rutina':'Iniciar rutina')+'" style="background:'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'var(--ink)':'var(--accent)')+';border:none;color:#fff;font-size:12px;padding:0;width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="15" height="15" style="margin-left:1px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.5-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z"/></svg></button>':'')+
       // Insignia de vínculo: solo si la tarea está vinculada (editar y vincular viven en el menú ⋯ y al tocar el nombre)
       taskAppChipHTML(t)+
       (_linked?'<button onclick="event.stopPropagation();openLinkModal(\''+t.id+'\')" title="Vinculada — toca para ver o cambiar" aria-label="Vinculada" style="background:none;border:none;color:var(--accent-text);opacity:.85;padding:0;width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('link',17,1.8)+'</button>':'')+
@@ -13976,6 +14279,7 @@ function openTaskMenu(id, event){
     main.push({label:'Organizar', icon:_og[0].icon, sub:_og});
     var _sk=_by('toggleSkipTaskWeek')[0]; if(_sk) main.push(_sk);
   }
+  main.push({label:'Ocultar', icon:ico('lock',15), action:"hidSetTask('"+id+"',true)"});
   main.push(items[items.length-1]);
   menu._main = main;
   taskMenuDraw(menu, main, false);
@@ -16074,8 +16378,8 @@ function timerReleaseWakeLock(){
   if(Platform.isNative && Platform.keepAwake.available()) Platform.keepAwake.off();
   if(TR && TR.wakeLock){ try{TR.wakeLock.release();}catch(e){} TR.wakeLock=null; }
 }
-function buildTimerAndStart(taskId, timer, taskName, isPreview){
-  var built = buildTimerSteps(timer, true);
+function buildTimerAndStart(taskId, timer, taskName, isPreview, prebuilt){
+  var built = prebuilt || buildTimerSteps(timer, true);
   if(!built.steps.length){ toast('Agrega al menos un ejercicio'); return; }
   TR = {
     taskId: isPreview?null:taskId, preview: !!isPreview, taskName: taskName,
@@ -16170,7 +16474,8 @@ function timerApplyNext(st){
   if(TR.taskId && st.setId){
     var t=S.tasks.find(function(x){return x.id===TR.taskId;});
     if(t){
-      if(TR.itemId){ var it=(t.checklist||[]).find(function(i){return i.id===TR.itemId;}); if(it && it.timer && it.timer.config){ done=upd((it.timer.config.sets||[]).find(function(x){return x.id===st.setId;})); } }
+      var _iid = st.itemId || TR.itemId;
+      if(_iid){ var it=(t.checklist||[]).find(function(i){return i.id===_iid;}); if(it && it.timer && it.timer.config){ done=upd((it.timer.config.sets||[]).find(function(x){return x.id===st.setId;})); } }
       else if(t.timer) done=upd((t.timer.sets||[]).find(function(x){return x.id===st.setId;}));
     }
   }
@@ -16262,7 +16567,7 @@ function timerMarkTask(){
     updated.done = isDone(updated);
     var justCompleted = !wasDone && isDone(updated);
     finishUpdate(updated, justCompleted, 0);
-    toast(justCompleted ? 'Tarea completada' : 'Temporizador listo · faltan ítems del checklist');
+    toast(justCompleted ? 'Tarea completada' : 'Rutina lista · faltan ítems del checklist');
   } else if(!isDone(t)) tapTask(TR.taskId);
 }
 function timerFinish(){
@@ -16275,7 +16580,8 @@ function timerFinish(){
   timerVib(timerCfgNorm().vibrate?[60,60,60]:50);
   try{ if(timerNative()) Platform.timer.stop(); }catch(e){}
   try{ timerLogHistory(); }catch(e){}
-  if(!TR.preview && TR.taskId && TR.itemId){ try{ timerMarkItem(); }catch(e){} }
+  if(!TR.preview && TR.taskId && TR.itemIds){ TR.itemIds.forEach(function(id){ try{ timerMarkItem(id); }catch(e){} }); }
+  else if(!TR.preview && TR.taskId && TR.itemId){ try{ timerMarkItem(); }catch(e){} }
   else if(!TR.preview && TR.taskId){ try{ timerMarkTask(); }catch(e){} timerClearSession(TR.taskId); }
   else if(!TR.preview && TR.tplId){ timerClearSession('tpl:'+TR.tplId); }
   timerRenderFrame(true);
@@ -16391,13 +16697,13 @@ function closeTimerRun(){
 function confirmExitTimerRun(){
   if(!TR) return;
   if(TR.finished){ closeTimerRun(); return; }
-  var canSave = !TR.preview && (TR.taskId || TR.tplId) && !TR.itemId;
+  var canSave = !TR.preview && (TR.taskId || TR.tplId) && !TR.itemId && !TR.itemIds;
   var box=document.createElement('div');
   box.className='conf-box';
   box.style.zIndex = 9000;
   box.innerHTML='<div class="conf-inner">'+
     '<div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:10px;">¿Salir del temporizador?</div>'+
-    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">'+(canSave?'Puedes guardar tu avance y continuar más tarde hoy, justo donde quedaste.':((TR.free||TR.itemId)?'Se pierde el progreso de este temporizador.':'Se pierde el progreso de esta vista previa.'))+'</div>'+
+    '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:16px;text-align:center;">'+(canSave?'Puedes guardar tu avance y continuar más tarde hoy, justo donde quedaste.':((TR.free||TR.itemId||TR.itemIds)?'Se pierde el progreso de este temporizador.':'Se pierde el progreso de esta vista previa.'))+'</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
       (canSave?'<button onclick="this.closest(\'.conf-box\').remove();timerSaveSession();" style="background:var(--accent);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Guardar y continuar luego</button>':'')+
       '<button onclick="this.closest(\'.conf-box\').remove();closeTimerRun();" style="background:var(--bg);color:var(--bad);border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Salir sin guardar</button>'+
@@ -16776,7 +17082,7 @@ function timerSeedDefaults(){
 function timerLogHistory(){
   if(!TR || TR.preview || TR.logged) return;
   TR.logged = true;
-  var group = TR.group || null, kind = TR.itemId ? 'item' : (TR.taskId ? 'task' : 'free'), t = null;
+  var group = TR.group || null, kind = (TR.itemId||TR.itemIds) ? 'item' : (TR.taskId ? 'task' : 'free'), t = null;
   if(TR.taskId){
     t = S.tasks.find(function(x){return x.id===TR.taskId;});
     if(!group && t && t.categoryId){ var c=(S.categories||[]).find(function(c){return c.id===t.categoryId;}); if(c) group=c.name; }
@@ -16850,7 +17156,7 @@ function openTimerHistDetail(id){
   ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('hist-detail'); });
   var st=h.startedAt||h.ts, d=new Date(st), end=new Date(st+(h.sec||0)*1000);
   var isBreath = h.group==='Respiración';
-  var kindTxt = h.kind==='task' ? 'Tarea con temporizador' : h.kind==='item' ? 'Ítem de checklist' : 'Temporizador libre';
+  var kindTxt = h.kind==='task' ? 'Tarea con rutina' : h.kind==='item' ? 'Ítem de checklist' : 'Temporizador libre';
   var tile=function(v,l){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:12px;padding:11px 8px;text-align:center;"><div style="font-size:17px;font-weight:800;color:var(--ink);white-space:nowrap;">'+v+'</div><div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px;">'+l+'</div></div>'; };
   var sec=function(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;">'+t+'</div>'; };
   var kv=function(k,v){ return '<div style="display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13px;"><span style="color:var(--muted);flex-shrink:0;">'+k+'</span><span style="color:var(--ink);font-weight:600;text-align:right;min-width:0;word-break:break-word;">'+v+'</span></div>'; };
@@ -17500,7 +17806,7 @@ function renderProgressLogros(){
   // estadísticas de Progreso — el calendario ya vive en su propia
   // subpestaña (Plan → Calendarios), no hace falta un atajo duplicado acá.
   html += shareHubCardHTML();
-  html += habLinkCardHTML();
+  // (botón "Habilidades y seguimientos" quitado de Progreso)
   html += renderMedals();
   html += renderAchievements();
   
@@ -17539,7 +17845,10 @@ function calAgendaData(dateKey){
   var recShown = inCur && !hideRec ? rec : [];
   var interactive = dated.concat(recShown);
   var ghost = (!inCur && isFuture && !hideRec) ? rec.filter(function(t){return !t.oneShotWeek;}) : [];
-  return {date:d, isFuture:isFuture, inCur:inCur, interactive:interactive, dated:dated, recShown:recShown, recCount:rec.length, ghost:ghost, skipped:skipped, hasRecurring:rec.length>0};
+  // Vista de conjunto (puntos del calendario y "próximos días"): cuenta las recurrentes aunque estén plegadas en la lista.
+  var glanceGhost = (!inCur && isFuture) ? rec.filter(function(t){return !t.oneShotWeek;}) : [];
+  var glance = dated.concat(inCur ? rec : glanceGhost);
+  return {glance:glance, glanceGhost:glanceGhost, date:d, isFuture:isFuture, inCur:inCur, interactive:interactive, dated:dated, recShown:recShown, recCount:rec.length, ghost:ghost, skipped:skipped, hasRecurring:rec.length>0};
 }
 function calGroupSort(list){
   return list.slice().sort(function(a,b){
@@ -17558,9 +17867,9 @@ function calCellHTML(key, opts){
   var isFuture = d > t0;
   var reached = data && data.streakReached;
   var A = calAgendaData(key);
-  var all = A.interactive.concat(A.ghost);
+  var all = A.glance;
   var dots = all.slice(0,3).map(function(t){
-    var gh = A.ghost.indexOf(t)!==-1, dn = !gh && isDone(t), col = calCatColor(t);
+    var gh = A.glanceGhost.indexOf(t)!==-1, dn = !gh && isDone(t), col = calCatColor(t);
     return '<span style="width:5px;height:5px;border-radius:50%;background:'+(dn?col:'transparent')+';border:1.3px solid '+col+';opacity:'+(gh?.45:1)+';box-sizing:border-box;"></span>';
   }).join('');
   var more = all.length>3 ? '<span style="font-size:8px;line-height:5px;color:var(--muted);font-weight:700;">+'+(all.length-3)+'</span>' : '';
@@ -17708,7 +18017,7 @@ function renderCalUpcoming(dateKey){
   var rows = '';
   for(var i=1;i<=6;i++){
     var k = localDateStr(addDaysLocal(parseLocalDate(dateKey), i));
-    var A = calAgendaData(k), all = A.interactive.concat(A.ghost);
+    var A = calAgendaData(k), all = A.glance;
     var d = A.date;
     var names = all.slice(0,2).map(function(t){return esc(t.text);}).join(' · ');
     rows += '<div onclick="selectCalendarDay(\''+k+'\')" style="display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;">'+
@@ -19301,6 +19610,7 @@ function tapCL(taskId,itemId){
   if(toggledItem && toggledItem.done && t.regPerItem && t.registryId && regById(t.registryId)){
     (function(tid,iid,txt){ setTimeout(function(){ maybeOpenRegEntryForTask(tid, {itemId:iid, label:txt}); }, 450); })(t.id, toggledItem.id, toggledItem.text||'');
   }
+  if(toggledItem && toggledItem.done && t.colId && t.colPerItem){ (function(tid,iid){ setTimeout(function(){ colMaybeSheet(tid, iid); }, 700); })(t.id, toggledItem.id); }
 }
 // Sumar/restar de a 1 unidad en un ítem de checklist con cantidad, desde la
 // vista rápida del día a día (sin tener que abrir el editor de la tarea).
@@ -19331,6 +19641,7 @@ function stepCL(taskId,itemId,stepDelta){
   if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, taskLevelDelta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, taskLevelDelta);
   if(itemJustCompleted && t.regPerItem && t.registryId && regById(t.registryId)){ (function(tid,iid,txt){ setTimeout(function(){ maybeOpenRegEntryForTask(tid, {itemId:iid, label:txt}); }, 450); })(t.id, targetItem.id, targetItem.text||''); }
+  if(itemJustCompleted && t.colId && t.colPerItem){ (function(tid,iid){ setTimeout(function(){ colMaybeSheet(tid, iid); }, 700); })(t.id, targetItem.id); }
 }
 // Pedido: poder escribir el número de avance directo en la lista del día a
 // día (no solo con −/+) — útil cuando la meta es un número grande.
@@ -19361,6 +19672,7 @@ function setCLProg(taskId,itemId,val){
   if(hasLinks(t.clLinkUp)) propagateCLLink({linkUp:t.clLinkUp}, taskLevelDelta, justCompleted?1:(justUncompleted?-1:0));
   finishUpdate(updated, justCompleted, taskLevelDelta);
   if(itemJustCompleted && t.regPerItem && t.registryId && regById(t.registryId)){ (function(tid,iid,txt){ setTimeout(function(){ maybeOpenRegEntryForTask(tid, {itemId:iid, label:txt}); }, 450); })(t.id, targetItem.id, targetItem.text||''); }
+  if(itemJustCompleted && t.colId && t.colPerItem){ (function(tid,iid){ setTimeout(function(){ colMaybeSheet(tid, iid); }, 700); })(t.id, targetItem.id); }
 }
 function expCL(id){
   var cl=document.getElementById('cl-'+id),exp=document.getElementById('exp-'+id);if(!cl)return;
@@ -19414,8 +19726,8 @@ function clSheetItemsHTML(t){
   var head = '<div style="display:flex;align-items:center;gap:10px;margin:-4px 0 6px;"><span style="font-size:13px;font-weight:800;color:var(--accent-text);font-variant-numeric:tabular-nums;">'+Math.round(_r*100)+'% logrado</span><div style="flex:1;">'+clSegBarHTML(t,_r)+'</div></div>';
   return head + t.checklist.map(function(item){
     var q=clItemQty(item), isQtyItem=q>1;
-    var leftHTML = isQtyItem ? clRingHTML(clItemRatio(item), item.done, 'sheetTapCLQty(\''+t.id+'\',\''+item.id+'\')', item.prog||0, 26) :
-      ('<div style="width:26px;height:26px;border-radius:7px;border:'+(item.done?'2px solid var(--accent-fill,var(--accent))':'2px solid var(--muted-soft)')+';background:'+(item.done?'var(--accent-fill,var(--accent))':'var(--paper)')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="sheetToggleCL(\''+t.id+'\',\''+item.id+'\')">'+(item.done?miniChkSVG():'')+'</div>');
+    var leftHTML = isQtyItem ? clRingHTML(clItemRatio(item), item.done, 'sheetTapCLQty(\''+t.id+'\',\''+item.id+'\')', item.prog||0, 28) :
+      clRingHTML(item.done?1:0, item.done, 'sheetToggleCL(\''+t.id+'\',\''+item.id+'\')', 0, 28);
     var stepHTML = isQtyItem ?
       ('<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">'+
         '<button class="cl-step-btn" onclick="sheetStepCL(\''+t.id+'\',\''+item.id+'\',-1)">−</button>'+
@@ -19526,6 +19838,7 @@ function finishUpdate(updated, justCompleted, delta){
     } else if((updated.skills||[]).length){
       var _stid = updated.id; setTimeout(function(){ openTaskGains(_stid); }, 500);
     }
+    if(updated.colId){ var _ctid = updated.id; setTimeout(function(){ colMaybeSheet(_ctid); }, 900); }
   }
   if(justCompleted) checkStreakNow();
   S._softDone = false;
@@ -20106,7 +20419,6 @@ function fabAddTap(){
   m.id = 'fab-menu';
   m.style.cssText = 'position:fixed;right:'+Math.max(8,window.innerWidth-r.right)+'px;bottom:'+(window.innerHeight-r.top+10)+'px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:800;min-width:230px;overflow:hidden;';
   m.innerHTML = item(I('<path d="M12 5v14M5 12h14"/>'),'Nueva tarea','Para este día','openNew(\'dia\')')+
-    div+item(I('<path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/>'),'Captura rápida','Escribe: «Dentista mañana 10:00»','openQuickCapture()')+
     (hasRegs ? div+item(I('<path d="M6 3h11a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM6 3v18M10 8h5M10 12h5"/>'),'Anotar movimiento','Gasto, ingreso o marca','openQuickAdd()') : '')+
     (tOn ? div+item(I('<path d="M13 2.5L4.5 14h6l-1.5 7.5L18.5 10h-6l1.5-7.5z"/>'),'Iniciar enfoque','Cuenta regresiva o rutina','setTab(\'timer\')') : '');
   document.body.appendChild(m);
@@ -20324,8 +20636,8 @@ var INFO_TIPS = {
 
   goal:'Simple: se marca y listo. Cantidad: una meta numérica (ej. 8 vasos). Checklist: sub-pasos, con opción de que alcance con algunos. El temporizador se suma aparte y se puede combinar con un checklist.',
   plannotify:'Cuando avanzas una tarea de Hoy que está vinculada a un objetivo del Plan, aparece un aviso breve arriba con el avance (y más largo si lo completas). Se cierra solo; con "Ver" vas a Objetivos.',
-  cltimer:'Toca el reloj de un ítem para darle su propio temporizador (por ejemplo 25 min). En Hoy verás un botón de play junto al ítem; al terminar la cuenta, el ítem se marca solo. Puedes ponerlo en uno o en varios ítems. Es independiente del temporizador general de la tarea.',
-  timeradd:'Agrega una cuenta regresiva con ejercicios y descansos a la tarea. Con un checklist, la tarea se completa cuando terminas el temporizador Y los ítems. (No se combina con "Cantidad".)',
+  cltimer:'Toca el reloj de un ítem para darle su propia rutina o una cuenta regresiva (por ejemplo 25 min). En Hoy verás un botón de play junto al ítem; al terminar, el ítem se marca solo. Puedes ponerla en uno o en varios ítems; con el play general de la tarea eliges cuáles reproducir, una o varias seguidas.',
+  timeradd:'Agrega una rutina (ejercicios y descansos con cuenta regresiva) a la tarea. Con un checklist, la tarea se completa cuando terminas la rutina Y los ítems; si los ítems tienen su propia rutina, la de la tarea no cuenta como parte extra. (No se combina con "Cantidad".)',
   when:'Cada semana: se repite el mismo día todas las semanas. Solo esta semana: aparece este día y desaparece al reiniciar la semana. Con fecha: un día concreto, que puede repetirse cada día, semana, mes o cada cierto intervalo, con fecha de término opcional.',
   repeat:'Al pasar la fecha, la tarea salta sola a la próxima que le toque (con su checklist reiniciado si es "único cada vez"). Sin repetición es solo para ese día.',
   clfresh:'Al reiniciarse la tarea, el checklist empieza vacío en vez de repetir los mismos ítems (útil para listas que cambian, como "qué comprar"). Queda el botón para recordar el último.',
@@ -20541,12 +20853,12 @@ function taskModalDayHTML(showFreshCL){
       '<span id="m-adv-chev" style="display:inline-flex;transition:transform .2s;transform:'+(M._advOpen?'rotate(180deg)':'none')+';color:var(--accent-text);">'+ico('chev',16,2)+'</span>'+
     '</button>'+
     '<div id="m-adv-area" style="display:'+(M._advOpen?'block':'none')+';">'+
-    '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Temporizador'+infoBtn('timeradd')+'</div>'+
+    '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Rutina'+infoBtn('timeradd')+'</div>'+
       '<button type="button" class="tog" id="m-timer-tog" onclick="mToggleTimerSection()" style="background:'+(M.hasTimer?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(M.hasTimer?22:2)+'px;"></span></button></div>'+
     '<div id="m-timer-area" style="display:'+(M.hasTimer?'block':'none')+';margin-top:12px;">'+timerAreaHTML()+'</div>'+
     '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Abrir una app o enlace</div><span id="m-app-wrap">'+taskAppBtnHTML()+'</span></div>'+
       '<div style="height:18px;"></div>'+
-      mRegistrySectionHTML()+mSkillsSectionHTML()+
+      mRegistrySectionHTML()+mColSectionHTML()+mSkillsSectionHTML()+
     '</div>'+
     '</div>';
 }
@@ -20638,7 +20950,7 @@ function showTaskModal(){
         '</div>'+
       '</div>'+
       '</div>'
-    ))+(isDay?'':mRegistrySectionHTML())+
+    ))+(isDay?'':mRegistrySectionHTML()+mColSectionHTML())+
     '<div style="height:18px;"></div></div>'+
     '<div class="stk-bar" style="position:sticky;bottom:0;z-index:20;background:var(--paper);display:flex;gap:8px;padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line-soft);">'+
       '<button class="sbtn" onclick="mSave()">'+(M.isNew?'Crear':'Guardar')+'</button>'+
@@ -21841,9 +22153,11 @@ function tlibApply(){
   var order = {tpl:0,set:1,ex:2};
   keys.sort(function(a,b){ return order[a.split(':')[0]]-order[b.split(':')[0]]; });
   var add = [], firstTpl = null;
+  var _cur0 = M.timer.sets, _pristine0 = _cur0.length===1 && !(_cur0[0].name||'').trim() && !_cur0[0].tap && _cur0[0].kind!=='reps';
+  var _soloTpl = _pristine0 && keys.length===1 && keys[0].indexOf('tpl:')===0;
   keys.forEach(function(k){
     var kind=k.split(':')[0], id=k.slice(kind.length+1);
-    if(kind==='tpl'){ var t=timerTplList().find(function(x){return x.id===id;}); if(t){ if(!firstTpl) firstTpl=t; (t.timer.sets||[]).forEach(function(x){ add.push(stripSetId(x)); }); } }
+    if(kind==='tpl'){ var t=timerTplList().find(function(x){return x.id===id;}); if(t){ if(!firstTpl) firstTpl=t; (_soloTpl ? (t.timer.sets||[]).map(stripSetId) : expandSetForTimer(t.timer).map(stripSetId)).forEach(function(x){ add.push(x); }); } }
     else if(kind==='set'){ var t2=setLibList().find(function(x){return x.id===id;}); if(t2){ var _gid='g'+uid(); expandSetForTimer(t2).forEach(function(x){ add.push(Object.assign({},x,{grp:_gid, grpName:t2.name, grpColor:t2.color||null})); }); } }
     else { var t3=exLibList().find(function(x){return x.id===id;}); if(t3) add.push(Object.assign({},t3.set)); }
   });
@@ -21851,8 +22165,8 @@ function tlibApply(){
   var pristine = cur.length===1 && !(cur[0].name||'').trim() && !cur[0].tap && cur[0].kind!=='reps';
   var base = pristine ? [] : cur.slice();
   if(pristine && keys.length===1 && firstTpl){ M.timer.rounds=firstTpl.timer.rounds||1; M.timer.restBetween=firstTpl.timer.restBetween; M.timer.restBetweenRounds=firstTpl.timer.restBetweenRounds; }
-  var room = 20-base.length;
-  if(add.length>room) toast('Máximo 20 ejercicios: se agregaron '+room);
+  var room = 80-base.length;
+  if(add.length>room) toast('Máximo 80 pasos: se agregaron '+room);
   add.slice(0,Math.max(0,room)).forEach(function(x,i){ var c=Object.assign({},x,{id:uid()}); if(!c.color) c.color=CATEGORY_COLORS[(base.length+i)%CATEGORY_COLORS.length]; base.push(c); });
   M.timer.sets = base; M._timerOpenSet = null;
   removeOverlay('tlib'); TLP=null;
@@ -23690,7 +24004,7 @@ function clItemIsQty(i){ return clItemQty(i)>1; }
 function itemTmBtnHTML(item){
   if(!(M.task && M.task.period==='dia')) return '';
   var has = item.timer && item.timer.sec>0;
-  return '<button onclick="mOpenItemTimer(\''+item.id+'\')" title="Temporizador del ítem" aria-label="Temporizador del ítem" style="background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted-soft)')+';border-radius:7px;height:22px;padding:0 '+(has?6:5)+'px;font-size:10px;font-weight:800;cursor:pointer;flex-shrink:0;font-family:Inter,sans-serif;display:inline-flex;align-items:center;gap:3px;">'+ico('clock',12,2)+(has?fmtDur(item.timer.sec):'')+'</button>';
+  return '<button onclick="mOpenItemTimer(\''+item.id+'\')" title="Rutina del ítem" aria-label="Rutina del ítem" style="background:'+(has?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(has?'var(--accent)':'var(--line)')+';color:'+(has?'var(--accent-text)':'var(--muted-soft)')+';border-radius:7px;height:22px;padding:0 '+(has?6:5)+'px;font-size:10px;font-weight:800;cursor:pointer;flex-shrink:0;font-family:Inter,sans-serif;display:inline-flex;align-items:center;gap:3px;">'+ico('clock',12,2)+(has?fmtDur(item.timer.sec):'')+'</button>';
 }
 // Temporizador de un ítem del checklist: puede ser solo un tiempo (cuenta
 // regresiva) o una RUTINA / SET / EJERCICIO guardado que se le adjudica al
@@ -23736,7 +24050,7 @@ function itmPaint(){
       '<input class="finp" type="text" placeholder="Buscar..." value="'+esc(ITM.q||'')+'" oninput="ITM.q=this.value;itmPaintList()" style="margin-bottom:0;"/>'+
       '<div id="itm-list">'+(empty?'<div style="text-align:center;padding:22px 8px;font-size:13px;color:var(--muted);line-height:1.6;">Todavía no tienes rutinas, sets ni ejercicios guardados.<br>Créalos en Enfoque → Plantillas.</div>':sec('Rutinas',d.tpls)+sec('Sets',d.sets)+sec('Ejercicios',d.exs))+'</div>';
   }
-  body.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">Temporizador del ítem</span>'+
+  body.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:18px;">Rutina del ítem</span>'+
     '<button onclick="removeOverlay(\'item-timer-sheet\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(it.text||'Ítem sin nombre')+'</div>'+
     '<div style="display:flex;gap:6px;margin-bottom:14px;">'+seg('time','Solo tiempo')+seg('lib','Rutina o set')+'</div>'+
@@ -23956,23 +24270,82 @@ function mSetAppAuto(v){
 function itemTmPlayHTML(t,item,compact){ return itemTmPlayInner(t,item,compact)+itemAppChipHTML(t,item); }
 function itemTmPlayInner(t,item,compact){
   if(!(item.timer && item.timer.sec>0) || item.done) return '';
-  return '<button class="cl-tm" onclick="event.stopPropagation();openItemTimerRun(\''+t.id+'\',\''+item.id+'\')" aria-label="Iniciar temporizador de '+esc(item.text)+'"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'+(item.timer.label?esc(item.timer.label).slice(0,14)+' · ':'')+fmtDur(item.timer.sec)+'</button>';
+  return '<button class="cl-tm" onclick="event.stopPropagation();openItemTimerRun(\''+t.id+'\',\''+item.id+'\')" aria-label="Iniciar rutina de '+esc(item.text)+'"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'+(item.timer.label?esc(item.timer.label).slice(0,14)+' · ':'')+fmtDur(item.timer.sec)+'</button>';
+}
+function itemRoutineCfg(it){
+  var cfg = null;
+  if(it.timer.ref){ var rr=itemTimerCfgFromRef(it.timer.ref.kind, it.timer.ref.id); if(rr) cfg=rr.cfg; }
+  if(!cfg && it.timer.config) cfg = cloneTimerFresh(it.timer.config);
+  if(!cfg) cfg = {sets:[{id:uid(),name:it.text||'Ítem',sec:it.timer.sec,color:CATEGORY_COLORS[2]}],rounds:1,restBetween:0,restBetweenRounds:0};
+  return cfg;
+}
+// ── Play general de una tarea: reúne las rutinas de sus ítems (y la propia, si tiene) ──
+var TP = null;
+function taskPlayList(t){
+  var out = [];
+  if(!t) return out;
+  (t.checklist||[]).forEach(function(i){ if(!i.done && itemHasRoutine(i)) out.push({id:i.id, kind:'item', name:i.text||'Ítem', label:i.timer.label||'', sec:i.timer.sec}); });
+  if(t.hasTimer && t.timer && t.timer.sets && t.timer.sets.length){ var tot=0; try{ tot=timerEstimateTotalSec(t.timer); }catch(e){} out.unshift({id:'__task', kind:'task', name:'Rutina de la tarea', label:'', sec:tot}); }
+  return out;
+}
+function openTaskPlay(taskId){
+  if(TR && !TR.finished){ toast('Ya hay un temporizador en curso'); return; }
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  var list = taskPlayList(t);
+  if(!list.length){ toast('Esta tarea no tiene rutinas pendientes'); return; }
+  if(list.length===1){ tpRun(taskId, [list[0].id]); return; }
+  var _its = list.filter(function(x){return x.kind==='item';}); TP = {taskId:taskId, sel:(_its.length?_its:list).map(function(x){return x.id;})};
+  removeOverlay('task-play'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='task-play'; ov.style.zIndex = 640; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('task-play'); });
+  document.body.appendChild(ov); tpDraw();
+}
+function tpDraw(){
+  var ov = document.getElementById('task-play'); if(!ov||!TP) return; var t = S.tasks.find(function(x){return x.id===TP.taskId;}); if(!t){ removeOverlay('task-play'); return; }
+  var list = taskPlayList(t), n = TP.sel.filter(function(id){ return list.some(function(x){return x.id===id;}); }).length, tot = list.filter(function(x){return TP.sel.indexOf(x.id)>=0;}).reduce(function(a,x){return a+(x.sec||0);},0);
+  var rows = list.map(function(x){ var on = TP.sel.indexOf(x.id)>=0;
+    return '<div style="display:flex;align-items:center;gap:12px;padding:11px 12px;background:var(--bg);border-radius:14px;margin-bottom:8px;border:1.5px solid '+(on?'var(--accent)':'transparent')+';">'+
+      '<button onclick="tpToggle(\''+x.id+'\')" aria-label="Elegir" class="chk'+(on?' done':'')+'" style="flex-shrink:0;border-radius:50%;width:26px;height:26px;padding:0;">'+(on?miniChkSVG():'')+'</button>'+
+      '<span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(x.name)+'</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:1px;">'+(x.label?esc(x.label)+' · ':'')+(x.sec?fmtDur(x.sec):'')+'</span></span>'+
+      '<button onclick="tpRun(\''+TP.taskId+'\',[\''+x.id+'\'])" aria-label="Solo esta" style="width:36px;height:36px;border-radius:50%;border:none;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button></div>'; }).join('');
+  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:19px;">'+esc(t.text)+'</span><div class="st-sub">Elige qué rutinas reproducir.</div></div><button class="st-x" onclick="removeOverlay(\'task-play\')" aria-label="Cerrar">×</button></div>'+rows+
+    '<button class="sbtn" style="width:100%;margin-top:6px;'+(n?'':'opacity:.45;')+'" onclick="tpRunSel()">'+(n>1?'Reproducir las '+n+' seguidas':(n===1?'Reproducir la elegida':'Elige al menos una'))+(n>1&&tot?' · '+fmtDur(tot):'')+'</button></div>');
+}
+function tpToggle(id){ if(!TP) return; var i = TP.sel.indexOf(id); if(i>=0) TP.sel.splice(i,1); else TP.sel.push(id); tpDraw(); }
+function tpRunSel(){ if(!TP || !TP.sel.length) return; tpRun(TP.taskId, TP.sel.slice()); }
+function tpRun(taskId, ids){
+  if(TR && !TR.finished){ toast('Ya hay un temporizador en curso'); return; }
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
+  removeOverlay('task-play'); removeOverlay('cl-sheet');
+  var order = taskPlayList(t).filter(function(x){return ids.indexOf(x.id)>=0;});
+  if(!order.length) return;
+  if(order.length===1){ var o = order[0]; if(o.kind==='task') openTimerRun(taskId); else openItemTimerRun(taskId, o.id); return; }
+  var steps = [], names = [], itemIds = [], first = null;
+  order.forEach(function(x, k){
+    var cfg, label;
+    if(x.kind==='task'){ cfg = t.timer; label = t.text; }
+    else { var it = (t.checklist||[]).find(function(i){return i.id===x.id;}); cfg = itemRoutineCfg(it); label = it.text||'Ítem'; itemIds.push(x.id); }
+    if(!first) first = cfg;
+    var b = buildTimerSteps(cfg, true, k>0);
+    if(k>0) steps.push({type:'rest', name:'Siguiente rutina', sec:10, round:1, totalRounds:1});
+    b.steps.forEach(function(st){ st.routine = label; if(x.kind==='item') st.itemId = x.id; steps.push(st); });
+    names.push(label);
+  });
+  var tt = 0; steps.forEach(function(s){ s.startAt = tt; tt += s.sec; });
+  buildTimerAndStart(taskId, first, t.text+' · '+names.join(' + '), false, {steps:steps, totalSec:tt});
+  if(TR){ TR.itemIds = itemIds; TR.itemText = names.join(' + '); }
 }
 function openItemTimerRun(taskId,itemId){
   if(TR && !TR.finished){ toast('Ya hay un temporizador en curso'); return; }
   var t=S.tasks.find(function(x){return x.id===taskId;}); if(!t) return;
   var it=(t.checklist||[]).find(function(i){return i.id===itemId;}); if(!it||!(it.timer&&it.timer.sec>0)) return;
   removeOverlay('cl-sheet');
-  var cfg = null;
-  if(it.timer.ref){ var rr=itemTimerCfgFromRef(it.timer.ref.kind, it.timer.ref.id); if(rr) cfg=rr.cfg; }
-  if(!cfg && it.timer.config) cfg = cloneTimerFresh(it.timer.config);
-  if(!cfg) cfg = {sets:[{id:uid(),name:it.text||'Ítem',sec:it.timer.sec,color:CATEGORY_COLORS[2]}],rounds:1,restBetween:0,restBetweenRounds:0};
+  var cfg = itemRoutineCfg(it);
   buildTimerAndStart(taskId, cfg, t.text+' · '+(it.text||'Ítem'), false);
   if(TR){ TR.itemId=itemId; TR.itemText=it.text||''; }
 }
-function timerMarkItem(){
+function timerMarkItem(itemId){
+  itemId = itemId || TR.itemId;
   var t=S.tasks.find(function(x){return x.id===TR.taskId;}); if(!t) return;
-  var it=(t.checklist||[]).find(function(i){return i.id===TR.itemId;}); if(!it||it.done) return;
+  var it=(t.checklist||[]).find(function(i){return i.id===itemId;}); if(!it||it.done) return;
   var q=clItemQty(it);
   if(q>1) setCLProg(t.id,it.id,q); else tapCL(t.id,it.id);
 }
@@ -24050,7 +24423,7 @@ function clItemsHTML(){
         '<span style="font-size:13px;font-weight:700;color:var(--muted);">/'+q+'</span>'+
         '<button class="cl-step-btn" onclick="mStepCLItem(\''+item.id+'\',1)">+</button>'+
       '</div>') :
-      ('<div style="width:26px;height:26px;border-radius:7px;border:'+(item.done?'2px solid var(--accent)':'2px solid var(--muted-soft)')+';background:'+(item.done?'var(--accent)':'var(--paper)')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" onclick="mToggleCLItem(\''+item.id+'\')">'+( item.done?miniChkSVG():'')+'</div>');
+      clRingHTML(item.done?1:0, item.done, 'mToggleCLItem(\''+item.id+'\')', 0, 28);
     // "Meta" — antes era el emoji "🔢" (poco serio); ahora es una etiqueta
     // de texto, más acorde al resto de la app.
     var qtyBtn = '<button onclick="mToggleCLQtyEditor(\''+item.id+'\')" title="Cantidad / meta" style="background:'+(isQtyItem?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(isQtyItem?'var(--accent)':'var(--line)')+';color:'+(isQtyItem?'var(--accent-text)':'var(--muted-soft)')+';border-radius:7px;height:22px;padding:0 6px;font-size:10px;font-weight:800;letter-spacing:.03em;cursor:pointer;flex-shrink:0;font-family:Inter,sans-serif;">META</button>';
@@ -24098,7 +24471,7 @@ function clAddButtonHTML(){
   var n = M.checklist.length;
   var atMax = limited && clBlocked(M.task, n);
   return '<button onclick="mAddCL()" style="background:none;border:none;color:'+(atMax?'var(--muted-soft)':'var(--muted)')+';font-size:13px;cursor:pointer;padding:4px 0;">'+(atMax?'🔒 Agregar ítem':'+ Agregar ítem')+'</button>'+
-    ((M.task&&M.task.period==='dia')?'<div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;">'+ico('clock',12,2)+'&nbsp;Temporizador por ítem'+infoBtn('cltimer')+'</div>':'')+
+    ((M.task&&M.task.period==='dia')?'<div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;">'+ico('clock',12,2)+'&nbsp;Rutina por ítem'+infoBtn('cltimer')+'</div>':'')+
     (limited?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+n+'/'+clMax(M.task)+' ítems (plan gratuito)'+(atMax?' — <span onclick="openDonationInfo()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">ampliar</span>':'')+'</div>':'');
 }
 function mAddCL(){
@@ -27364,7 +27737,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.27.138';
+var APP_VERSION = '2026.10.27.139';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
