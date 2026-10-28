@@ -96,6 +96,14 @@
       off: function(){ var P = plugin('KeepAwake'); return P ? P.allowSleep().catch(function(){}) : Promise.resolve(); }
     },
 
+    // Bloquea capturas de pantalla y la vista previa en apps recientes (plugin propio GrSecure, FLAG_SECURE).
+    secure: {
+      set: function(on){
+        var P = plugin('GrSecure');
+        if(P) try{ P.setSecure({on: !!on}).catch(function(){}); }catch(e){}
+      }
+    },
+
     // Huella / rostro para el espacio oculto. Plugin @aparajita/capacitor-biometric-auth ('BiometricAuth').
     // `available` pasa a true solo si el plugin existe Y el teléfono tiene huella/rostro registrados;
     // si no, el espacio oculto sigue funcionando solo con código (PIN).

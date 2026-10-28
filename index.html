@@ -508,6 +508,7 @@ details:not([open]) .rsec-chev{transform:rotate(-90deg);}
 .authSwitch{text-align:center;font-size:12.5px;color:var(--muted);margin-top:4px;}
 .authSwitch button{background:none;border:none;color:var(--accent-text);font-weight:800;font-size:12.5px;cursor:pointer;font-family:'Inter',sans-serif;padding:4px 2px;}
 .authBtn[disabled]{opacity:.65;cursor:default;}
+#authModal.req .authClose, #authModal.req .authSkip{display:none;}
 .authInput{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:10px;outline:none;font-size:15px;background:var(--bg);padding:11px 12px;margin-bottom:14px;color:var(--ink);font-family:'Inter',sans-serif;}
 .authBtn{width:100%;background:var(--accent);color:white;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;margin-bottom:12px;cursor:pointer;font-family:'Inter',sans-serif;}
 .googleBtn{width:100%;background:white;border:1.5px solid var(--line);color:#1a1a1a;border-radius:10px;padding:12px;font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-family:'Inter',sans-serif;}
@@ -584,7 +585,7 @@ details:not([open]) .rsec-chev{transform:rotate(-90deg);}
       <div style="text-align:center;margin:-2px 0 4px;"><button type="button" id="authForgot" class="authLinkBtn" onclick="handleAuthReset()">¿Olvidaste tu contraseña?</button></div>
     </form>
     <div class="authSwitch" id="authSwitch"></div>
-    <div style="text-align:center;margin-top:12px;border-top:1px solid var(--line);padding-top:12px;">
+    <div class="authSkip" style="text-align:center;margin-top:12px;border-top:1px solid var(--line);padding-top:12px;">
       <button type="button" onclick="closeAuthModal()" class="authLinkBtn">Continuar sin cuenta</button>
       <div style="font-size:11px;color:var(--muted-soft);margin-top:2px;">Todo se guarda en este dispositivo.</div>
     </div>
@@ -852,7 +853,7 @@ try {
         if(user){
           currentUser = user;
           var modal = document.getElementById('authModal');
-          if(modal) modal.style.display='none';
+          if(modal){ modal.classList.remove('req'); modal.style.display='none'; }
           accountSwitchGuard(user).then(function(ok){
             if(!ok || !currentUser) return;
             if(typeof syncWithCloud === 'function'){ Promise.resolve(syncWithCloud()).catch(function(){}).then(function(){ return syncExtra(); }); }
@@ -864,6 +865,7 @@ try {
           currentUser = null;
           try{ ADS_CFG = null; UNLOCKS = null; }catch(e){}
           _extraReadyUid = null; _extraHash = null;
+          authGate();
         }
         if(typeof render === 'function') render();
       } catch(e){
@@ -890,8 +892,22 @@ function showAuthModal(mode){
   document.getElementById('authModal').style.display='flex';
   setTimeout(function(){ var e=document.getElementById('authEmail'); if(e && !e.value) try{e.focus();}catch(x){} },80);
 }
+function authHide(){
+  var m=document.getElementById('authModal'); if(!m) return;
+  m.classList.remove('req'); m.style.display='none';
+}
+// App nativa: hace falta una cuenta para usarla (anuncios, copias en la nube y sincronización dependen de ella).
+// En web/TWA el acceso sigue siendo opcional. Sin Firebase disponible (primer arranque sin red) no se bloquea.
+function authGate(){
+  if(!Platform.isNative || !firebaseAvailable || currentUser) return;
+  var m=document.getElementById('authModal'); if(!m) return;
+  m.classList.add('req'); setAuthMode('login'); m.style.display='flex';
+  try{ renderGoogleButton(); }catch(e){}
+}
 function closeAuthModal(){
-  document.getElementById('authModal').style.display='none';
+  var m=document.getElementById('authModal');
+  if(m && m.classList.contains('req') && !currentUser) return;
+  authHide();
 }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var m=document.getElementById('authModal'); if(m && m.style.display==='flex') closeAuthModal(); } });
 function setAuthMode(mode){
@@ -900,7 +916,9 @@ function setAuthMode(mode){
   $('authTabIn').classList.toggle('on',!up); $('authTabUp').classList.toggle('on',up);
   $('authTabIn').setAttribute('aria-selected',String(!up)); $('authTabUp').setAttribute('aria-selected',String(up));
   $('authTitle').textContent = up ? 'Crea tu cuenta' : 'Qué bueno verte de nuevo';
-  $('authSub').textContent = up ? 'Guarda tu progreso en la nube y úsalo en todos tus dispositivos.' : 'Entra para recuperar tu progreso en cualquier dispositivo.';
+  var _req = $('authModal').classList.contains('req');
+  $('authSub').textContent = _req ? (up ? 'Crea tu cuenta para empezar. Tu progreso queda guardado en la nube.' : 'Inicia sesión para usar Gramifica. Tu progreso queda guardado en la nube.')
+    : (up ? 'Guarda tu progreso en la nube y úsalo en todos tus dispositivos.' : 'Entra para recuperar tu progreso en cualquier dispositivo.');
   $('authBtn').textContent = up ? 'Crear cuenta' : 'Iniciar sesión';
   $('authPass2Wrap').style.display = up ? 'block' : 'none';
   $('authHint').style.display = up ? 'block' : 'none';
@@ -941,7 +959,7 @@ function handleAuth(){
   promise.then(function(){
     authBusy(false);
     toast(isSignup ? 'Cuenta creada' : 'Sesión iniciada');
-    closeAuthModal();
+    authHide();
   }).catch(function(e){
     authBusy(false);
     authShowErr(authMsg(e));
@@ -991,7 +1009,7 @@ function onGoogleCredential(resp){
     return auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(resp.credential));
   }).then(function(){
     toast('Sesión iniciada con Google');
-    closeAuthModal();
+    authHide();
     _registerFCMToken();
   }).catch(function(e){
     toast(e.code==='auth/unauthorized-domain' ? 'Este dominio no está autorizado en Firebase' : 'No se pudo iniciar sesión: '+(e.message||e.code));
@@ -1018,7 +1036,7 @@ function nativeGoogleLogin(withCalendar){
     return auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).then(function(){ return auth.signInWithCredential(cred); });
   }).then(function(){
     toast('Sesión iniciada con Google');
-    closeAuthModal();
+    authHide();
     try{ _registerFCMToken(); }catch(e){}
   }).catch(function(e){
     var m = String((e && (e.message||e.code)) || e || '');
@@ -6975,6 +6993,20 @@ function hidPinCheck(){
     else { var e=document.getElementById('hid-pin-err'); if(e) e.textContent='Código incorrecto'; var i=document.getElementById('hid-pin-in'); if(i){ i.value=''; i.focus(); } }
   });
 }
+// Bloqueo de capturas / vista previa de «apps recientes» mientras el espacio oculto o un registro oculto está abierto (solo app nativa).
+var _secOn = null;
+function secureWanted(){
+  if(document.getElementById('hid-ov') || document.getElementById('hid-pin')) return true;
+  var rv = document.getElementById('reg-view');
+  if(rv){ var r = regById(rv.dataset.regId); if(r && r.hidden) return true; }
+  return false;
+}
+function secureSync(){
+  var w = false; try{ w = secureWanted(); }catch(e){}
+  if(w === _secOn) return; _secOn = w;
+  try{ Platform.secure.set(w); }catch(e){}
+}
+if(Platform.isNative) setInterval(secureSync, 400);
 function hidHiddenRegs(){ return regListAll().filter(function(r){return r.hidden;}); }
 function hidScreenBody(){
   var c = hidCfg(), regs = hidHiddenRegs(), tasks = S.hiddenTasks||[];
@@ -9716,6 +9748,7 @@ function actStartDraw(){
     '<div style="display:flex;gap:10px;margin:6px 0 4px;">'+typ+'</div>'+
     '<button onclick="actBegin()" style="width:100%;margin-top:20px;padding:17px;border:none;border-radius:16px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px '+c[1]+'44;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar</button>'+
     '<div class="st-sub" style="text-align:center;margin-top:10px;">Usamos tu ubicación solo mientras dura la actividad. El recorrido queda en tu dispositivo.<br>'+actBgHint()+'</div>'+
+    '<button class="st-row" onclick="actMapToggle()" style="margin-top:6px;"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Mapa de fondo</span><span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px;">'+(actMapOn()?'Descarga imágenes de mapa (CARTO / OpenStreetMap) con la zona que se ve. Sin conexión se muestra solo la ruta.':'Apagado: se dibuja solo la ruta. Al activarlo se descargan imágenes de mapa de CARTO / OpenStreetMap.')+'</span></span><span style="font-size:12.5px;font-weight:700;color:'+(actMapOn()?'var(--accent-text)':'var(--muted)')+';">'+(actMapOn()?'Activado':'Apagado')+'</span></button>'+
     '<details class="st-adv"><summary>Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
       '<button class="st-row" onclick="openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+(nsk?nsk+' elegida'+(nsk===1?'':'s'):'Opcional')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="removeOverlay(\'act-start\');openActHistory()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Todas mis actividades'+(n?' <span style="color:var(--muted);font-weight:600;">· '+n+'</span>':'')+'</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
@@ -9913,9 +9946,17 @@ function actCreate(o){
 var ACT_TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 var ACT_TILE_ATTR = '© OpenStreetMap · © CARTO';
 var _tc = {}, _tcN = 0;
+// El mapa de fondo es opcional (apagado por defecto): al activarlo, el teléfono descarga imágenes de mapa de CARTO/OpenStreetMap
+// y esos servidores reciben la zona aproximada que se ve en pantalla. Sin él se dibuja solo la ruta sobre una cuadrícula.
+function actMapOn(){ try{ return localStorage.getItem('og6-actmap')==='1'; }catch(e){ return false; } }
+function actMapToggle(){
+  try{ localStorage.setItem('og6-actmap', actMapOn()?'0':'1'); }catch(e){}
+  actStartDraw();
+}
 function actMx(lon, z){ return (lon+180)/360*256*Math.pow(2,z); }
 function actMy(lat, z){ var s = Math.sin(lat*Math.PI/180); s = Math.max(-0.9999, Math.min(0.9999, s)); return (0.5 - Math.log((1+s)/(1-s))/(4*Math.PI))*256*Math.pow(2,z); }
 function actTileImg(z, x, y, cv){
+  if(!actMapOn()) return null;
   var k = z+'/'+x+'/'+y, e = _tc[k];
   if(e){
     if(e.ok) return e.img;
@@ -9959,7 +10000,7 @@ function actMapDraw(cv, pts, opt){
   if(P.length>1) dot(P[0], lw*.9, '#2bb673');
   var en = P[P.length-1]; if(opt.live){ g.beginPath(); g.arc(X(en),Y(en),lw*2.8,0,7); g.fillStyle = col+'33'; g.fill(); }
   dot(en, lw*1.1, opt.live ? col : '#e0523c');
-  g.font = '600 9px Inter, sans-serif'; var tw = g.measureText(ACT_TILE_ATTR).width; g.fillStyle = 'rgba(255,255,255,.78)'; g.fillRect(0, H-15, tw+12, 15); g.fillStyle = '#444'; g.textAlign = 'left'; g.fillText(ACT_TILE_ATTR, 6, H-5);
+  if(actMapOn()){ g.font = '600 9px Inter, sans-serif'; var tw = g.measureText(ACT_TILE_ATTR).width; g.fillStyle = 'rgba(255,255,255,.78)'; g.fillRect(0, H-15, tw+12, 15); g.fillStyle = '#444'; g.textAlign = 'left'; g.fillText(ACT_TILE_ATTR, 6, H-5); }
 }
 // ── Parciales por kilómetro (tiempo en movimiento) ──
 function actSplits(pts, maxMs){
@@ -27737,7 +27778,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.27.139';
+var APP_VERSION = '2026.10.27.140';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
