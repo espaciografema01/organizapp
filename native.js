@@ -31,6 +31,22 @@
 
   var Platform = {
     isNative: native,
+    build: '2026.10.28.diag',
+    // Texto de diagnóstico (plugins nativos que la app ve). Se muestra en Actividad → Ajustes avanzados.
+    diag: function(){
+      var l = [];
+      try{
+        var hdr = (C && C.PluginHeaders) ? C.PluginHeaders.map(function(h){ return h.name; }) : [];
+        l.push('native.js: ' + Platform.build);
+        l.push('App nativa: ' + (native ? 'sí' : 'no'));
+        ['GrGeo','GrTimer','GramificaWidget','GrSecure','BiometricAuth','AdMob'].forEach(function(n){
+          l.push(n + ': ' + (hdr.indexOf(n) >= 0 ? 'registrado' : 'NO registrado') + (native && plugin(n) ? ' · disponible' : ' · no disponible'));
+        });
+        l.push('GPS nativo disponible: ' + (Platform.geo && Platform.geo.available() ? 'sí' : 'no'));
+        l.push('Todos los plugins: ' + (hdr.join(', ') || '(ninguno)'));
+      }catch(e){ l.push('error: ' + e); }
+      return l.join('\n');
+    },
     plugin: plugin,
     has: function(name){ return !!plugin(name); },
 
