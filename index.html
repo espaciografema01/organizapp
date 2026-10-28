@@ -7050,12 +7050,37 @@ function hidSetPin(){
 }
 function hidClearPin(){ S.hid = {}; saveState(); hidRedraw(); toast('Código quitado'); }
 function hidToggleBio(on){ S.hid = Object.assign({}, S.hid||{}, {bio:!!on}); saveState(); }
+function hidIntroSeen(){ try{ return localStorage.getItem('og6-hid-intro')==='1'; }catch(e){ return true; } }
+// Primera vez que se oculta algo: explica qué pasa y cómo volver a verlo.
+function hidIntro(ok, cancel){
+  var seen = false; try{ seen = localStorage.getItem('og6-hid-intro')==='1'; }catch(e){}
+  if(seen){ ok(); return; }
+  removeOverlay('hid-intro');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='hid-intro'; ov.style.zIndex = 960;
+  window._hidIntroCb = {ok:ok, cancel:cancel||function(){}};
+  ov.innerHTML = '<div class="sheet"><div class="serif" style="font-weight:700;font-size:19px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">'+ico('lock',18,1.8)+' Ocultar</div>'+
+    '<div style="font-size:13.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Lo que ocultes desaparece de Hoy, Plan, estadísticas, avisos, widgets y de lo que compartas. <b>No se borra.</b><br><br>'+
+    'Para volver a verlo: toca <b>5 veces rápido el logo «[Gr.]»</b> (arriba a la izquierda). Se abre el <b>Espacio oculto</b>, donde está el botón «Mostrar». Ahí también puedes poner un código o huella.</div>'+
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="hidIntroAns(false)">Cancelar</button><button class="sbtn" style="flex:1;" onclick="hidIntroAns(true)">Entendido, ocultar</button></div></div>';
+  document.body.appendChild(ov);
+}
+function hidRegCheck(el){
+  if(!el.checked){ RE.reg.hidden = false; return; }
+  if(hidIntroSeen()){ RE.reg.hidden = true; return; }
+  hidIntro(function(){ RE.reg.hidden = true; }, function(){ el.checked = false; RE.reg.hidden = false; });
+}
+function hidIntroAns(yes){
+  var c = window._hidIntroCb || {}; window._hidIntroCb = null; removeOverlay('hid-intro');
+  if(yes){ try{ localStorage.setItem('og6-hid-intro','1'); }catch(e){} if(c.ok) c.ok(); } else if(c.cancel) c.cancel();
+}
 function hidSetReg(id, on){
+  if(on && !hidIntroSeen()){ hidIntro(function(){ hidSetReg(id, true); }); return; }
   var r = regListAll().find(function(x){return x.id===id;}); if(!r) return;
   r.hidden = !!on; r.updatedAt = new Date().toISOString(); saveState(); render(); hidRedraw();
   toast(on?'Registro oculto':'Registro visible de nuevo');
 }
 function hidSetTask(id, on){
+  if(on && !hidIntroSeen()){ hidIntro(function(){ hidSetTask(id, true); }); return; }
   if(on){
     var t = S.tasks.find(function(x){return x.id===id;}); if(!t) return;
     S.tasks = S.tasks.filter(function(x){return x.id!==id;});
@@ -7260,7 +7285,7 @@ function regEditorBodyHTML(){
           [['high','↑ Más alto es mejor'],['low','↓ Más bajo es mejor'],['none','— Sin récord']].map(function(o){return '<option value="'+o[0]+'"'+((m.better||'high')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>';
       }).join('')+'<div style="height:12px;"></div>';
     }
-    html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);margin:2px 0 14px;cursor:pointer;"><input type="checkbox" '+(r.hidden?'checked':'')+' onchange="RE.reg.hidden=this.checked" style="width:18px;height:18px;accent-color:var(--accent);"/> Ocultar este registro</label>';
+    html += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);margin:2px 0 14px;cursor:pointer;"><input type="checkbox" '+(r.hidden?'checked':'')+' onchange="hidRegCheck(this)" style="width:18px;height:18px;accent-color:var(--accent);"/> Ocultar este registro</label>';
     if(r.kind==='metrics') html += mSecLabel('Dificultad extra')+'<div id="re-mods">'+reModsHTML()+'</div><div style="height:14px;"></div>';
     if(pzOn(r)) html += rePzAdvHTML(r); else html += mSecLabel('Metas')+'<div id="re-goals">'+reGoalsHTML()+'</div><div style="height:14px;"></div>';
     if(isFin){
@@ -9814,8 +9839,8 @@ function actGeoStart(){
   var onP = function(lat, lon, acc, alt, ts){ actOnPoint(lat, lon, acc, alt, ts||Date.now()); };
   var onE = function(msg){ if(ACT){ ACT.err = msg||'No se pudo obtener tu ubicación'; actRunUpdate(); } };
   try{
-    if(Platform.geo && Platform.geo.available && Platform.geo.available()){ Platform.geo.start(onP, onE); ACT.native = true; return; }
-  }catch(e){}
+    if(Platform.geo && Platform.geo.available && Platform.geo.available()){ ACT.native = true; Platform.geo.start(onP, onE); return; }
+  }catch(e){ ACT.native = false; ACT.nativeErr = String(e && e.message || e); }
   if(!navigator.geolocation){ onE('Este dispositivo no permite usar la ubicación'); return; }
   ACT.watch = navigator.geolocation.watchPosition(function(p){ onP(p.coords.latitude, p.coords.longitude, p.coords.accuracy, p.coords.altitude, p.timestamp); },
     function(e){ onE(e.code===1 ? 'Permiso de ubicación denegado: actívalo en los ajustes' : 'Buscando tu ubicación…'); }, {enableHighAccuracy:true, maximumAge:1000, timeout:20000});
@@ -9880,7 +9905,7 @@ function actRunUpdate(){
   else { set('act-pace', actFmtPace(ACT.movSec||el, km)); set('act-pace-l','ritmo /km'); }
   var kc = actKcal(ACT.type, km, +S.bodyKg||0); set('act-x', kc!=null ? kc : Math.round(ACT.gain)); set('act-x-l', kc!=null ? 'kcal (aprox.)' : 'desnivel + m');
   var sg = document.getElementById('act-sig'); if(sg){ var st = ACT.state==='paused' ? ['#ffffff','En pausa'] : (ACT.state==='wait' ? ['#ffe08a','Buscando señal'] : ['#b8ffcf','Grabando']); sg.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:'+st[0]+';"></span>'+st[1]; }
-  var em = document.getElementById('act-empty'); if(em){ var msg = ACT.err || (ACT.pts.length<2 ? (ACT.state==='wait' ? 'Buscando tu ubicación…' : 'Empieza a moverte y tu recorrido aparecerá aquí.') : ''); if(msg && ACT.pts.length<2) msg += ' ('+(ACT.native?'GPS nativo':'GPS del navegador')+' · señales recibidas: '+(ACT.rx||0)+')'; em.textContent = msg; em.style.display = msg ? 'block' : 'none'; }
+  var em = document.getElementById('act-empty'); if(em){ var msg = ACT.err || (ACT.pts.length<2 ? (ACT.state==='wait' ? 'Buscando tu ubicación…' : 'Empieza a moverte y tu recorrido aparecerá aquí.') : ''); if(msg && ACT.pts.length<2) msg += ' ('+(ACT.native?'GPS nativo':'GPS del navegador'+(ACT.nativeErr?' — falló el nativo: '+ACT.nativeErr:''))+' · señales recibidas: '+(ACT.rx||0)+')'; em.textContent = msg; em.style.display = msg ? 'block' : 'none'; }
   var lp = document.getElementById('act-lap'); if(lp){ lp.textContent = ACT.lapTxt||''; lp.style.display = ACT.lapTxt ? 'block' : 'none'; }
   set('act-fit', ACT.follow===false ? 'Seguir' : 'Ver todo');
   var cv = document.getElementById('act-cv'); if(cv) actMapDraw(cv, ACT.pts, {color:c[1], follow:ACT.follow!==false, live:true, zoom:16});
@@ -27786,7 +27811,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.28.141';
+var APP_VERSION = '2026.10.28.143';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })

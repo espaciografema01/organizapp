@@ -31,7 +31,7 @@
 
   var Platform = {
     isNative: native,
-    build: '2026.10.28.diag',
+    build: '2026.10.28.diag3',
     // Texto de diagnóstico (plugins nativos que la app ve). Se muestra en Actividad → Ajustes avanzados.
     diag: function(){
       var l = [];
@@ -39,7 +39,7 @@
         var hdr = (C && C.PluginHeaders) ? C.PluginHeaders.map(function(h){ return h.name; }) : [];
         l.push('native.js: ' + Platform.build);
         l.push('App nativa: ' + (native ? 'sí' : 'no'));
-        ['GrGeo','GrTimer','GramificaWidget','GrSecure','BiometricAuth','AdMob'].forEach(function(n){
+        ['GrGeo','GrTimer','GramificaWidget','GrSecure','BiometricAuthNative','AdMob'].forEach(function(n){
           l.push(n + ': ' + (hdr.indexOf(n) >= 0 ? 'registrado' : 'NO registrado') + (native && plugin(n) ? ' · disponible' : ' · no disponible'));
         });
         l.push('GPS nativo disponible: ' + (Platform.geo && Platform.geo.available() ? 'sí' : 'no'));
@@ -126,7 +126,7 @@
     biometric: {
       available: false,
       verify: function(reason){
-        var P = plugin('BiometricAuth');
+        var P = plugin('BiometricAuthNative') || plugin('BiometricAuth');
         if(!P) return Promise.resolve(false);
         return P.authenticate({reason: reason || 'Confirma tu identidad', androidTitle: 'Gramifica', androidSubtitle: reason || '', cancelTitle: 'Usar código', allowDeviceCredential: false})
           .then(function(){ return true; }).catch(function(){ return false; });
@@ -153,10 +153,13 @@
         available: function(){ return native && !!plugin('GrGeo'); },
         start: function(onPoint, onError){
           var P = plugin('GrGeo'); onP = onPoint; onE = onError; lastTs = 0; next = 0;
-          P.addListener('point', function(p){ feed(p); if(p.seq!=null) next = p.seq + 1; }).then(function(x){ h.push(x); });
-          P.addListener('error', function(e){ if(onE) onE(e && e.msg); }).then(function(x){ h.push(x); });
+          function keep(r){ Promise.resolve(r).then(function(x){ if(x) h.push(x); }).catch(function(){}); }
+          try{ keep(P.addListener('point', function(p){ feed(p); if(p && p.seq!=null) next = p.seq + 1; })); }catch(e){ if(onE) onE('Listener GPS: ' + String(e && e.message || e)); }
+          try{ keep(P.addListener('error', function(e){ if(onE) onE(e && e.msg); })); }catch(e){}
           vis = function(){ if(!document.hidden) drain(); }; document.addEventListener('visibilitychange', vis);
-          P.start().then(function(r){ if(r && r.seq!=null) next = r.seq; }).catch(function(e){ if(onE) onE(String(e && e.message || e).indexOf('denied')>=0 ? 'Permiso de ubicación denegado: actívalo en los ajustes' : 'No se pudo iniciar el GPS'); });
+          try{
+            Promise.resolve(P.start()).then(function(r){ if(r && r.seq!=null) next = r.seq; }).catch(function(e){ if(onE) onE(String(e && e.message || e).indexOf('denied')>=0 ? 'Permiso de ubicación denegado: actívalo en los ajustes' : 'No se pudo iniciar el GPS: ' + String(e && e.message || e)); });
+          }catch(e){ if(onE) onE('No se pudo iniciar el GPS: ' + String(e && e.message || e)); }
         },
         stop: function(){
           var P = plugin('GrGeo'); if(vis){ document.removeEventListener('visibilitychange', vis); vis = null; }
@@ -345,7 +348,7 @@
   };
 
     try{
-    var _bio = native && plugin('BiometricAuth');
+    var _bio = native && (plugin('BiometricAuthNative') || plugin('BiometricAuth'));
     if(_bio && _bio.checkBiometry) _bio.checkBiometry().then(function(r){ Platform.biometric.available = !!(r && r.isAvailable); }).catch(function(){});
   }catch(e){}
 
