@@ -31,7 +31,7 @@
 
   var Platform = {
     isNative: native,
-    build: '2026.10.29.health2',
+    build: '2026.10.29.ads3',
     // Texto de diagnóstico (plugins nativos que la app ve). Se muestra en Actividad → Ajustes avanzados.
     diag: function(){
       var l = [];
@@ -289,21 +289,46 @@
         }).catch(function(){ ready = null; return false; });
         return ready;
       }
+      var _prep = null; // {key, p, ok}
+      function _key(o){ return [o.adId, o.userId, o.customData, o.testing?1:0].join('|'); }
+      function _start(P, opts, key){
+        var st = {key: key, ok: false};
+        st.p = init().then(function(can){
+          if(!can){ var e = new Error('consent'); e.consent = true; throw e; }
+          var o = {adId: opts.adId, isTesting: !!opts.testing, ssv: {userId: opts.userId, customData: opts.customData}};
+          return P.prepareRewardVideoAd(o);
+        }).then(function(){ st.ok = true; });
+        st.p.catch(function(){ if(_prep === st) _prep = null; });
+        return st;
+      }
       return {
         available: function(){ return native && !!pl(); },
+        // Precarga: pide el anuncio con antelación para que al tocar "Ver anuncio" salga al instante.
+        // Un anuncio precargado queda atado a (adId, usuario, función) porque la recompensa lleva esos datos.
+        preload: function(opts){
+          var P = pl();
+          if(!P || !opts || !opts.adId) return;
+          var key = _key(opts);
+          if(_prep && _prep.key === key) return;
+          _prep = _start(P, opts, key);
+        },
+        // ¿Ya está cargado el anuncio para esas opciones?
+        ready: function(opts){ return !!(_prep && opts && _prep.key === _key(opts) && _prep.ok); },
         // opts: {adId, testing, userId, customData}. Resuelve {ok:true} cuando el anuncio terminó de mostrarse
         // (la recompensa real la confirma el servidor) o {ok:false, reason}.
         showRewarded: function(opts){
           var P = pl();
           if(!P) return Promise.resolve({ok:false, reason:'unsupported'});
           if(!opts || !opts.adId) return Promise.resolve({ok:false, reason:'no-config'});
-          return init().then(function(can){
-            if(!can) return {ok:false, reason:'consent'};
-            var o = {adId: opts.adId, isTesting: !!opts.testing, ssv: {userId: opts.userId, customData: opts.customData}};
-            return P.prepareRewardVideoAd(o).then(function(){
-              return P.showRewardVideoAd();
-            }).then(function(){ return {ok:true}; });
-          }).catch(function(e){
+          var key = _key(opts);
+          if(!_prep || _prep.key !== key) _prep = _start(P, opts, key);
+          var cur = _prep;
+          return cur.p.then(function(){
+            return P.showRewardVideoAd();
+          }).then(function(){ if(_prep === cur) _prep = null; return {ok:true}; })
+          .catch(function(e){
+            if(_prep === cur) _prep = null;
+            if(e && e.consent) return {ok:false, reason:'consent'};
             return {ok:false, reason:'error', error:String((e && (e.message || e.code)) || e || '')};
           });
         },

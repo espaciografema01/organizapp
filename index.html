@@ -530,6 +530,21 @@ details:not([open]) .rsec-chev{transform:rotate(-90deg);}
 .cl-tm{display:inline-flex;align-items:center;gap:4px;border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent-text);border-radius:8px;height:24px;padding:0 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;margin-left:auto;flex-shrink:0;}
 .hist-chip{flex-shrink:0;padding:7px 13px;border-radius:18px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;}
 .hist-chip.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent-text);}
+
+/* ── Enfoque: fondo y color propios por subpestaña ── */
+.enf-bg{position:relative;isolation:isolate;overflow:hidden;min-height:calc(100vh - 140px);}
+.enf-bg::before,.enf-bg::after{content:'';position:absolute;z-index:-1;pointer-events:none;}
+.enf-t-entrenar::before{inset:0;background:radial-gradient(120% 60% at 100% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%),linear-gradient(180deg,color-mix(in srgb,var(--accent) 6%,transparent),transparent 55%);}
+.enf-t-entrenar::after{left:-30%;top:-10%;width:160%;height:90px;background:linear-gradient(100deg,transparent 35%,color-mix(in srgb,var(--accent) 10%,transparent) 50%,transparent 65%);transform:translateX(-60%) skewX(-18deg);animation:enfSweep 9s ease-in-out infinite;}
+.enf-t-respiracion::before{inset:-20% -30% auto -30%;height:75%;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 24%,transparent),transparent 72%);animation:enfBreath 9s ease-in-out infinite;}
+.enf-t-respiracion::after{right:-35%;bottom:-8%;width:95%;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,#5aa9e6 18%,transparent),transparent 72%);animation:enfDrift 14s ease-in-out infinite alternate;}
+.enf-t-estudio::before{inset:0;background:radial-gradient(110% 50% at 0% 0%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 70%),radial-gradient(color-mix(in srgb,var(--accent) 16%,transparent) 1px,transparent 1.5px) 0 0/18px 18px;-webkit-mask-image:linear-gradient(180deg,#000,transparent 80%);mask-image:linear-gradient(180deg,#000,transparent 80%);}
+.enf-t-estudio::after{left:-10%;top:0;width:120%;height:2px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 35%,transparent),transparent);animation:enfScan 12s linear infinite;}
+@keyframes enfBreath{0%,100%{transform:scale(.88);opacity:.65}50%{transform:scale(1.12);opacity:1}}
+@keyframes enfDrift{from{transform:translate(0,0) scale(.9)}to{transform:translate(-14%,-10%) scale(1.1)}}
+@keyframes enfSweep{0%,55%{transform:translateX(-60%) skewX(-18deg)}100%{transform:translateX(60%) skewX(-18deg)}}
+@keyframes enfScan{from{transform:translateY(0);opacity:0}10%{opacity:1}90%{opacity:1}to{transform:translateY(520px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.enf-bg::before,.enf-bg::after{animation:none!important}}
 </style>
 </head>
 <body class="theme-light task-size-medium">
@@ -6541,8 +6556,12 @@ function lockMark(f){
   return '🔒 ';
 }
 var _adThen = null;
+function adOpts(f){ return {adId: ADS_CFG.rewardedUnitId, testing: ADS_CFG.testMode===true, userId: currentUser.uid, customData: f}; }
+// Pide el anuncio por adelantado (mientras el usuario lee la oferta) para que salga al instante.
+function adPreload(f){ try{ if(adOffered(f)) Platform.ads.preload(adOpts(f)); }catch(e){} }
 function showAdOfferModal(f, title, body, then, extraText){
   _adThen = (typeof then==='function') ? then : null;
+  adPreload(f);
   var cfg = adFeatureCfg(f) || {}, n = cfg.adsRequired||1, d = cfg.days||30, p = adProgress(f);
   var extra = extraText || ('También puedes ver '+n+' anuncio'+(n===1?'':'s')+' y obtener 1 cupo extra durante '+d+' días'+(p>0?' (llevas '+p+'/'+n+')':'')+'.');
   var old = document.getElementById('info-modal'); if(old) old.remove();
@@ -6565,10 +6584,9 @@ async function desbloquearConAnuncio(idFuncion, dias){
   _adBusy = true;
   try{
     var before = JSON.stringify((UNLOCKS && UNLOCKS[idFuncion]) || {});
-    var res = await Platform.ads.showRewarded({
-      adId: ADS_CFG.rewardedUnitId, testing: ADS_CFG.testMode===true,
-      userId: currentUser.uid, customData: idFuncion
-    });
+    var _ao = adOpts(idFuncion);
+    if(!Platform.ads.ready(_ao)) toast('Cargando anuncio… un momento');
+    var res = await Platform.ads.showRewarded(_ao);
     if(!res.ok){
       console.warn('Anuncio:', res.reason, res.error||'');
       toast(res.reason==='consent' ? 'Necesitamos tu consentimiento para mostrar anuncios' : 'No se pudo mostrar el anuncio. Inténtalo más tarde.');
@@ -6593,6 +6611,7 @@ async function desbloquearConAnuncio(idFuncion, dias){
     var cfg = adFeatureCfg(idFuncion) || {};
     var n = cfg.adsRequired||1, p = adProgress(idFuncion);
     var _done = !(p>0 && p<n), _cb = _adThen; _adThen = null;
+    if(!_done) adPreload(idFuncion);
     toast(!_done ? ('✓ Anuncio '+p+'/'+n+'. Falta '+(n-p)+' más.') : ('✓ ¡Desbloqueado!'+(_cb?'':' ('+(cfg.days||dias||30)+' días)')));
     if(_done && _cb){ try{ _cb(); }catch(e){ console.warn('adThen', e && e.message); } }
   }catch(e){
@@ -18117,12 +18136,18 @@ function toggleLibSec(k){ if(!S._libSecOpen) S._libSecOpen={}; S._libSecOpen[k]=
 function toggleTimerLib(){ S._timerLibOpen = !S._timerLibOpen; render(); }
 // ── Enfoque: pestañas Entrenar · Respiración · Estudio ──
 var ENF_TABS = [['entrenar','Entrenar','ejercicio'],['respiracion','Respiración','breath'],['estudio','Estudio','estudio']];
+// Color propio de cada subpestaña (acento + fondo). 'c' es el acento; el resto se deriva del tema activo.
+var ENF_COL = {entrenar:'#e0702f', respiracion:'#2f9e9a', estudio:'#6366d1'};
+function enfColVars(t){
+  var c = ENF_COL[t] || ENF_COL.entrenar;
+  return '--accent:'+c+';--accent-fill:'+c+';--accent-text:color-mix(in srgb,'+c+' 70%,var(--ink));--accent-bg:color-mix(in srgb,'+c+' 16%,var(--paper));';
+}
 function enfTabCur(){ var v = S._enfTab; if(!v){ try{ v = localStorage.getItem('og6-enftab'); }catch(e){} } return ENF_TABS.some(function(t){return t[0]===v;}) ? v : 'entrenar'; }
 function setEnfTab(v){ S._enfTab = v; try{ localStorage.setItem('og6-enftab', v); }catch(e){} render(); }
 function enfKindCur(){ return ENF_TABS.find(function(t){return t[0]===enfTabCur();})[2]; }
 function enfSubHTML(){
   var cur = enfTabCur();
-  return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button onclick="setEnfTab(\''+t[0]+'\')" style="flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'</div>';
+  return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button onclick="setEnfTab(\''+t[0]+'\')" style="'+enfColVars(t[0])+'flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'</div>';
 }
 function enfGoalGet(kind){ try{ return +((JSON.parse(localStorage.getItem('og6-enfgoal')||'{}'))[kind])||0; }catch(e){ return 0; } }
 function enfGoalSet(kind, v){ try{ var o = JSON.parse(localStorage.getItem('og6-enfgoal')||'{}'); o[kind] = Math.max(0, Math.min(600, Math.round(+v||0))); localStorage.setItem('og6-enfgoal', JSON.stringify(o)); }catch(e){} render(); }
@@ -18163,7 +18188,7 @@ function renderTimerHome(){
   if(enfSegCur()==='pro') return renderProgresoTab();
   var list = timerTplAll();
   var _tab = enfTabCur(), _kind = enfKindCur();
-  var html = '<div style="padding:16px 16px 90px;">'+enfSegHTML()+enfSubHTML();
+  var html = '<div class="enf-bg enf-t-'+_tab+'" style="'+enfColVars(_tab)+'padding:16px 16px 90px;">'+enfSegHTML()+enfSubHTML();
   if(_tab==='entrenar') html += timerTopHTML();
   else html += timerPausedHTML() + (_tab==='respiracion' ? enfBreathHTML() : enfStudyHTML());
   html += enfStatsHTML(_kind)+trainHistCardHTML(_kind);
@@ -28601,7 +28626,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.29.149';
+var APP_VERSION = '2026.10.29.150';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
