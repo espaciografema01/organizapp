@@ -31,7 +31,7 @@
 
   var Platform = {
     isNative: native,
-    build: '2026.10.28.diag3',
+    build: '2026.10.29.health2',
     // Texto de diagnóstico (plugins nativos que la app ve). Se muestra en Actividad → Ajustes avanzados.
     diag: function(){
       var l = [];
@@ -39,7 +39,7 @@
         var hdr = (C && C.PluginHeaders) ? C.PluginHeaders.map(function(h){ return h.name; }) : [];
         l.push('native.js: ' + Platform.build);
         l.push('App nativa: ' + (native ? 'sí' : 'no'));
-        ['GrGeo','GrTimer','GramificaWidget','GrSecure','BiometricAuthNative','AdMob'].forEach(function(n){
+        ['GrGeo','GrTimer','GramificaWidget','GrSecure','BiometricAuthNative','Health','AdMob'].forEach(function(n){
           l.push(n + ': ' + (hdr.indexOf(n) >= 0 ? 'registrado' : 'NO registrado') + (native && plugin(n) ? ' · disponible' : ' · no disponible'));
         });
         l.push('GPS nativo disponible: ' + (Platform.geo && Platform.geo.available() ? 'sí' : 'no'));
@@ -168,6 +168,48 @@
         }
       };
     })(),
+
+    // Health Connect (Android): lectura de entrenos de otras apps (Mi Fitness, Strava, Garmin…). Plugin @capgo/capacitor-health ('Health').
+    // Solo lectura: nunca escribe en Health Connect. Lee los últimos 30 días (sin permiso de historial).
+    health: {
+      available: function(){ return native && !!plugin('Health'); },
+      // → {available:boolean, reason?:string}
+      check: function(){
+        var P = plugin('Health'); if(!P) return Promise.resolve({available:false, reason:'no-plugin'});
+        return P.isAvailable().catch(function(e){ return {available:false, reason:String(e && e.message || e)}; });
+      },
+      // Pide permiso de lectura de entrenos, distancia y calorías. → true si se concedió al menos «workouts».
+      connect: function(){
+        var P = plugin('Health'); if(!P) return Promise.resolve(false);
+        return P.requestAuthorization({read:['workouts','distance','calories']}).then(function(r){
+          return !!(r && (r.readAuthorized||[]).indexOf('workouts') >= 0);
+        }).catch(function(){ return false; });
+      },
+      // ¿Ya está concedido el permiso de lectura de entrenos? No muestra ningún diálogo.
+      hasPermission: function(){
+        var P = plugin('Health'); if(!P) return Promise.resolve(false);
+        return P.checkAuthorization({read:['workouts']}).then(function(r){ return !!(r && (r.readAuthorized||[]).indexOf('workouts') >= 0); }).catch(function(){ return false; });
+      },
+      // → [{workoutType, duration(s), startDate, endDate, totalDistance(m)?, totalEnergyBurned(kcal)?, sourceId, sourceName, platformId}]
+      workouts: function(days){
+        var P = plugin('Health'); if(!P) return Promise.resolve([]);
+        var end = new Date(), start = new Date(end.getTime() - Math.min(30, days||30) * 86400000), all = [];
+        function page(anchor, n){
+          var o = {startDate: start.toISOString(), endDate: end.toISOString(), limit: 100};
+          if(anchor) o.anchor = anchor;
+          return P.queryWorkouts(o).then(function(r){
+            all = all.concat((r && r.workouts) || []);
+            if(r && r.anchor && n < 4 && ((r.workouts||[]).length)) return page(r.anchor, n+1);
+            return all;
+          });
+        }
+        return page(null, 0);
+      },
+      openSettings: function(){
+        var P = plugin('Health'); if(P && P.openHealthConnectSettings) return P.openHealthConnectSettings().catch(function(){});
+        return Promise.resolve();
+      }
+    },
 
     // Vibración. En nativo usa Haptics (un patrón [v,p,v,...] se reproduce por tramos).
     vibrate: function(pattern){

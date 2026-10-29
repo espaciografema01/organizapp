@@ -9800,6 +9800,7 @@ function actStartDraw(){
       '<button class="st-row" onclick="openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+(nsk?nsk+' elegida'+(nsk===1?'':'s'):'Opcional')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="removeOverlay(\'act-start\');openActHistory()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Todas mis actividades'+(n?' <span style="color:var(--muted);font-weight:600;">· '+n+'</span>':'')+'</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="actDiag()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Diagnóstico del GPS</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
+      (Platform.health && Platform.health.available() ? '<button class="st-row" onclick="openHcImport()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Importar de Salud (Health Connect)</span><span style="color:var(--muted);font-size:18px;">›</span></button>' : '')+
       '<button class="st-row" onclick="actImportPick()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Importar un archivo GPX</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="S.actVoice=!S.actVoice;saveState();actStartDraw()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Avisar por voz cada kilómetro</span><span style="font-size:12.5px;font-weight:700;color:'+(S.actVoice?'var(--accent-text)':'var(--muted)')+';">'+(S.actVoice?'Activado':'Apagado')+'</span></button>'+
       '<div style="display:flex;align-items:center;gap:10px;padding:6px 2px 0;font-size:12.5px;color:var(--ink-soft);"><span style="flex:1;line-height:1.4;">Mi peso, para estimar las calorías</span><input class="finp" type="number" inputmode="decimal" placeholder="kg" value="'+esc(S.bodyKg||'')+'" oninput="S.bodyKg=+this.value>0?+this.value:\'\';saveState()" style="width:80px;margin:0;text-align:right;"/></div>'+
@@ -10216,6 +10217,173 @@ function actGpxOut(){
   var a = ACTV.a, name = 'gramifica-'+a.type+'-'+a.date+'.gpx', b = new Blob([actGpx(a)], {type:'application/gpx+xml'});
   if(Platform.isNative){ Platform.saveBlobFile(name, b, 'application/gpx+xml').then(function(x){ if(!x.ok && x.error!=='cancelled') toast('No se pudo guardar'); }); return; }
   var u = URL.createObjectURL(b), l = document.createElement('a'); l.href = u; l.download = name; document.body.appendChild(l); l.click(); l.remove(); setTimeout(function(){URL.revokeObjectURL(u);},2000);
+}
+// ── Importar de Health Connect (Android): entrenos que otras apps (Mi Fitness, Strava, Garmin…) guardaron ──
+// Solo lectura, los últimos 30 días. Evita duplicados: por identificador (ya importado) y por parecido
+// (misma actividad, horas que se superponen) frente a lo que ya hay en Gramifica y entre las propias apps de origen.
+var HC_TYPE = {running:'trote', runningTreadmill:'trote', trackAndField:'trote', walking:'caminata', hiking:'caminata', snowshoeing:'caminata',
+  cycling:'bici', bikingStationary:'bici', handCycling:'bici'};
+var HC_NAME = {swimming:'Natación', swimmingPool:'Natación', swimmingOpenWater:'Natación', rowing:'Remo', rowingMachine:'Remo', elliptical:'Elíptica',
+  yoga:'Yoga', pilates:'Pilates', strengthTraining:'Fuerza', weightlifting:'Fuerza', traditionalStrengthTraining:'Fuerza', functionalStrengthTraining:'Fuerza',
+  highIntensityIntervalTraining:'HIIT', dance:'Baile', dancing:'Baile', cardioDance:'Baile', climbing:'Escalada', rockClimbing:'Escalada', soccer:'Fútbol',
+  tennis:'Tenis', basketball:'Básquetbol', volleyball:'Vóleibol', surfing:'Surf', stairClimbing:'Escaleras', stairClimbingMachine:'Escaleras',
+  boxing:'Boxeo', martialArts:'Artes marciales', skiing:'Esquí', snowboarding:'Snowboard', skating:'Patinaje', iceSkating:'Patinaje', bootCamp:'Boot camp',
+  calisthenics:'Calistenia', stretching:'Estiramiento', exerciseClass:'Clase', crossTraining:'Entrenamiento cruzado', mixedCardio:'Cardio'};
+var HC_APPS = {'com.xiaomi.wearable':'Mi Fitness','com.mi.health':'Mi Fitness','com.strava':'Strava','com.garmin.android.apps.connectmobile':'Garmin Connect',
+  'com.sec.android.app.shealth':'Samsung Health','com.google.android.apps.fitness':'Google Fit','com.fitbit.FitbitMobile':'Fitbit','fi.polar.polarflow':'Polar Flow',
+  'com.huawei.health':'Huawei Health','com.huami.watch.hmwatchmanager':'Zepp','com.stt.android.suunto':'Suunto','com.withings.wiscale2':'Withings',
+  'com.fitnesskeeper.runkeeper.pro':'Runkeeper','com.nike.plusgps':'Nike Run Club','com.google.android.wearable.healthservices':'Wear OS','com.ouraring.oura':'Oura',
+  'com.yf.smart.coros.dist':'Coros','com.google.android.apps.healthdata':'Health Connect'};
+function hcMapType(t){ return HC_TYPE[t] || 'otro'; }
+function hcOrigin(w){ var id = String(w.sourceId||''); return HC_APPS[id] || (w.sourceName && w.sourceName!==id ? w.sourceName : (id.split('.').slice(-1)[0] || 'otra app')); }
+// ¿Son el mismo entrenamiento? (inicio en ms, duración en s). Misma actividad y horas que se superponen casi por completo,
+// o inicios a ≤5 min con duraciones parecidas (±25 %).
+function hcSame(s1, d1, t1, s2, d2, t2){
+  if(!(d1>0) || !(d2>0) || !isFinite(s1) || !isFinite(s2)) return false;
+  if(t1!==t2 && t1!=='otro' && t2!=='otro') return false;
+  var e1 = s1+d1*1000, e2 = s2+d2*1000, ov = Math.min(e1,e2)-Math.max(s1,s2);
+  if(ov>0 && ov/(Math.min(d1,d2)*1000)>=0.8 && ov/(Math.max(d1,d2)*1000)>=0.5) return true;
+  return Math.abs(s1-s2)<=5*60000 && Math.abs(d1-d2)/Math.max(d1,d2)<=0.25;
+}
+// Devuelve filas {w, s, e, dur, type, state:'new'|'imported'|'deleted'|'dup'|'dupsrc', match, pick}
+function hcAnalyze(ws, acts){
+  var rows = (ws||[]).map(function(w){
+    var s = Date.parse(w.startDate), e = Date.parse(w.endDate);
+    return {w:w, s:s, e:e, dur:Math.max(1,(e-s)/1000), type:hcMapType(w.workoutType), state:'new', match:null, pick:true};
+  }).filter(function(r){ return isFinite(r.s) && isFinite(r.e) && r.e>r.s; });
+  rows.sort(function(a,b){ return b.s-a.s; });
+  acts = acts||[];
+  rows.forEach(function(r){
+    var seen = r.w.platformId && acts.find(function(a){ return a.hcId===r.w.platformId; });
+    if(seen){ r.state = seen.del ? 'deleted' : 'imported'; r.pick = false; return; }
+    var m = acts.find(function(a){ return !a.del && hcSame(r.s, r.dur, r.type, a.startedAt, a.sec||0, a.type); });
+    if(m){ r.state = 'dup'; r.match = m; r.pick = false; }
+  });
+  // Mismo entreno guardado por dos apps de origen: se propone el que trae más datos.
+  var cand = rows.filter(function(r){ return r.state==='new'; });
+  var score = function(r){ return (r.w.totalDistance>0?4:0)+(r.w.totalEnergyBurned>0?1:0)+r.dur/100000; };
+  cand.forEach(function(r, i){
+    if(r.state!=='new') return;
+    cand.forEach(function(q, j){
+      if(j<=i || q.state!=='new' || !hcSame(r.s, r.dur, r.type, q.s, q.dur, q.type)) return;
+      var keep = score(q)>score(r) ? q : r, drop = keep===r ? q : r;
+      drop.state = 'dupsrc'; drop.match = keep; drop.pick = false;
+    });
+  });
+  return rows;
+}
+function actCreateHealth(w, type){
+  var s = Date.parse(w.startDate), e = Date.parse(w.endDate), sec = Math.max(1, Math.round(w.duration || (e-s)/1000)), km = Math.max(0, (w.totalDistance||0)/1000);
+  var nm = type==='otro' ? (HC_NAME[w.workoutType] || actType('otro').name) : actType(type).name;
+  var act = {id:uid(), ts:Date.now(), date:localDateStr(new Date(s)), startedAt:s, type:type, name:nm, sec:sec, movSec:sec, km:Math.round(km*1000)/1000, gain:0, kg:+S.bodyKg||0,
+    skills:[], updatedAt:Date.now(), src:'hc', hcId:w.platformId || ('hc'+s), hcSrc:String(w.sourceId||'')};
+  act.kcal = w.totalEnergyBurned>0 ? Math.round(w.totalEnergyBurned) : actKcal(type, km, act.kg);
+  var h = {id:uid(), ts:act.ts, startedAt:s, date:act.date, kind:'free', name:act.name, itemText:'', taskId:null, group:'Actividad', sec:act.sec, rounds:1, exercises:[], results:[], km:act.km, actId:act.id, updatedAt:Date.now()};
+  if(!S.timerHistory) S.timerHistory = []; S.timerHistory.push(h); timerHistAward(h); act.histId = h.id;
+  if(!S.activities) S.activities = []; S.activities.push(act);
+  try{ actCheckRecords(act); }catch(x){}
+  try{ actFeedSkills(act); }catch(x){}
+  return act;
+}
+// ── Importación automática: al abrir la app (o volver a ella) se importan los entrenos NUEVOS desde que se conectó Health Connect.
+// Se activa sola la primera vez que el usuario concede el permiso; se puede apagar en «Importar de Salud». Los dudosos
+// (parecen repetidos) no se importan solos: se avisa y quedan para revisarlos a mano.
+function hcLS(k, v){ try{ if(v===undefined) return localStorage.getItem(k); if(v===null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){} return null; }
+function hcAutoOn(){ return hcLS('og6-hc-auto')!=='0' && !!hcLS('og6-hc-since'); }
+function hcAutoFirst(){ if(!hcLS('og6-hc-since')){ hcLS('og6-hc-since', String(Date.now())); if(hcLS('og6-hc-auto')===null) hcLS('og6-hc-auto','1'); } }
+function hcAutoToggle(){
+  if(hcAutoOn()){ hcLS('og6-hc-auto','0'); }
+  else { hcLS('og6-hc-auto','1'); hcLS('og6-hc-since', String(Date.now())); hcAutoSync(true); }
+  hcDraw();
+}
+function hcAutoRowHTML(){
+  var on = hcAutoOn();
+  return '<div onclick="hcAutoToggle()" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:12px;margin-bottom:10px;cursor:pointer;">'+
+    '<span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13.5px;color:var(--ink);">Importar automáticamente</span>'+
+    '<span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px;">Al abrir la app se suman solos los entrenos nuevos. Los que parezcan repetidos se dejan para revisar aquí.</span></span>'+
+    '<span style="font-size:12.5px;font-weight:700;color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+(on?'Activado':'Apagado')+'</span></div>';
+}
+var _hcRun = 0, _hcBusy = false;
+function hcAutoSync(force){
+  if(_hcBusy || !hcAutoOn() || !Platform.isNative || !currentUser || !(Platform.health && Platform.health.available())) return Promise.resolve();
+  if(!force && Date.now()-_hcRun < 10*60000) return Promise.resolve();
+  _hcBusy = true; _hcRun = Date.now();
+  var since = +hcLS('og6-hc-since') || Date.now();
+  return Platform.health.hasPermission().then(function(ok){
+    if(!ok) return;
+    return Platform.health.workouts(30).then(function(ws){
+      var rows = hcAnalyze(ws, S.activities||[]).filter(function(r){ return r.s >= since; });
+      var nuevos = rows.filter(function(r){ return r.state==='new'; }).slice(0, 10), dudosos = rows.filter(function(r){ return r.state==='dup'; });
+      var rep = []; try{ rep = JSON.parse(hcLS('og6-hc-rep')||'[]'); }catch(e){}
+      var nuevoDud = dudosos.filter(function(r){ return rep.indexOf(r.w.platformId)<0; });
+      var n = 0, apps = {};
+      nuevos.slice().sort(function(a,b){ return a.s-b.s; }).forEach(function(r){ try{ actCreateHealth(r.w, r.type); n++; apps[hcOrigin(r.w)] = 1; }catch(e){ console.warn('hc auto', e && e.message); } });
+      if(n){ try{ chalSync(); }catch(e){} saveState(); render(); }
+      if(nuevoDud.length){ rep = rep.concat(nuevoDud.map(function(r){ return r.w.platformId; })).slice(-200); hcLS('og6-hc-rep', JSON.stringify(rep)); }
+      if(n || nuevoDud.length){
+        var msg = n ? ('Importado'+(n===1?'':'s')+' '+n+' entreno'+(n===1?'':'s')+' de '+Object.keys(apps).join(', ')) : '';
+        if(nuevoDud.length) msg += (msg?' · ':'')+nuevoDud.length+' parecido'+(nuevoDud.length===1?'':'s')+' a lo que ya tienes: revísa'+(nuevoDud.length===1?'lo':'los')+' en Importar de Salud';
+        toast(msg);
+      }
+    });
+  }).catch(function(e){ console.warn('hcAutoSync', e && e.message); }).then(function(){ _hcBusy = false; });
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(function(){ hcAutoSync(false); }, 2500); });
+setTimeout(function(){ hcAutoSync(false); }, 9000);
+var HCI = null;
+function openHcImport(){
+  if(!(Platform.health && Platform.health.available())){ toast('Disponible en la app de Android'); return; }
+  removeOverlay('act-start'); removeOverlay('hc-import');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='hc-import'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('hc-import'); });
+  document.body.appendChild(ov); HCI = {rows:null, busy:true, msg:''}; hcDraw();
+  Platform.health.check().then(function(r){
+    if(!r || !r.available){ HCI.busy = false; HCI.msg = 'Health Connect no está disponible en este teléfono ('+((r&&r.reason)||'sin detalle')+'). Instálalo o actualízalo desde Play Store.'; HCI.fix = true; hcDraw(); return; }
+    return Platform.health.connect().then(function(ok){
+      if(!ok){ HCI.busy = false; HCI.msg = 'Sin permiso para leer tus entrenos. Puedes dárselo en Health Connect → Permisos de apps → Gramifica.'; HCI.fix = true; hcDraw(); return; }
+      hcAutoFirst();
+      return Platform.health.workouts(30).then(function(ws){
+        HCI.rows = hcAnalyze(ws, S.activities||[]); HCI.busy = false; hcDraw();
+      });
+    });
+  }).catch(function(e){ HCI.busy = false; HCI.msg = 'No se pudieron leer los entrenos: '+String(e && e.message || e); hcDraw(); });
+}
+function hcDraw(){
+  var ov = document.getElementById('hc-import'); if(!ov || !HCI) return;
+  var b = '', rows = HCI.rows;
+  if(HCI.busy) b = '<div style="text-align:center;padding:30px 0;color:var(--muted);font-size:13px;">Leyendo tus entrenos…</div>';
+  else if(HCI.msg) b = '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;padding:6px 0 12px;">'+esc(HCI.msg)+'</div>'+(HCI.fix?'<button class="sbtn" style="width:100%;" onclick="Platform.health.openSettings()">Abrir Health Connect</button>':'');
+  else if(rows && !rows.length) b = hcAutoRowHTML()+'<div style="font-size:13px;color:var(--muted);line-height:1.6;padding:14px 0;text-align:center;">No hay entrenos en los últimos 30 días.<br>Si tu reloj o app no aparece, revisa que esté sincronizando con Health Connect.</div>';
+  else if(rows){
+    var nSel = rows.filter(function(r){return r.pick;}).length;
+    b = hcAutoRowHTML()+'<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Últimos 30 días, desde las apps conectadas a Health Connect. Los que ya están en Gramifica quedan sin marcar.</div>'+
+      rows.map(function(r,i){
+        var w = r.w, d = new Date(r.s), hh = ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2), nm = r.type==='otro' ? (HC_NAME[w.workoutType]||'Otra') : actType(r.type).name;
+        var st = r.state, tag = '';
+        if(st==='imported') tag = '<span style="color:var(--muted);">Ya importado</span>';
+        else if(st==='deleted') tag = '<span style="color:var(--muted);">Lo eliminaste antes</span>';
+        else if(st==='dup') tag = '<span style="color:#b07a1e;font-weight:700;">Parece el mismo que «'+esc(r.match.name||'actividad')+'» de Gramifica</span>';
+        else if(st==='dupsrc') tag = '<span style="color:#b07a1e;font-weight:700;">Repetido de '+esc(hcOrigin(r.match.w))+'</span>';
+        else tag = '<span style="color:var(--accent-text);font-weight:700;">Nuevo</span>';
+        var kmTxt = w.totalDistance>0 ? ' · '+fmtNum(Math.round(w.totalDistance/10)/100)+' km' : '', kc = w.totalEnergyBurned>0 ? ' · '+Math.round(w.totalEnergyBurned)+' kcal' : '';
+        var dis = (st==='imported'||st==='deleted') ? ' style="opacity:.55;"' : '';
+        return '<div'+dis+' onclick="hcToggle('+i+')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:'+(r.pick?'var(--accent-bg)':'var(--paper)')+';border:1px solid '+(r.pick?'var(--accent)':'var(--line-soft)')+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
+          '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(r.pick?'var(--accent)':'var(--muted-soft)')+';background:'+(r.pick?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(r.pick?chkSVG():'')+'</div>'+
+          '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(nm)+' <span style="font-weight:500;color:var(--muted);font-size:12px;">· '+d.getDate()+' '+REG_MONTHS[d.getMonth()]+' '+hh+'</span></div>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(fmtDur(Math.round(r.dur)))+kmTxt+kc+' · '+esc(hcOrigin(w))+'</div>'+
+          '<div style="font-size:11px;margin-top:3px;">'+tag+'</div></div></div>';
+      }).join('')+
+      '<button class="sbtn" style="width:100%;margin-top:6px;'+(nSel?'':'opacity:.5;')+'" onclick="hcImportDo()">'+(nSel?'Importar '+nSel+' entreno'+(nSel===1?'':'s'):'Nada seleccionado')+'</button>';
+  }
+  ov.innerHTML = '<div class="sheet" style="max-height:88vh;overflow-y:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="serif" style="font-weight:700;font-size:19px;">Importar de Salud</span><button onclick="removeOverlay(\'hc-import\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+b+'</div>';
+}
+function hcToggle(i){ if(!HCI || !HCI.rows || !HCI.rows[i]) return; var r = HCI.rows[i]; if(r.state==='imported'||r.state==='deleted') return; r.pick = !r.pick; hcDraw(); }
+function hcImportDo(){
+  if(!HCI || !HCI.rows) return; var sel = HCI.rows.filter(function(r){ return r.pick; }); if(!sel.length) return;
+  var n = 0;
+  sel.slice().sort(function(a,b){ return a.s-b.s; }).forEach(function(r){ try{ actCreateHealth(r.w, r.type); n++; }catch(e){ console.warn('hc import', e && e.message); } });
+  try{ chalSync(); }catch(e){}
+  saveState(); render(); removeOverlay('hc-import'); HCI = null;
+  toast(n ? ('Importados '+n+' entreno'+(n===1?'':'s')) : 'No se pudo importar');
 }
 function actImportPick(){
   var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.gpx,application/gpx+xml,text/xml';
@@ -28006,7 +28174,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.28.145';
+var APP_VERSION = '2026.10.29.147';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
