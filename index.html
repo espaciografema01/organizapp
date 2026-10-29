@@ -5734,13 +5734,22 @@ function renderYoTemaScreenBase(){
         var active = S.theme===t.id;
         var locked = !themeAllowed(t.id);
         var textColor = (t.id==='dark'||t.id==='galaxia'||t.id==='terracota') ? '#f5f5f5' : '#1a1a1a';
-        return '<button onclick="'+(locked?'themeLockedTap(\''+t.id+'\')':'setTheme(\''+t.id+'\')')+'" style="cursor:pointer;border:'+(active?'2px solid var(--accent)':'1.5px solid var(--line)')+';border-radius:12px;padding:12px 6px;background:'+t.bg+(locked?';opacity:.6':'')+';font-family:Inter,sans-serif;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">'+
-          (locked?'<span style="position:absolute;top:5px;right:6px;color:'+textColor+';opacity:.5;">'+LOCK_ICON+'</span>':'')+
+        // ▶ ANUNCIO = se desbloquea con un anuncio · PREMIUM = solo con suscripción · ✓ N d = desbloqueado por anuncio
+        var _pill = 'display:inline-flex;align-items:center;gap:3px;border-radius:8px;padding:2px 6px;font-size:9px;font-weight:800;letter-spacing:.04em;color:#fff;';
+        var viaAd = limOn() && !userIsDonante && LIM_AD_THEMES.indexOf(t.id)>=0, adDays = 0;
+        if(viaAd && !locked){ var _a = adActive('theme_'+t.id); if(_a.length) adDays = Math.max(1, Math.ceil((Math.max.apply(null,_a)-Date.now())/86400000)); }
+        var kind = !locked ? (adDays?'on':'') : ((viaAd && adOffered('theme_'+t.id)) ? 'ad' : 'sub');
+        var pill = kind==='ad' ? '<span style="'+_pill+'background:var(--accent);">▶ ANUNCIO</span>'
+          : (kind==='sub' ? '<span style="'+_pill+'background:rgba(0,0,0,.5);">'+LOCK_ICON.replace('width="11" height="13"','width="8" height="10"')+' PREMIUM</span>'
+          : (kind==='on' ? '<span style="'+_pill+'background:#2d8c70;">✓ '+adDays+' d</span>' : ''));
+        return '<button onclick="'+(locked?'themeLockedTap(\''+t.id+'\')':'setTheme(\''+t.id+'\')')+'" style="cursor:pointer;border:'+(active?'2px solid var(--accent)':'1.5px solid var(--line)')+';border-radius:12px;padding:12px 6px;background:'+t.bg+(kind==='sub'?';opacity:.62':'')+';font-family:Inter,sans-serif;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;">'+
           '<div style="width:22px;height:22px;border-radius:50%;background:'+t.color+';'+(active?'box-shadow:0 0 0 2px '+t.bg+',0 0 0 4px '+t.color+';':'')+'"></div>'+
           '<div style="font-size:11px;font-weight:600;color:'+textColor+';">'+t.name+'</div>'+
+          pill+
         '</button>';
       }).join('')+
     '</div>'+
+    (limOn() && !userIsDonante ? '<div style="margin-top:10px;display:flex;gap:14px;justify-content:center;font-size:10.5px;color:var(--muted);"><span><b style="color:var(--accent-text);">▶</b> se desbloquea con un anuncio</span><span>🔒 solo con suscripción</span></div>' : '')+
     (userIsDonante?'':
       '<div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center;">'+
         '<span onclick="openDonationInfo()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">Comprar acceso</span> para desbloquear todos los temas'+
@@ -6520,6 +6529,11 @@ function adOffered(f){
     return true;
   }catch(e){ return false; }
 }
+// Distintivos: ▶ = se desbloquea mirando un anuncio · 🔒 = solo con suscripción.
+function lockMark(f){
+  try{ if(limOn() && f && adOffered(f)) return '<span style="color:var(--accent-text);font-weight:800;">▶</span> '; }catch(e){}
+  return '🔒 ';
+}
 var _adThen = null;
 function showAdOfferModal(f, title, body, then, extraText){
   _adThen = (typeof then==='function') ? then : null;
@@ -6932,7 +6946,7 @@ function regSpark(r){
   return ser.length>=2 ? miniSpark(ser,r.color,false) : '';
 }
 function regQuickBtn(r){
-  if(regLocked(r)) return '<button onclick="event.stopPropagation();regLockedTap()" aria-label="Bloqueado" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line);background:var(--bg);cursor:pointer;">🔒</button>';
+  if(regLocked(r)) return '<button onclick="event.stopPropagation();regLockedTap()" aria-label="Bloqueado" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line);background:var(--bg);cursor:pointer;">'+lockMark('registry_slot').trim()+'</button>';
   if(r.kind==='cycle') return '<button onclick="event.stopPropagation();cyDay(\''+r.id+'\',\''+todayStr()+'\')" aria-label="Anotar hoy" style="flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);font-size:20px;">+</button>';
   var base='flex-shrink:0;width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;';
   if(pzOn(r)) return '<button onclick="event.stopPropagation();pzResetOpen(\''+r.id+'\')" aria-label="Reinicio" style="'+base+'border:1.5px solid var(--line);background:var(--bg);color:var(--ink-soft);">'+ico('reset',17,2)+'</button>';
@@ -7135,7 +7149,7 @@ function regRowHTML(r){
     '<div onclick="if(_selLpFired){_selLpFired=false;return;}openRegistryView(\''+r.id+'\')" oncontextmenu="event.preventDefault();if(!_selLpFired)openQuickAdd(\''+r.id+'\');return false;" ontouchstart="selLpStart(\'regs\',\''+r.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'regs\',\''+r.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer;">'+
     '<div style="width:38px;height:38px;border-radius:11px;background:'+r.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+regIcon(r)+'</div>'+
     '<div style="flex:1;min-width:0;">'+
-      '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(regLocked(r)?'🔒 ':'')+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
+      '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(regLocked(r)?lockMark('registry_slot'):'')+esc(r.name)+(pc?' <span style="font-size:11px;font-weight:600;color:'+(pl?'var(--bad)':'var(--muted)')+';margin-left:4px;">· '+pc+' pend.</span>':'')+'</div>'+
       '<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(regSummaryLine(r))+'</div>'+
     '</div>'+regSpark(r)+'</div>'+regQuickBtn(r)+
   '</div>';
@@ -7177,7 +7191,7 @@ function renderRegistriesSection(){
   var _bs = 'border-radius:14px;padding:14px;font-size:14px;font-weight:700;font-family:Inter,sans-serif;cursor:pointer;';
   var _can = canCreateAnyRegistry(), _lk = featureLocked('cycle');
   html += '<div style="display:flex;gap:8px;margin-top:12px;">'+
-    '<button onclick="'+(_can?'openRegEditor(null)':(limOn()?'regNewLimit()':'toast(\'Llegaste al límite de tu plan\')'))+'" style="flex:1;background:var(--accent);color:white;border:none;'+_bs+(_can?'':'opacity:.7;')+'">'+(_can?'':'🔒 ')+'+ Añadir registro</button>'+
+    '<button onclick="'+(_can?'openRegEditor(null)':(limOn()?'regNewLimit()':'toast(\'Llegaste al límite de tu plan\')'))+'" style="flex:1;background:var(--accent);color:white;border:none;'+_bs+(_can?'':'opacity:.7;')+'">'+(_can?'':lockMark('registry_slot'))+'+ Añadir registro</button>'+
     (cyReg() ? '' : '<button onclick="'+(_lk?'toast(\'Próximamente\')':'cyCreate()')+'" style="flex:1;background:transparent;color:var(--ink);border:1.5px solid var(--line);'+_bs+(_lk?'opacity:.55;':'')+'">Registro de ciclo'+(_lk?' · pronto':'')+'</button>')+
   '</div>';
   if(!_can) html += '<div style="text-align:center;padding:10px;font-size:11.5px;color:var(--muted);">Usas '+regCountedList().length+' de '+registryCap()+' registros de tu plan.'+(limOn()?' <span onclick="regNewLimit()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">Ampliar</span>':'')+'</div>';
@@ -15667,7 +15681,7 @@ function levelTrackCardHTML(track, idx, editable){
   }
   var info = lvlInfo(track.xp||0);
   if(trackLocked(track)) return '<div onclick="trackLockedTap()" style="display:flex;align-items:center;gap:12px;padding:9px 2px;cursor:pointer;opacity:.6;">'+
-    '<div style="width:42px;height:42px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">🔒</div>'+
+    '<div style="width:42px;height:42px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+lockMark('track_slot').trim()+'</div>'+
     '<div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(track.name)+'</div>'+
     '<div style="font-size:11px;color:var(--muted);margin-top:1px;">Bloqueado: no suma XP hasta ampliar tu cupo</div></div>'+
     (editable?'<button onclick="event.stopPropagation();openTrackEditor(\''+track.id+'\')" style="background:none;border:none;font-size:12px;font-weight:700;color:var(--accent-text);cursor:pointer;text-decoration:underline;">Editar</button>':'')+'</div>';
@@ -24725,7 +24739,7 @@ function clAddButtonHTML(){
   var limited = !isPremium();
   var n = M.checklist.length;
   var atMax = limited && clBlocked(M.task, n);
-  return '<button onclick="mAddCL()" style="background:none;border:none;color:'+(atMax?'var(--muted-soft)':'var(--muted)')+';font-size:13px;cursor:pointer;padding:4px 0;">'+(atMax?'🔒 Agregar ítem':'+ Agregar ítem')+'</button>'+
+  return '<button onclick="mAddCL()" style="background:none;border:none;color:'+(atMax?'var(--muted-soft)':'var(--muted)')+';font-size:13px;cursor:pointer;padding:4px 0;">'+(atMax?lockMark('checklist_ext')+'Agregar ítem':'+ Agregar ítem')+'</button>'+
     ((M.task&&M.task.period==='dia')?'<div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;align-items:center;">'+ico('clock',12,2)+'&nbsp;Rutina por ítem'+infoBtn('cltimer')+'</div>':'')+
     (limited?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+n+'/'+clMax(M.task)+' ítems (plan gratuito)'+(atMax?' — <span onclick="openDonationInfo()" style="color:var(--accent-text);font-weight:700;cursor:pointer;text-decoration:underline;">ampliar</span>':'')+'</div>':'');
 }
@@ -27992,7 +28006,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.28.144';
+var APP_VERSION = '2026.10.28.145';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
