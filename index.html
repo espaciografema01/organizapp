@@ -535,16 +535,17 @@ details:not([open]) .rsec-chev{transform:rotate(-90deg);}
 .enf-bg{position:relative;isolation:isolate;overflow:hidden;min-height:calc(100vh - 140px);}
 .enf-bg::before,.enf-bg::after{content:'';position:absolute;z-index:-1;pointer-events:none;}
 .enf-t-entrenar::before{inset:0;background:radial-gradient(120% 60% at 100% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%),linear-gradient(180deg,color-mix(in srgb,var(--accent) 6%,transparent),transparent 55%);}
-.enf-t-entrenar::after{left:-30%;top:-10%;width:160%;height:90px;background:linear-gradient(100deg,transparent 35%,color-mix(in srgb,var(--accent) 10%,transparent) 50%,transparent 65%);transform:translateX(-60%) skewX(-18deg);animation:enfSweep 9s ease-in-out infinite;}
-.enf-t-respiracion::before{inset:-20% -30% auto -30%;height:75%;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 24%,transparent),transparent 72%);animation:enfBreath 9s ease-in-out infinite;}
-.enf-t-respiracion::after{right:-35%;bottom:-8%;width:95%;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,#5aa9e6 18%,transparent),transparent 72%);animation:enfDrift 14s ease-in-out infinite alternate;}
+.enf-t-entrenar::after{left:-30%;top:-4%;width:160%;height:260px;background:linear-gradient(100deg,transparent 38%,color-mix(in srgb,var(--accent) 26%,transparent) 50%,transparent 62%);transform:translateX(-60%) skewX(-18deg);animation:enfSweep 6s ease-in-out infinite;}
+.enf-t-respiracion::before{inset:-20% -30% auto -30%;height:75%;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent) 38%,transparent),transparent 72%);animation:enfBreath 8s ease-in-out infinite;}
+.enf-t-respiracion::after{right:-35%;bottom:-8%;width:95%;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,#5aa9e6 30%,transparent),transparent 72%);animation:enfDrift 11s ease-in-out infinite alternate;}
 .enf-t-estudio::before{inset:0;background:radial-gradient(110% 50% at 0% 0%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 70%),radial-gradient(color-mix(in srgb,var(--accent) 16%,transparent) 1px,transparent 1.5px) 0 0/18px 18px;-webkit-mask-image:linear-gradient(180deg,#000,transparent 80%);mask-image:linear-gradient(180deg,#000,transparent 80%);}
 .enf-t-estudio::after{left:-10%;top:0;width:120%;height:2px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 35%,transparent),transparent);animation:enfScan 12s linear infinite;}
-@keyframes enfBreath{0%,100%{transform:scale(.88);opacity:.65}50%{transform:scale(1.12);opacity:1}}
+@keyframes enfBreath{0%,100%{transform:scale(.8);opacity:.5}50%{transform:scale(1.2);opacity:1}}
 @keyframes enfDrift{from{transform:translate(0,0) scale(.9)}to{transform:translate(-14%,-10%) scale(1.1)}}
-@keyframes enfSweep{0%,55%{transform:translateX(-60%) skewX(-18deg)}100%{transform:translateX(60%) skewX(-18deg)}}
+@keyframes enfSweep{0%,35%{transform:translateX(-60%) skewX(-18deg)}100%{transform:translateX(60%) skewX(-18deg)}}
 @keyframes enfScan{from{transform:translateY(0);opacity:0}10%{opacity:1}90%{opacity:1}to{transform:translateY(520px);opacity:0}}
 @media (prefers-reduced-motion:reduce){.enf-bg::before,.enf-bg::after{animation:none!important}}
+.sec-tint{background-image:radial-gradient(120% 320px at 100% 0%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 75%);background-repeat:no-repeat;}
 .enf-noanim::before,.enf-noanim::after{animation:none!important}.enf-noanim.enf-t-entrenar::after,.enf-noanim.enf-t-estudio::after{display:none}
 </style>
 </head>
@@ -5729,7 +5730,8 @@ function renderYoTemaScreen(){
         '<div style="pointer-events:none;margin-bottom:8px;">'+rows+'</div>'+
         '<div style="font-size:12.5px;font-weight:700;color:var(--ink);">'+o[1]+'</div><div style="font-size:10px;color:var(--muted);">'+o[2]+'</div></button>';
     }).join('')+'</div></div>';
-  return renderYoTemaScreenBase()+card;
+  var colCard = '<div class="card" style="margin-top:14px;"><div style="font-weight:700;font-size:14px;color:var(--ink);margin-bottom:4px;">Colores y fondos por sección</div><div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Dale un color propio a Hoy, Plan, Registros, Enfoque y más.</div><button type="button" class="sbtn" onclick="openEnfColors()" style="width:100%;">Elegir colores</button></div>';
+  return renderYoTemaScreenBase()+card+colCard;
 }
 function renderYoTemaScreenBase(){
   var FREE_THEMES = ['light','dark','bosque'];  // Disponibles sin pagar
@@ -18140,28 +18142,66 @@ function toggleTimerLib(){ S._timerLibOpen = !S._timerLibOpen; render(); }
 // ── Enfoque: pestañas Entrenar · Respiración · Estudio ──
 var ENF_TABS = [['entrenar','Entrenar','ejercicio'],['respiracion','Respiración','breath'],['estudio','Estudio','estudio']];
 // Color propio de cada subpestaña (acento + fondo). 'c' es el acento; el resto se deriva del tema activo.
+var _render0 = render; render = function(){ var r = _render0.apply(this, arguments); try{ applySecColor(); }catch(e){} return r; };
 var ENF_COL = {entrenar:'#e0702f', respiracion:'#2f9e9a', estudio:'#6366d1'};
 var ENF_PAL = ['#e0702f','#d94f70','#c9a227','#4f9d4a','#2f9e9a','#3b82c4','#6366d1','#9a5bc7'];
+// Secciones de la app que se pueden teñir (sin color propio = el del tema).
+var SEC_COL = [['hoy','Hoy'],['plan','Plan'],['horario','Calendario'],['progreso','Progreso'],['proyectos','Registros'],['energia','Energía y modos'],['yo','Yo']];
+function secKey(tab){
+  if(tab==='hoy'||tab==='dia') return 'hoy';
+  if(tab==='plan'||tab==='objetivos') return 'plan';
+  if(tab==='horario'||tab==='progreso'||tab==='proyectos'||tab==='yo') return tab;
+  if(tab==='energia'||tab==='modos'||tab==='plantillas') return 'energia';
+  return null;
+}
 function enfPrefLoad(){ if(S._enfPrefOk) return; S._enfPrefOk = true; try{ var a = JSON.parse(localStorage.getItem('og6-enfcol')||'null'); if(a && typeof a==='object') S.enfCol = a; var b = localStorage.getItem('og6-enfanim'); if(b==='0') S.enfAnim = false; }catch(e){} }
 function enfPrefSave(){ try{ localStorage.setItem('og6-enfcol', JSON.stringify(S.enfCol||{})); localStorage.setItem('og6-enfanim', S.enfAnim===false?'0':'1'); }catch(e){} }
-function enfColGet(t){ enfPrefLoad(); var c = S.enfCol && S.enfCol[t]; return (typeof c==='string' && /^#[0-9a-f]{6}$/i.test(c)) ? c : (ENF_COL[t] || ENF_COL.entrenar); }
-function enfColSet(t, c){ if(!S.enfCol) S.enfCol = {}; if(c) S.enfCol[t] = c; else delete S.enfCol[t]; enfPrefSave(); removeOverlay('enf-col'); render(); openEnfColors(); }
-function enfAnimToggle(){ enfPrefLoad(); S.enfAnim = (S.enfAnim===false); enfPrefSave(); removeOverlay('enf-col'); render(); openEnfColors(); }
+function enfColGet(t){ enfPrefLoad(); var c = S.enfCol && S.enfCol[t]; return (typeof c==='string' && /^#[0-9a-f]{6}$/i.test(c)) ? c : (ENF_COL[t]||null); }
+function _setVars(el, str){ String(str||'').split(';').forEach(function(p){ var i = p.indexOf(':'); if(i>0) el.style.setProperty(p.slice(0,i).trim(), p.slice(i+1).trim()); }); }
+var _VARN = ['--accent','--accent-fill','--accent-text','--accent-bg'];
+// Actualiza la pantalla en el sitio, sin volver a dibujarla (no reinicia animaciones ni cierra nada).
+function enfApplyLive(){
+  var bg = document.querySelector('.enf-bg');
+  if(bg){ bg.classList.toggle('enf-noanim', S.enfAnim===false); _setVars(bg, enfColVars(enfTabCur())); }
+  document.querySelectorAll('[data-enfsub]').forEach(function(b){ _setVars(b, enfColVars(b.getAttribute('data-enfsub'))); });
+  applySecColor();
+}
+function applySecColor(){
+  var c = document.getElementById('content'); if(!c) return;
+  var k = secKey(S.tab), col = k ? enfColGet(k) : null;
+  if(col){ _setVars(c, enfColVars(k)); c.classList.add('sec-tint'); }
+  else { _VARN.forEach(function(v){ c.style.removeProperty(v); }); c.classList.remove('sec-tint'); }
+}
+function enfColSet(t, c){
+  enfPrefLoad(); if(!S.enfCol) S.enfCol = {}; if(c) S.enfCol[t] = c; else delete S.enfCol[t];
+  enfPrefSave(); enfApplyLive(); enfColSheetRefresh();
+}
+function enfAnimToggle(){ enfPrefLoad(); S.enfAnim = (S.enfAnim===false); enfPrefSave(); enfApplyLive(); enfColSheetRefresh(); }
+function enfColSheetHTML(){
+  enfPrefLoad();
+  var row = function(key, name, isSec){
+    var cur = enfColGet(key), sel = cur ? cur.toLowerCase() : '';
+    var none = isSec ? '<button aria-label="Color del tema" onclick="enfColSet(\''+key+'\',null)" style="width:30px;height:30px;border-radius:50%;background:var(--paper);border:3px solid '+(!sel?'var(--ink)':'transparent')+';box-shadow:0 0 0 1.5px var(--line);cursor:pointer;padding:0;font-size:11px;color:var(--muted);">∅</button>' : '';
+    var sw = ENF_PAL.map(function(c){ var on = c.toLowerCase()===sel; return '<button aria-label="'+c+'" onclick="enfColSet(\''+key+'\',\''+c+'\')" style="width:30px;height:30px;border-radius:50%;background:'+c+';border:3px solid '+(on?'var(--ink)':'transparent')+';box-shadow:0 0 0 1.5px var(--line);cursor:pointer;padding:0;"></button>'; }).join('');
+    var rs = (!isSec && S.enfCol && S.enfCol[key]) ? '<span onclick="enfColSet(\''+key+'\',null)" style="font-size:11px;font-weight:600;color:var(--accent-text);cursor:pointer;text-decoration:underline;">Restablecer</span>' : '';
+    return '<div style="margin-bottom:14px;"><div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><span>'+name+'</span>'+rs+'</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+none+sw+'</div></div>';
+  };
+  var lbl = function(t){ return '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 10px;">'+t+'</div>'; };
+  var an = S.enfAnim!==false;
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:19px;">Colores y fondos</span><button onclick="removeOverlay(\'enf-col\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;">×</button></div>'+
+    lbl('Enfoque')+ENF_TABS.map(function(t){ return row(t[0], t[0]==='entrenar'?'Entrenar':tmSecName(t[2]), false); }).join('')+
+    lbl('Otras secciones')+SEC_COL.map(function(t){ return row(t[0], t[1], true); }).join('')+
+    '<button onclick="enfAnimToggle()" style="display:flex;width:100%;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);font-size:13.5px;font-weight:700;"><span>Animación de fondo (Enfoque)</span><span style="color:'+(an?'var(--accent-text)':'var(--muted)')+';">'+(an?'Activada':'Desactivada')+'</span></button>';
+}
+function enfColSheetRefresh(){ var sh = document.querySelector('#enf-col .sheet'); if(!sh) return; var y = sh.scrollTop; sh.innerHTML = enfColSheetHTML(); sh.scrollTop = y; }
 function openEnfColors(){
   removeOverlay('enf-col');
   var ov=document.createElement('div'); ov.className='overlay'; ov.id='enf-col'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('enf-col'); });
-  var rows = ENF_TABS.map(function(t){
-    var cur = enfColGet(t[0]);
-    var sw = ENF_PAL.map(function(c){ var on = c.toLowerCase()===cur.toLowerCase(); return '<button aria-label="'+c+'" onclick="enfColSet(\''+t[0]+'\',\''+c+'\')" style="width:30px;height:30px;border-radius:50%;background:'+c+';border:3px solid '+(on?'var(--ink)':'transparent')+';box-shadow:0 0 0 1.5px var(--line);cursor:pointer;padding:0;"></button>'; }).join('');
-    return '<div style="margin-bottom:14px;"><div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><span>'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</span>'+(S.enfCol&&S.enfCol[t[0]]?'<span onclick="enfColSet(\''+t[0]+'\',null)" style="font-size:11px;font-weight:600;color:var(--accent-text);cursor:pointer;text-decoration:underline;">Restablecer</span>':'')+'</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+sw+'</div></div>';
-  }).join('');
-  enfPrefLoad(); var an = S.enfAnim!==false;
-  ov.innerHTML='<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:19px;">Colores de Enfoque</span><button onclick="removeOverlay(\'enf-col\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;">×</button></div>'+rows+
-    '<button onclick="enfAnimToggle()" style="display:flex;width:100%;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);font-size:13.5px;font-weight:700;"><span>Animación de fondo</span><span style="color:'+(an?'var(--accent-text)':'var(--muted)')+';">'+(an?'Activada':'Desactivada')+'</span></button></div>';
+  ov.innerHTML='<div class="sheet" style="max-height:86vh;overflow-y:auto;">'+enfColSheetHTML()+'</div>';
   document.body.appendChild(ov);
 }
 function enfColVars(t){
-  var c = enfColGet(t);
+  var c = enfColGet(t) || ENF_COL.entrenar;
   return '--accent:'+c+';--accent-fill:'+c+';--accent-text:color-mix(in srgb,'+c+' 70%,var(--ink));--accent-bg:color-mix(in srgb,'+c+' 16%,var(--paper));';
 }
 function enfTabCur(){ var v = S._enfTab; if(!v){ try{ v = localStorage.getItem('og6-enftab'); }catch(e){} } return ENF_TABS.some(function(t){return t[0]===v;}) ? v : 'entrenar'; }
@@ -18169,7 +18209,7 @@ function setEnfTab(v){ S._enfTab = v; try{ localStorage.setItem('og6-enftab', v)
 function enfKindCur(){ return ENF_TABS.find(function(t){return t[0]===enfTabCur();})[2]; }
 function enfSubHTML(){
   var cur = enfTabCur();
-  return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button onclick="setEnfTab(\''+t[0]+'\')" style="'+enfColVars(t[0])+'flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'<button onclick="openEnfColors()" aria-label="Colores" style="flex:0 0 38px;border-radius:12px;border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 004-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg></button></div>';
+  return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button data-enfsub="'+t[0]+'" onclick="setEnfTab(\''+t[0]+'\')" style="'+enfColVars(t[0])+'flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'<button onclick="openEnfColors()" aria-label="Colores" style="flex:0 0 38px;border-radius:12px;border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 004-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg></button></div>';
 }
 function enfGoalGet(kind){ try{ return +((JSON.parse(localStorage.getItem('og6-enfgoal')||'{}'))[kind])||0; }catch(e){ return 0; } }
 function enfGoalSet(kind, v){ try{ var o = JSON.parse(localStorage.getItem('og6-enfgoal')||'{}'); o[kind] = Math.max(0, Math.min(600, Math.round(+v||0))); localStorage.setItem('og6-enfgoal', JSON.stringify(o)); }catch(e){} render(); }
@@ -28877,7 +28917,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.30.152';
+var APP_VERSION = '2026.10.30.153';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
