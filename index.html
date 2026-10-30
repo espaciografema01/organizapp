@@ -545,6 +545,7 @@ details:not([open]) .rsec-chev{transform:rotate(-90deg);}
 @keyframes enfSweep{0%,55%{transform:translateX(-60%) skewX(-18deg)}100%{transform:translateX(60%) skewX(-18deg)}}
 @keyframes enfScan{from{transform:translateY(0);opacity:0}10%{opacity:1}90%{opacity:1}to{transform:translateY(520px);opacity:0}}
 @media (prefers-reduced-motion:reduce){.enf-bg::before,.enf-bg::after{animation:none!important}}
+.enf-noanim::before,.enf-noanim::after{animation:none!important}.enf-noanim.enf-t-entrenar::after,.enf-noanim.enf-t-estudio::after{display:none}
 </style>
 </head>
 <body class="theme-light task-size-medium">
@@ -1389,7 +1390,7 @@ async function syncWithCloud(){
         bonusTrackSlots: S.bonusTrackSlots||0,
         bonusTaskLimit: S.bonusTaskLimit||0,
         registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
-        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, zoneDim: S.zoneDim||{}, zoneLog: S.zoneLog||[],
+        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, anims: S.anims||[], zoneDim: S.zoneDim||{}, zoneLog: S.zoneLog||[],
         hiddenTasks: S.hiddenTasks||[], hid: S.hid||{}, exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
         timerCfg: S.timerCfg||{},
@@ -1801,7 +1802,7 @@ function pushToCloud(){
       bonusTrackSlots: S.bonusTrackSlots||0,
       bonusTaskLimit: S.bonusTaskLimit||0,
       registries: (S.registries||[]).filter(function(r){return !(r.kind==='cycle' && r.private!==false);}),
-        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, zoneDim: S.zoneDim||{}, zoneLog: S.zoneLog||[],
+        timerTemplates: S.timerTemplates||[], collection: S.collection||[], activities: actCloud(), challenges: S.challenges||[], skLog: S.skLog||[], exSkills: S.exSkills||{}, skCfg: S.skCfg||{}, timerLv: S.timerLv||{}, planActs: S.planActs||[], exZones: S.exZones||{}, zoneBase: S.zoneBase||{}, anims: S.anims||[], zoneDim: S.zoneDim||{}, zoneLog: S.zoneLog||[],
         hiddenTasks: S.hiddenTasks||[], hid: S.hid||{}, exerciseLib: S.exerciseLib||[], setLib: S.setLib||[], exerciseGroups: S.exerciseGroups||[], timerBests: S.timerBests||{}, timerHistory: (S.timerHistory||[]).slice(-600), periodCloses: (S.periodCloses||[]).slice(-24),
         taskLog: S.taskLog||{}, taskSkips: S.taskSkips||{},
       timerCfg: S.timerCfg||{},
@@ -2657,6 +2658,7 @@ function loadState(){
     try{var zb2=localStorage.getItem('og6-zonebase');if(zb2)S.zoneBase=JSON.parse(zb2)||{};}catch(e){}
     try{var zl2=localStorage.getItem('og6-zonelog');if(zl2)S.zoneLog=JSON.parse(zl2)||[];}catch(e){}
     try{var zd2=localStorage.getItem('og6-zonedim');if(zd2)S.zoneDim=JSON.parse(zd2)||{};}catch(e){}
+    try{var an2=localStorage.getItem('og6-anims');if(an2)S.anims=JSON.parse(an2)||[];}catch(e){}
     try{S.zoneAdv=localStorage.getItem('og6-zoneadv')==='1';}catch(e){}
     try{var tl2=localStorage.getItem('og6-timerlv');if(tl2)S.timerLv=JSON.parse(tl2)||{};}catch(e){}
     try{var pa2=localStorage.getItem('og6-planacts');if(pa2)S.planActs=JSON.parse(pa2)||[];}catch(e){}
@@ -2878,6 +2880,7 @@ function _saveStateNow(){
     _lsSet('og6-zonebase',JSON.stringify(S.zoneBase||{}));
     _lsSet('og6-zonelog',JSON.stringify(S.zoneLog||[]));
     _lsSet('og6-zonedim',JSON.stringify(S.zoneDim||{}));
+    _lsSet('og6-anims',JSON.stringify(S.anims||[]));
     _lsSet('og6-zoneadv',S.zoneAdv?'1':'0');
     _lsSet('og6-planacts',JSON.stringify(S.planActs||[]));
     _lsSet('og6-actbests',JSON.stringify(S.actBests||{}));
@@ -3257,7 +3260,7 @@ function flushXP(){
 // El modo pruebas (solo en este dispositivo) se activa tocando 7 veces la marca
 // "desarrollado por" al final de Yo, y deja usar todo lo marcado.
 // Registro de ciclo ya está habilitado para todos (se quitó de esta lista).
-var SOON_FEATURES = {hexagon:'Habilidades en gráfico', coleccion:'Colección', actividad:'Actividades', retos:'Retos', planmes:'Planificación mensual', cycle:'Registro de ciclo', habilidades:'Habilidades', cuerpo:'Cuerpo', rutnivel:'Nivel de las rutinas', rutconex:'Conexión de rutinas con zonas y habilidades'};
+var SOON_FEATURES = {hexagon:'Habilidades en gráfico', coleccion:'Colección', actividad:'Actividades', retos:'Retos', planmes:'Planificación mensual', anim:'Animaciones de ejercicios', cycle:'Registro de ciclo', habilidades:'Habilidades', cuerpo:'Cuerpo', rutnivel:'Nivel de las rutinas', rutconex:'Conexión de rutinas con zonas y habilidades'};
 // Modo pruebas: manual (7 toques en "desarrollado por") o automático para la
 // cuenta de desarrollador (DEV_EMAILS). Es 100% local: NO depende de Firestore.
 function labOn(){ try{ if(typeof isDevUser==='function' && isDevUser()) return true; return localStorage.getItem('og6-lab')==='1'; }catch(e){ return false; } }
@@ -18138,8 +18141,27 @@ function toggleTimerLib(){ S._timerLibOpen = !S._timerLibOpen; render(); }
 var ENF_TABS = [['entrenar','Entrenar','ejercicio'],['respiracion','Respiración','breath'],['estudio','Estudio','estudio']];
 // Color propio de cada subpestaña (acento + fondo). 'c' es el acento; el resto se deriva del tema activo.
 var ENF_COL = {entrenar:'#e0702f', respiracion:'#2f9e9a', estudio:'#6366d1'};
+var ENF_PAL = ['#e0702f','#d94f70','#c9a227','#4f9d4a','#2f9e9a','#3b82c4','#6366d1','#9a5bc7'];
+function enfPrefLoad(){ if(S._enfPrefOk) return; S._enfPrefOk = true; try{ var a = JSON.parse(localStorage.getItem('og6-enfcol')||'null'); if(a && typeof a==='object') S.enfCol = a; var b = localStorage.getItem('og6-enfanim'); if(b==='0') S.enfAnim = false; }catch(e){} }
+function enfPrefSave(){ try{ localStorage.setItem('og6-enfcol', JSON.stringify(S.enfCol||{})); localStorage.setItem('og6-enfanim', S.enfAnim===false?'0':'1'); }catch(e){} }
+function enfColGet(t){ enfPrefLoad(); var c = S.enfCol && S.enfCol[t]; return (typeof c==='string' && /^#[0-9a-f]{6}$/i.test(c)) ? c : (ENF_COL[t] || ENF_COL.entrenar); }
+function enfColSet(t, c){ if(!S.enfCol) S.enfCol = {}; if(c) S.enfCol[t] = c; else delete S.enfCol[t]; enfPrefSave(); removeOverlay('enf-col'); render(); openEnfColors(); }
+function enfAnimToggle(){ enfPrefLoad(); S.enfAnim = (S.enfAnim===false); enfPrefSave(); removeOverlay('enf-col'); render(); openEnfColors(); }
+function openEnfColors(){
+  removeOverlay('enf-col');
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='enf-col'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('enf-col'); });
+  var rows = ENF_TABS.map(function(t){
+    var cur = enfColGet(t[0]);
+    var sw = ENF_PAL.map(function(c){ var on = c.toLowerCase()===cur.toLowerCase(); return '<button aria-label="'+c+'" onclick="enfColSet(\''+t[0]+'\',\''+c+'\')" style="width:30px;height:30px;border-radius:50%;background:'+c+';border:3px solid '+(on?'var(--ink)':'transparent')+';box-shadow:0 0 0 1.5px var(--line);cursor:pointer;padding:0;"></button>'; }).join('');
+    return '<div style="margin-bottom:14px;"><div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;"><span>'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</span>'+(S.enfCol&&S.enfCol[t[0]]?'<span onclick="enfColSet(\''+t[0]+'\',null)" style="font-size:11px;font-weight:600;color:var(--accent-text);cursor:pointer;text-decoration:underline;">Restablecer</span>':'')+'</div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+sw+'</div></div>';
+  }).join('');
+  enfPrefLoad(); var an = S.enfAnim!==false;
+  ov.innerHTML='<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:19px;">Colores de Enfoque</span><button onclick="removeOverlay(\'enf-col\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;">×</button></div>'+rows+
+    '<button onclick="enfAnimToggle()" style="display:flex;width:100%;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);font-size:13.5px;font-weight:700;"><span>Animación de fondo</span><span style="color:'+(an?'var(--accent-text)':'var(--muted)')+';">'+(an?'Activada':'Desactivada')+'</span></button></div>';
+  document.body.appendChild(ov);
+}
 function enfColVars(t){
-  var c = ENF_COL[t] || ENF_COL.entrenar;
+  var c = enfColGet(t);
   return '--accent:'+c+';--accent-fill:'+c+';--accent-text:color-mix(in srgb,'+c+' 70%,var(--ink));--accent-bg:color-mix(in srgb,'+c+' 16%,var(--paper));';
 }
 function enfTabCur(){ var v = S._enfTab; if(!v){ try{ v = localStorage.getItem('og6-enftab'); }catch(e){} } return ENF_TABS.some(function(t){return t[0]===v;}) ? v : 'entrenar'; }
@@ -18147,7 +18169,7 @@ function setEnfTab(v){ S._enfTab = v; try{ localStorage.setItem('og6-enftab', v)
 function enfKindCur(){ return ENF_TABS.find(function(t){return t[0]===enfTabCur();})[2]; }
 function enfSubHTML(){
   var cur = enfTabCur();
-  return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button onclick="setEnfTab(\''+t[0]+'\')" style="'+enfColVars(t[0])+'flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'</div>';
+  return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button onclick="setEnfTab(\''+t[0]+'\')" style="'+enfColVars(t[0])+'flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'<button onclick="openEnfColors()" aria-label="Colores" style="flex:0 0 38px;border-radius:12px;border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 004-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg></button></div>';
 }
 function enfGoalGet(kind){ try{ return +((JSON.parse(localStorage.getItem('og6-enfgoal')||'{}'))[kind])||0; }catch(e){ return 0; } }
 function enfGoalSet(kind, v){ try{ var o = JSON.parse(localStorage.getItem('og6-enfgoal')||'{}'); o[kind] = Math.max(0, Math.min(600, Math.round(+v||0))); localStorage.setItem('og6-enfgoal', JSON.stringify(o)); }catch(e){} render(); }
@@ -18188,7 +18210,8 @@ function renderTimerHome(){
   if(enfSegCur()==='pro') return renderProgresoTab();
   var list = timerTplAll();
   var _tab = enfTabCur(), _kind = enfKindCur();
-  var html = '<div class="enf-bg enf-t-'+_tab+'" style="'+enfColVars(_tab)+'padding:16px 16px 90px;">'+enfSegHTML()+enfSubHTML();
+  enfPrefLoad();
+  var html = '<div class="enf-bg enf-t-'+_tab+(S.enfAnim===false?' enf-noanim':'')+'" style="'+enfColVars(_tab)+'padding:16px 16px 90px;">'+enfSegHTML()+enfSubHTML();
   if(_tab==='entrenar') html += timerTopHTML();
   else html += timerPausedHTML() + (_tab==='respiracion' ? enfBreathHTML() : enfStudyHTML());
   html += enfStatsHTML(_kind)+trainHistCardHTML(_kind);
@@ -22673,6 +22696,7 @@ function zlSave(){
   saveState(); removeOverlay('zone-log'); render(); toast('✓ Entrenamiento anotado');
 }
 function mergeZoneData(cloud){
+  (function(){ var m = {}; (S.anims||[]).forEach(function(x){ m[x.id]=x; }); (cloud.anims||[]).forEach(function(c){ var l = m[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) m[c.id]=c; }); S.anims = Object.keys(m).map(function(k){return m[k];}); })();
   S.exZones = Object.assign({}, cloud.exZones||{}, S.exZones||{}); S.zoneBase = Object.assign({}, cloud.zoneBase||{}, S.zoneBase||{}); S.zoneDim = Object.assign({}, cloud.zoneDim||{}, S.zoneDim||{});
   var m = {}; (S.zoneLog||[]).forEach(function(a){ m[a.id]=a; }); (cloud.zoneLog||[]).forEach(function(c){ var l = m[c.id]; if(!l || (c.updatedAt||0)>(l.updatedAt||0)) m[c.id]=c; }); S.zoneLog = Object.keys(m).map(function(k){return m[k];});
 }
@@ -23272,6 +23296,233 @@ function seSave(){ var n=(SE.name||'').trim(); if(!n){ toast('Ponle un nombre');
 
 // ── Editor de Respiración ──
 var BE = null;
+// ══ Animaciones de ejercicios (cuerpo 3D gris, 4 vistas, fotogramas) ══════════
+// Lista para usar pero oculta al público: SOON_FEATURES.anim
+var AN = null, ANIM_RAF = 0;
+var AN_P0 = {pt:0,tf:0,hd:0,lift:0,dx:0,base:'',sfL:0,sfR:0,saL:7,saR:7,efL:8,efR:8,hfL:0,hfR:0,haL:3,haR:3,kfL:0,kfR:0};
+var AN_SL = [ // [grupo, clave, nombre, min, max, lado]
+  ['Cuerpo','pt','Inclinación del cuerpo',-10,95,0],['Cuerpo','tf','Tronco hacia delante',-30,100,0],['Cuerpo','hd','Cabeza',-40,40,0],['Cuerpo','lift','Altura (salto)',0,120,0],['Cuerpo','dx','Desplazamiento',-80,80,0],
+  ['Brazos','sf','Hombro adelante',-60,180,1],['Brazos','sa','Hombro lateral',0,170,1],['Brazos','ef','Codo',0,150,1],
+  ['Piernas','hf','Cadera adelante',-30,120,1],['Piernas','ha','Cadera lateral',0,50,1],['Piernas','kf','Rodilla',0,150,1]];
+var AN_VIEWS = [['Frente',0],['Espalda',180],['Perfil izq.',90],['Perfil der.',270]];
+var AN_ZMAP = {cuello:['neck'],espalda:['chest','abdomen'],trapecio:['neck','chest'],hombros:['dlL','dlR'],pecho:['chest'],biceps:['uaL','uaR'],triceps:['uaL','uaR'],antebrazos:['faL','faR'],manos:['handL','handR'],core:['abdomen'],oblicuos:['abdomen'],lumbar:['abdomen'],gluteos:['glL','glR'],cuadriceps:['thL','thR'],aductores:['thL','thR'],isquios:['thL','thR'],tibial:['snL','snR'],pantorrillas:['snL','snR'],pies:['footL','footR']};
+function anPose(o){ return Object.assign({}, AN_P0, o||{}); }
+function anSym(o){ var r = {}; Object.keys(o).forEach(function(k){ r[k]=o[k]; if(/[a-z]L$/.test(k) && k.length>2 && !/^(base)/.test(k)) r[k.slice(0,-1)+'R']=o[k]; }); return r; }
+function anTemplates(){
+  var s = function(o){ return anPose(anSym(o)); };
+  return [
+    {name:'Sentadilla', zones:['cuadriceps','gluteos'], objs:[], frames:[{p:s({saL:8,efL:5}),d:700},{p:s({hfL:88,kfL:105,tf:38,sfL:85,saL:6,efL:4}),d:900},{p:s({hfL:88,kfL:105,tf:38,sfL:85,saL:6,efL:4}),d:300}]},
+    {name:'Flexión', zones:['pecho','triceps'], objs:[], frames:[{p:s({pt:68,sfL:68,saL:12,efL:0}),d:600},{p:s({pt:80,sfL:46,saL:14,efL:105}),d:900},{p:s({pt:80,sfL:46,saL:14,efL:105}),d:250}]},
+    {name:'Jumping jack', zones:[], objs:[], frames:[{p:anPose({saL:12,saR:12,haL:4,haR:4}),d:350},{p:anPose({saL:165,saR:165,haL:24,haR:24,lift:14}),d:350}]},
+    {name:'Elevación lateral', zones:['hombros'], objs:[{id:'o1',t:'dumb',hand:'LR'}], frames:[{p:anPose({saL:10,saR:10,efL:12,efR:12}),d:700},{p:anPose({saL:92,saR:92,efL:12,efR:12}),d:900},{p:anPose({saL:92,saR:92,efL:12,efR:12}),d:250}]},
+    {name:'Curl de bíceps', zones:['biceps'], objs:[{id:'o1',t:'dumb',hand:'LR'}], frames:[{p:anPose({sfL:4,sfR:4,saL:5,saR:5,efL:6,efR:6}),d:600},{p:anPose({sfL:6,sfR:6,saL:5,saR:5,efL:150,efR:150}),d:900},{p:anPose({sfL:6,sfR:6,saL:5,saR:5,efL:150,efR:150}),d:250}]},
+    {name:'Salto al cajón', zones:['cuadriceps','gluteos','pantorrillas'], objs:[{id:'b1',t:'box',h:40,x:42}], frames:[{p:anPose({saL:8,saR:8}),d:500},{p:anPose(anSym({hfL:60,kfL:95,tf:30,sfL:50,saL:8})),d:450},{p:anPose(anSym({hfL:50,kfL:80,tf:20,sfL:70,saL:8,lift:62,dx:42})),d:380},{p:anPose(anSym({hfL:55,kfL:85,tf:25,sfL:55,saL:8,dx:42,base:'b1'})),d:260},{p:anPose({saL:8,saR:8,dx:42,base:'b1'}),d:600}]}
+  ];
+}
+// ── Esqueleto: coordenadas en cm, x adelante, y arriba, z izquierda ──────────
+function anRot(v, p){ var c = Math.cos(p), s = Math.sin(p); return {x:v.x*c+v.y*s, y:-v.x*s+v.y*c, z:v.z}; }
+function anAdd(a,b,k){ return {x:a.x+b.x*k, y:a.y+b.y*k, z:a.z+b.z*k}; }
+function anSkel(p, objs){
+  var R = Math.PI/180, pt = p.pt*R, tf = p.tf*R, J = {}, side = {L:1,R:-1};
+  var u = {x:Math.sin(tf), y:Math.cos(tf), z:0}, fw = {x:Math.cos(tf), y:-Math.sin(tf), z:0};
+  J.pel = {x:0,y:0,z:0}; J.mid = anAdd(J.pel,u,22); J.sho = anAdd(J.pel,u,52);
+  var hd = (p.tf+p.hd)*R; J.head = anAdd(J.sho,{x:Math.sin(hd),y:Math.cos(hd),z:0},23); J.neck = anAdd(J.sho,{x:Math.sin(hd),y:Math.cos(hd),z:0},8);
+  ['L','R'].forEach(function(S){
+    var s = side[S], hf = p['hf'+S]*R, ha = p['ha'+S]*R, kf = p['kf'+S]*R;
+    var hip = {x:0,y:0,z:s*9}, d1 = {x:Math.sin(hf)*Math.cos(ha), y:-Math.cos(hf)*Math.cos(ha), z:s*Math.sin(ha)};
+    var knee = anAdd(hip,d1,44), a2 = hf-kf, d2 = {x:Math.sin(a2)*Math.cos(ha), y:-Math.cos(a2)*Math.cos(ha), z:s*Math.sin(ha)};
+    var ank = anAdd(knee,d2,43), toe = {x:ank.x+15,y:ank.y-3,z:ank.z};
+    var sh = anAdd(J.sho,{x:0,y:0,z:1},s*19), sf = p['sf'+S]*R, sa = p['sa'+S]*R, ef = p['ef'+S]*R;
+    var dir = function(a){ var b = {x:-u.x*Math.cos(a)+fw.x*Math.sin(a), y:-u.y*Math.cos(a)+fw.y*Math.sin(a)}; return {x:b.x*Math.cos(sa), y:b.y*Math.cos(sa), z:s*Math.sin(sa)}; };
+    var el = anAdd(sh,dir(sf),30), wr = anAdd(el,dir(sf+ef),27), hn = anAdd(wr,dir(sf+ef),8);
+    J['hip'+S]=hip; J['kn'+S]=knee; J['ak'+S]=ank; J['toe'+S]=toe; J['sh'+S]=sh; J['el'+S]=el; J['wr'+S]=wr; J['hn'+S]=hn;
+  });
+  var rot = {}; Object.keys(J).forEach(function(k){ rot[k] = anRot(J[k], pt); });
+  var cx = (rot.akL.x+rot.akR.x)/2, minY = 1e9;
+  ['akL','akR','toeL','toeR','hnL','hnR','head'].forEach(function(k){ var r = k==='head'?10.5:(k.indexOf('hn')===0?3.5:3.6); minY = Math.min(minY, rot[k].y-r); });
+  var baseH = 0; if(p.base){ var bo = (objs||[]).find(function(o){return o.id===p.base;}); if(bo) baseH = bo.h||30; }
+  var off = {x:(p.dx||0)-cx, y:baseH+(p.lift||0)-minY, z:0};
+  Object.keys(rot).forEach(function(k){ rot[k] = {x:rot[k].x+off.x, y:rot[k].y+off.y, z:rot[k].z}; });
+  return rot;
+}
+function anInterp(frames, t){
+  var n = frames.length; if(n===1) return frames[0].p;
+  var tot = 0; frames.forEach(function(f){ tot += Math.max(80,f.d||500); }); t = t % tot;
+  var i = 0; while(i<n){ var d = Math.max(80,frames[(i+1)%n].d||500); if(t<=d) break; t -= d; i++; }
+  var A = frames[i%n].p, B = frames[(i+1)%n].p, k = (function(x){ return (1-Math.cos(Math.PI*Math.min(1,x)))/2; })(t/Math.max(80,frames[(i+1)%n].d||500)), o = {};
+  Object.keys(AN_P0).forEach(function(key){ if(key==='base'){ o.base = k>.5 ? B.base : A.base; } else o[key] = A[key]+(B[key]-A[key])*k; });
+  return o;
+}
+function anZoneKeys(zones){
+  var keys = {}; (zones||[]).forEach(function(zid){ var z = zoneById(zid), id = z && z.p ? z.p : zid; (AN_ZMAP[id]||[]).forEach(function(k){ keys[k]=1; }); });
+  return keys;
+}
+function anDraw(cv, an, pose, view){
+  var dpr = Math.min(2, window.devicePixelRatio||1), W = cv.clientWidth||200, H = cv.clientHeight||220;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+  var c = cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,W,H);
+  var th = view*Math.PI/180, cs = Math.cos(th), sn = Math.sin(th), gy = H-H*.07;
+  var bx0 = 1e9, bx1 = -1e9, by1 = 150;
+  (an.frames||[]).forEach(function(fr){ var sk = anSkel(fr.p, an.objs); Object.keys(sk).forEach(function(k){ var q = sk[k], X = -sn*q.x+cs*q.z; bx0 = Math.min(bx0,X-8); bx1 = Math.max(bx1,X+8); by1 = Math.max(by1,q.y+14); }); });
+  (an.objs||[]).forEach(function(o){ if(o.t==='box'){ [-1,1].forEach(function(a){ [-1,1].forEach(function(b){ var X = -sn*((o.x||42)+a*22)+cs*b*28; bx0 = Math.min(bx0,X); bx1 = Math.max(bx1,X); }); }); } else if(o.t==='bar'){ bx0 = Math.min(bx0,-58*Math.abs(cs)); bx1 = Math.max(bx1,58*Math.abs(cs)); } });
+  var sc = Math.min(W*.92/Math.max(60,bx1-bx0), H*.86/by1, W/110), cxp = W/2 - (bx0+bx1)/2*sc;
+  var P = function(p){ return {X:cxp+(-sn*p.x+cs*p.z)*sc, Y:gy-p.y*sc, D:cs*p.x+sn*p.z}; };
+  var dark = (function(){ try{ var m = getComputedStyle(document.body).backgroundColor.match(/\d+/g); return m && (+m[0]+ +m[1]+ +m[2])<330; }catch(e){ return false; } })();
+  var J = anSkel(pose, an.objs), hi = anZoneKeys(an.zones), prims = [];
+  var wd = 10 + 7*Math.abs(cs);
+  var cap = function(key,a,b,r,extra){ prims.push({k:key,a:a,b:b,r:r,d:(a.D+b.D)/2}); };
+  var jp = {}; Object.keys(J).forEach(function(k){ jp[k] = P(J[k]); });
+  // objetos
+  (an.objs||[]).forEach(function(o){
+    if(o.t==='box'){
+      var h = o.h||30, x0 = (o.x||42)-22, x1 = (o.x||42)+22, z0 = -28, z1 = 28, pts = [[x0,0,z0],[x1,0,z0],[x1,0,z1],[x0,0,z1],[x0,h,z0],[x1,h,z0],[x1,h,z1],[x0,h,z1]].map(function(q){ return P({x:q[0],y:q[1],z:q[2]}); });
+      var faces = [[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7],[4,5,6,7]];
+      faces.forEach(function(f,i){ var d = f.reduce(function(s,j){return s+pts[j].D;},0)/4; prims.push({box:1,pts:f.map(function(j){return pts[j];}),top:i===4,d:d-0.5}); });
+    } else {
+      var hands = o.hand==='L'?['L']:o.hand==='R'?['R']:['L','R'];
+      if(o.t==='bar'){ var m = {x:(J.hnL.x+J.hnR.x)/2,y:(J.hnL.y+J.hnR.y)/2,z:0}; [-1,1].forEach(function(q){ prims.push({w:1,a:P({x:m.x,y:m.y,z:q*52}),b:P({x:m.x,y:m.y,z:q*56}),r:20,d:P({x:m.x,y:m.y,z:q*52}).D}); }); prims.push({w:1,a:P({x:m.x,y:m.y,z:-56}),b:P({x:m.x,y:m.y,z:56}),r:1.6,d:P(m).D}); }
+      else hands.forEach(function(S){ var h = J['hn'+S]; prims.push({w:1,a:P({x:h.x,y:h.y,z:h.z-7}),b:P({x:h.x,y:h.y,z:h.z+7}),r:1.8,d:P(h).D}); [-1,1].forEach(function(q){ prims.push({w:1,a:P({x:h.x,y:h.y,z:h.z+q*7}),b:P({x:h.x,y:h.y,z:h.z+q*9.5}),r:7,d:P({x:h.x,y:h.y,z:h.z+q*8}).D}); }); });
+    }
+  });
+  // cuerpo
+  ['L','R'].forEach(function(S){
+    cap('th'+S,jp['hip'+S],jp['kn'+S],7); cap('sn'+S,jp['kn'+S],jp['ak'+S],5.2); cap('foot'+S,jp['ak'+S],jp['toe'+S],4);
+    cap('ua'+S,jp['sh'+S],jp['el'+S],4.6); cap('fa'+S,jp['el'+S],jp['wr'+S],3.9); cap('hand'+S,jp['wr'+S],jp['hn'+S],3.6);
+    prims.push({k:'dl'+S,s:1,a:jp['sh'+S],r:6.6,d:jp['sh'+S].D+.1}); prims.push({k:'gl'+S,s:1,a:jp['hip'+S],r:7.6,d:jp['hip'+S].D+.1});
+  });
+  var pe = P(J.pel), md = P(J.mid), sh = P(J.sho);
+  cap('abdomen',pe,md,wd*.92); cap('chest',md,sh,wd); cap('neck',sh,P(J.neck),4.2); prims.push({k:'head',s:1,a:P(J.head),r:10.5,d:P(J.head).D});
+  prims.sort(function(a,b){ return a.d-b.d; });
+  // suelo y sombra
+  c.strokeStyle = dark?'#4a4136':'#ddd0bb'; c.lineWidth = 3; c.lineCap = 'round'; c.beginPath(); c.moveTo(W*.08,gy); c.lineTo(W*.92,gy); c.stroke();
+  var body0 = P({x:J.pel.x,y:0,z:0}); c.fillStyle = dark?'rgba(0,0,0,.35)':'rgba(60,40,20,.12)'; c.beginPath(); c.ellipse(body0.X,gy,34*sc*Math.max(.55,Math.abs(sn)+.3),4*sc,0,0,7); c.fill();
+  var base = dark?[158,164,172]:[154,160,168], hc = [228,87,46];
+  var col = function(rgb,d,a){ var k = .8+.2*Math.max(0,Math.min(1,(d+45)/90)); return 'rgba('+Math.round(rgb[0]*k)+','+Math.round(rgb[1]*k)+','+Math.round(rgb[2]*k)+','+(a==null?1:a)+')'; };
+  prims.forEach(function(q){
+    if(q.box){ c.beginPath(); q.pts.forEach(function(p,i){ i?c.lineTo(p.X,p.Y):c.moveTo(p.X,p.Y); }); c.closePath(); c.fillStyle = q.top?(dark?'#6a5a46':'#c9a778'):(dark?'#54463a':'#b08a5c'); c.fill(); c.strokeStyle = dark?'#2b241c':'#8a6a42'; c.lineWidth = 1.2; c.stroke(); return; }
+    if(q.w){ c.lineCap='round'; c.strokeStyle = '#2f3338'; c.lineWidth = q.r*2*sc; c.beginPath(); c.moveTo(q.a.X,q.a.Y); c.lineTo(q.b.X,q.b.Y); c.stroke(); return; }
+    var on = !!hi[q.k], rgb = on?hc:base;
+    if(q.s){ c.beginPath(); c.arc(q.a.X,q.a.Y,q.r*sc,0,7); if(q.k==='dl'+q.k.slice(-1)||q.k.indexOf('gl')===0){ if(!on) return; c.fillStyle = col(hc,q.d,.92); } else c.fillStyle = col(rgb,q.d); c.fill(); return; }
+    c.lineCap='round'; c.strokeStyle = 'rgba(0,0,0,.16)'; c.lineWidth = (q.r*2+1.6)*sc; c.beginPath(); c.moveTo(q.a.X,q.a.Y); c.lineTo(q.b.X,q.b.Y); c.stroke();
+    c.strokeStyle = col(rgb,q.d); c.lineWidth = q.r*2*sc; c.beginPath(); c.moveTo(q.a.X,q.a.Y); c.lineTo(q.b.X,q.b.Y); c.stroke();
+  });
+}
+// ── Reproductor ligero (miniaturas vivas) ────────────────────────────────────
+function anLoop(ts){
+  var list = document.querySelectorAll('canvas[data-anim]'), any = false;
+  list.forEach(function(cv){
+    var id = cv.getAttribute('data-anim'), an = (id==='__ed' && AN) ? AN : anById(id); if(!an||!an.frames||!an.frames.length) return; any = true;
+    var view = +(cv.getAttribute('data-view')||0), playing = id!=='__ed' || AN.playing;
+    var pose = playing ? anInterp(an.frames, ts) : an.frames[Math.min(AN.cur,an.frames.length-1)].p;
+    anDraw(cv, an, pose, view);
+  });
+  ANIM_RAF = any ? requestAnimationFrame(anLoop) : 0;
+}
+function anKick(){ if(!ANIM_RAF) ANIM_RAF = requestAnimationFrame(anLoop); }
+function animList(){ return (S.anims||[]).filter(function(a){ return !a.del; }); }
+function anById(id){ return (S.anims||[]).find(function(a){ return a.id===id && !a.del; }); }
+function anMini(id, view, h){ return '<canvas data-anim="'+id+'" data-view="'+(view||0)+'" style="width:100%;height:'+(h||110)+'px;display:block;"></canvas>'; }
+// ── Fila dentro del editor de ejercicio ─────────────────────────────────────
+function animLinkHTML(set){
+  if(featureLocked('anim')) return '';
+  var a = set.animId ? anById(set.animId) : null;
+  return '<div style="font-size:11px;color:var(--muted);margin:14px 0 6px;">Animación'+soonBadgeIfLab()+'</div>'+
+    '<div style="display:flex;align-items:center;gap:10px;">'+(a?'<div style="width:70px;flex-shrink:0;background:var(--bg);border-radius:10px;border:1px solid var(--line);">'+anMini(a.id,0,70)+'</div>':'')+
+    '<div style="flex:1;font-size:13px;color:var(--ink-soft);">'+(a?esc(a.name):'Sin animación')+'</div>'+
+    '<button type="button" class="cbtn" style="padding:8px 12px;" onclick="animPick(\''+set.id+'\')">'+(a?'Cambiar':'Elegir')+'</button>'+
+    (a?'<button type="button" onclick="mUpdateTimerSet(\''+set.id+'\',\'animId\',null);mRerenderTimerArea();" style="background:none;border:none;color:var(--muted-soft);font-size:18px;cursor:pointer;">×</button>':'')+'</div>';
+}
+function soonBadgeIfLab(){ return (SOON_FEATURES.anim && labOn()) ? soonBadge() : ''; }
+function animPick(setId){
+  removeOverlay('anim-pick');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='anim-pick'; ov.style.zIndex = 9100;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('anim-pick'); });
+  document.body.appendChild(ov); ov._set = setId; animPickDraw();
+}
+function animPickDraw(){
+  var ov = document.getElementById('anim-pick'); if(!ov) return; var setId = ov._set, L = animList();
+  brPutSheet(ov,'<div class="sheet" style="max-height:88vh;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="serif" style="font-weight:700;font-size:18px;">Animaciones</span><button onclick="removeOverlay(\'anim-pick\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;">×</button></div>'+
+    '<button class="sbtn" style="width:100%;margin-bottom:12px;" onclick="animEdit(null,\''+setId+'\')">+ Crear animación</button>'+
+    (L.length?'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">'+L.map(function(a){ return '<div style="border:1.5px solid var(--line);border-radius:14px;padding:6px 6px 8px;background:var(--bg);"><div onclick="animUse(\''+setId+'\',\''+a.id+'\')" style="cursor:pointer;">'+anMini(a.id,0,120)+'<div style="font-size:12.5px;font-weight:700;text-align:center;">'+esc(a.name)+'</div></div><div style="display:flex;gap:6px;margin-top:6px;"><button class="cbtn" style="flex:1;padding:6px;font-size:11px;" onclick="animEdit(\''+a.id+'\',\''+setId+'\')">Editar</button><button class="cbtn" style="flex:1;padding:6px;font-size:11px;color:var(--bad);" onclick="animDel(\''+a.id+'\')">Borrar</button></div></div>'; }).join('')+'</div>':'<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:14px;">Todavía no hay animaciones. Crea una desde una plantilla o desde cero.</div>')+'</div>');
+  anKick();
+}
+function animUse(setId, id){ mUpdateTimerSet(setId,'animId',id); removeOverlay('anim-pick'); mRerenderTimerArea(); anKick(); }
+function animDel(id){ S.anims = (S.anims||[]).map(function(a){ return a.id===id?Object.assign({},a,{del:true,updatedAt:Date.now()}):a; }); saveState(); animPickDraw(); toast('Eliminada'); }
+// ── Editor ───────────────────────────────────────────────────────────────────
+function animEdit(id, setId){
+  var a = id ? anById(id) : null, tpl = anTemplates()[0];
+  AN = {id:id||null, setId:setId||null, name:a?a.name:'', zones:a?a.zones.slice():[], objs:a?JSON.parse(JSON.stringify(a.objs||[])):[], frames:a?JSON.parse(JSON.stringify(a.frames)):[{p:anPose(),d:600}], view:0, cur:0, playing:false, sym:true, blank:!a};
+  removeOverlay('anim-ed');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='anim-ed'; ov.style.zIndex = 9200;
+  document.body.appendChild(ov); anDrawEd();
+}
+function anCur(){ return AN.frames[AN.cur]; }
+function anRe(){ anDrawEd(); }
+function anDrawEd(){
+  var ov = document.getElementById('anim-ed'); if(!ov) return;
+  var lbl = function(t){ return '<div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:16px 0 6px;">'+t+'</div>'; };
+  var chip = function(on, label, fn){ return '<button onclick="'+fn+'" style="padding:7px 12px;border-radius:16px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+label+'</button>'; };
+  var f = anCur(), grp = '';
+  var sliders = AN_SL.map(function(s){
+    var key = s[5] ? s[1]+'L' : s[1], v = Math.round(f.p[key]);
+    var head = (grp!==s[0]) ? (grp = s[0], lbl(s[0])) : '';
+    return head+'<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft);margin:4px 0;"><span style="width:128px;flex-shrink:0;">'+s[2]+'</span><input type="range" min="'+s[3]+'" max="'+s[4]+'" value="'+v+'" oninput="anSet(\''+s[1]+'\','+s[5]+',this.value,this)" style="flex:1;"/><b id="anv-'+s[1]+'" style="width:38px;text-align:right;">'+v+(s[1]==='lift'||s[1]==='dx'?'':'°')+'</b></div>'+
+      (s[1]==='sf'?'':'');
+  }).join('');
+  var boxes = AN.objs.filter(function(o){return o.t==='box';});
+  var zl = ZONES.filter(function(z){ return zoneVisible(z) && !z.p; }).concat(S.zoneAdv?[]:[]);
+  var frames = AN.frames.map(function(fr,i){ return '<button onclick="anGo('+i+')" style="min-width:38px;height:38px;border-radius:10px;font-weight:700;cursor:pointer;border:1.5px solid '+(i===AN.cur?'var(--accent)':'var(--line)')+';background:'+(i===AN.cur?'var(--accent-bg)':'var(--bg)')+';color:'+(i===AN.cur?'var(--accent-text)':'var(--ink-soft)')+';">'+(i+1)+'</button>'; }).join('');
+  brPutSheet(ov,'<div class="sheet" style="max-height:94vh;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(AN.id?'Editar':'Nueva')+' animación</span><button onclick="anClose()" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;">×</button></div>'+
+    '<input class="finp" placeholder="Nombre (ej. Sentadilla con salto)" maxlength="40" value="'+esc(AN.name)+'" oninput="AN.name=this.value" style="margin-bottom:10px;"/>'+
+    (AN.blank?'<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Empezar desde una plantilla</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+anTemplates().map(function(t,i){ return chip(false,t.name,'anTpl('+i+')'); }).join('')+'</div>':'')+
+    '<div style="background:var(--bg);border:1px solid var(--line);border-radius:16px;"><canvas id="an-cv" data-anim="__ed" data-view="'+AN_VIEWS[AN.view][1]+'" style="width:100%;height:270px;display:block;"></canvas></div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'+AN_VIEWS.map(function(v,i){ return chip(AN.view===i,v[0],'anView('+i+')'); }).join('')+'</div>'+
+    lbl('Fotogramas')+'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+frames+
+      '<button onclick="anAddFrame()" style="min-width:38px;height:38px;border-radius:10px;border:1.5px dashed var(--line);background:none;color:var(--muted);font-size:18px;cursor:pointer;">+</button></div>'+
+    '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'+chip(AN.playing,AN.playing?'■ Detener':'▶ Reproducir','anPlay()')+
+      '<button class="cbtn" style="padding:7px 11px;font-size:12px;" onclick="anMove(-1)">←</button><button class="cbtn" style="padding:7px 11px;font-size:12px;" onclick="anMove(1)">→</button>'+
+      (AN.frames.length>1?'<button class="cbtn" style="padding:7px 11px;font-size:12px;color:var(--bad);" onclick="anDelFrame()">Quitar</button>':'')+'</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft);margin-top:10px;"><span style="width:128px;">Tiempo hasta este paso</span><input type="range" min="100" max="2500" step="50" value="'+(f.d||500)+'" oninput="anCur().d=+this.value;document.getElementById(\'anv-d\').textContent=(this.value/1000).toFixed(2).replace(\'.\',\',\')+\' s\'" style="flex:1;"/><b id="anv-d" style="width:48px;text-align:right;">'+((f.d||500)/1000).toFixed(2).replace('.',',')+' s</b></div>'+
+    '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);margin:10px 0 0;"><span style="flex:1;">Mover ambos lados a la vez</span><div class="tog" onclick="AN.sym=!AN.sym;anRe()" style="width:44px;height:24px;border-radius:12px;position:relative;cursor:pointer;background:'+(AN.sym?'var(--accent)':'var(--line)')+';"><div style="position:absolute;top:2px;left:'+(AN.sym?'22px':'2px')+';width:20px;height:20px;border-radius:50%;background:#fff;"></div></div></div>'+
+    sliders+
+    (boxes.length?'<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft);margin-top:8px;"><span style="width:128px;">Apoyado sobre</span><select class="finp" style="margin:0;flex:1;font-size:13px;" onchange="anCur().p.base=this.value;anRe()"><option value="">Suelo</option>'+boxes.map(function(b,i){ return '<option value="'+b.id+'"'+(f.p.base===b.id?' selected':'')+'>Cajón '+(i+1)+' ('+b.h+' cm)</option>'; }).join('')+'</select></div>':'')+
+    lbl('Zonas que trabaja')+'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+zl.map(function(z){ return chip(AN.zones.indexOf(z.id)>=0,z.name,'anZone(\''+z.id+'\')'); }).join('')+'</div>'+
+    lbl('Objetos')+'<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="cbtn" style="padding:7px 11px;font-size:12px;" onclick="anObj(\'dumb\')">+ Mancuernas</button><button class="cbtn" style="padding:7px 11px;font-size:12px;" onclick="anObj(\'bar\')">+ Barra</button><button class="cbtn" style="padding:7px 11px;font-size:12px;" onclick="anObj(\'box\')">+ Cajón</button></div>'+
+    AN.objs.map(function(o,i){ var nm = o.t==='box'?'Cajón':o.t==='bar'?'Barra':'Mancuernas';
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-top:8px;"><span style="width:84px;font-weight:700;">'+nm+'</span>'+
+        (o.t==='box'?'<input type="range" min="10" max="100" step="5" value="'+o.h+'" oninput="AN.objs['+i+'].h=+this.value;this.nextElementSibling.textContent=this.value+\' cm\'" onchange="anRe()" style="flex:1;"/><b style="width:46px;text-align:right;">'+o.h+' cm</b>':
+          (o.t==='bar'?'<span style="flex:1;color:var(--muted);">Ambas manos</span>':'<select class="finp" style="margin:0;flex:1;font-size:13px;" onchange="AN.objs['+i+'].hand=this.value"><option value="LR"'+(o.hand==='LR'?' selected':'')+'>Ambas manos</option><option value="L"'+(o.hand==='L'?' selected':'')+'>Mano izquierda</option><option value="R"'+(o.hand==='R'?' selected':'')+'>Mano derecha</option></select>'))+
+        '<button onclick="AN.objs.splice('+i+',1);anRe()" style="background:none;border:none;color:var(--muted-soft);font-size:18px;cursor:pointer;">×</button></div>'; }).join('')+
+    '<div style="display:flex;gap:8px;margin-top:18px;"><button class="cbtn" style="flex:1;" onclick="anClose()">Cancelar</button><button class="sbtn" style="flex:1.4;" onclick="anSave()">Guardar</button></div></div>');
+  anKick();
+}
+function anSet(key, hasSide, val, el){
+  var f = anCur(); val = +val;
+  if(hasSide){ f.p[key+'L'] = val; if(AN.sym) f.p[key+'R'] = val; else { f.p[key+'L']=val; } } else f.p[key] = val;
+  var lab = document.getElementById('anv-'+key); if(lab) lab.textContent = Math.round(val)+(key==='lift'||key==='dx'?'':'°');
+  anKick();
+}
+function anGo(i){ AN.cur = i; AN.playing = false; anRe(); }
+function anView(i){ AN.view = i; anRe(); }
+function anPlay(){ AN.playing = !AN.playing; anRe(); }
+function anAddFrame(){ var c = JSON.parse(JSON.stringify(anCur())); AN.frames.splice(AN.cur+1,0,c); AN.cur++; AN.playing = false; anRe(); }
+function anDelFrame(){ AN.frames.splice(AN.cur,1); AN.cur = Math.max(0,AN.cur-1); anRe(); }
+function anMove(d){ var j = AN.cur+d; if(j<0||j>=AN.frames.length) return; var t = AN.frames[AN.cur]; AN.frames[AN.cur]=AN.frames[j]; AN.frames[j]=t; AN.cur = j; anRe(); }
+function anTpl(i){ var t = anTemplates()[i]; AN.frames = JSON.parse(JSON.stringify(t.frames)); AN.zones = t.zones.slice(); AN.objs = JSON.parse(JSON.stringify(t.objs)); AN.cur = 0; if(!AN.name) AN.name = t.name; AN.view = /Flexión|Salto/.test(t.name)?2:(/Jumping|lateral/.test(t.name)?0:2); AN.playing = true; anRe(); }
+function anZone(id){ var i = AN.zones.indexOf(id); if(i>=0) AN.zones.splice(i,1); else AN.zones.push(id); anRe(); }
+function anObj(t){ AN.objs.push(t==='box'?{id:'b'+uid(),t:'box',h:40,x:42}:{id:'o'+uid(),t:t,hand:'LR'}); anRe(); }
+function anClose(){ AN = null; removeOverlay('anim-ed'); }
+function anSave(){
+  var name = (AN.name||'').trim(); if(!name){ toast('Ponle un nombre a la animación'); return; }
+  var rec = {id:AN.id||uid(), name:name, zones:AN.zones.slice(), objs:AN.objs, frames:AN.frames, updatedAt:Date.now()}, setId = AN.setId;
+  if(!S.anims) S.anims = [];
+  if(AN.id) S.anims = S.anims.map(function(a){ return a.id===AN.id?rec:a; }); else S.anims.push(rec);
+  saveState(); AN = null; removeOverlay('anim-ed');
+  if(setId){ try{ mUpdateTimerSet(setId,'animId',rec.id); mRerenderTimerArea(); }catch(e){} removeOverlay('anim-pick'); }
+  else animPickDraw();
+  toast('✓ Animación guardada'); anKick();
+}
+
 function openBreathEditor(id){
   var tp = id ? timerTplAll().find(function(x){return x.id===id;}) : null;
   BE = {id:id||null, name:tp?tp.name:'', b:brNorm(tp&&tp.breath ? JSON.parse(JSON.stringify(tp.breath)) : null)};
@@ -24338,7 +24589,7 @@ function exEditorAreaHTML(){
     timerSetKindHTML(set)+
     lbl(isReps?'Repeticiones (meta)':'Duración')+
     (isReps ? repsInputHTML(set) : durInputHTML(set.sec||30,'set',set.id,'sec',false)+timerQuickDurHTML(set))+
-    timerSetRegHTML(set)+
+    timerSetRegHTML(set)+animLinkHTML(set)+
     timerSetStepperHTML(set,'reps','Series de este ejercicio','',1)+
     (set.reps>1?timerSetStepperHTML(set,'restReps','Descanso entre series','s',5):'')+
     timerSetStepperHTML(set,'restAfter','Descanso al terminar este ejercicio','s',5)+
@@ -24577,7 +24828,7 @@ function timerSetRowHTML(set, idx, nested){
     var isLast = idx===M.timer.sets.length-1;
     html += '<div style="background:var(--bg);border-radius:10px;padding:4px 12px 8px;margin:0 0 10px;">'+
       (function(){ var kd = timerSetKindHTML(set), cut = kd.indexOf('<div class="frow"'); if(cut<0) cut = kd.length; return kd.slice(0,cut)+(set.kind==='reps'?'':timerQuickDurHTML(set))+
-        mAdv('set'+set.id,'Más opciones', kd.slice(cut)+timerSetRegHTML(set)+timerSetExtrasHTML(set)+timerSetStyleHTML(set)+
+        mAdv('set'+set.id,'Más opciones', kd.slice(cut)+timerSetRegHTML(set)+animLinkHTML(set)+timerSetExtrasHTML(set)+timerSetStyleHTML(set)+
           timerSetStepperHTML(set,'reps','Vueltas de este ejercicio','',1)+
           (set.reps>1?timerSetStepperHTML(set,'restReps','Descanso entre sus vueltas','s',5):'')+
           timerSetStepperHTML(set,'restAfter', isLast?(M.timer.rounds>1?'Descanso antes de la siguiente vuelta general':'Descanso al terminar'):'Descanso antes del siguiente ejercicio','s',5)+
@@ -28626,7 +28877,7 @@ syncNotifPermission();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.10.29.150';
+var APP_VERSION = '2026.10.30.152';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
