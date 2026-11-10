@@ -11174,6 +11174,31 @@ function hcAutoSync(force){
 }
 document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(function(){ hcAutoSync(false); }, 2500); });
 setTimeout(function(){ hcAutoSync(false); }, 9000);
+// Aviso destacado ANTES del permiso de Health Connect (exigido por Google Play): qué se lee, para qué y qué NO se hace.
+function hcDisclosure(){
+  return new Promise(function(res){
+    if(hcLS('og6-hc-disc')==='1'){ res(true); return; }
+    removeOverlay('hc-disc');
+    var ov = document.createElement('div'); ov.className='overlay'; ov.id='hc-disc'; ov.style.zIndex = 950;
+    function done(v){ if(v) hcLS('og6-hc-disc','1'); removeOverlay('hc-disc'); res(v); }
+    ov.addEventListener('click', function(e){ if(e.target===ov) done(false); });
+    ov.innerHTML = '<div class="sheet" style="max-height:92vh;overflow-y:auto;">'+
+      '<div class="serif" style="font-weight:700;font-size:21px;margin-bottom:6px;">Conectar con Health Connect</div>'+
+      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.55;margin-bottom:10px;">Gramifica puede traer a tu historial de <b>Entrenar</b> los entrenamientos que tu reloj u otras apps guardaron en Health Connect.</div>'+
+      '<div style="font-size:12px;font-weight:800;color:var(--ink);margin:10px 0 4px;">Qué leeremos (solo lectura, con tu permiso)</div>'+
+      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">• Tus entrenamientos: tipo, fecha y hora, y duración<br>• La distancia de esos entrenamientos<br>• Las calorías activas de esos entrenamientos<br>De los últimos 30 días y, después, los nuevos.</div>'+
+      '<div style="font-size:12px;font-weight:800;color:var(--ink);margin:12px 0 4px;">Para qué lo usamos</div>'+
+      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">Para mostrar esos entrenos en tu historial, sumarlos a tu progreso y evitar duplicados con los que ya registraste.</div>'+
+      '<div style="font-size:12px;font-weight:800;color:var(--ink);margin:12px 0 4px;">Qué no hacemos</div>'+
+      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">No escribimos nada en Health Connect. No vendemos ni compartimos estos datos con terceros y no los usamos para publicidad. Quedan guardados como actividades de tu cuenta y se borran junto con ella.</div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin:12px 0;">Puedes quitar el permiso cuando quieras en Health Connect → Permisos de apps → Gramifica. Más detalle en la política de privacidad.</div>'+
+      '<button class="sbtn" style="width:100%;" id="hc-disc-ok">Continuar</button>'+
+      '<button type="button" id="hc-disc-no" style="width:100%;background:none;border:none;color:var(--ink-soft);font-size:14px;font-weight:700;padding:12px;cursor:pointer;">Ahora no</button></div>';
+    document.body.appendChild(ov);
+    document.getElementById('hc-disc-ok').onclick = function(){ done(true); };
+    document.getElementById('hc-disc-no').onclick = function(){ done(false); };
+  });
+}
 var HCI = null;
 function openHcImport(){
   if(!(Platform.health && Platform.health.available())){ toast('Disponible en la app de Android'); return; }
@@ -11182,7 +11207,8 @@ function openHcImport(){
   document.body.appendChild(ov); HCI = {rows:null, busy:true, msg:''}; hcDraw();
   Platform.health.check().then(function(r){
     if(!r || !r.available){ HCI.busy = false; HCI.msg = 'Health Connect no está disponible en este teléfono ('+((r&&r.reason)||'sin detalle')+'). Instálalo o actualízalo desde Play Store.'; HCI.fix = true; hcDraw(); return; }
-    return Platform.health.connect().then(function(ok){
+    return hcDisclosure().then(function(acc){ return acc ? Platform.health.connect() : 'declined'; }).then(function(ok){
+      if(ok==='declined'){ HCI.busy = false; HCI.msg = 'No conectamos Health Connect. Puedes hacerlo cuando quieras desde «Importar de Salud».'; hcDraw(); return; }
       if(!ok){ HCI.busy = false; HCI.msg = 'Sin permiso para leer tus entrenos. Puedes dárselo en Health Connect → Permisos de apps → Gramifica.'; HCI.fix = true; hcDraw(); return; }
       hcAutoFirst();
       return Platform.health.workouts(30).then(function(ws){
@@ -30446,7 +30472,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.04.158';
+var APP_VERSION = '2026.11.06.159';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
