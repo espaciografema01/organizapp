@@ -2896,7 +2896,7 @@ function widgetSnapshot(){
   var list = [];
   try{ list = tasksForDateKey(key); }catch(e){}
   var items = list.map(function(t){
-    return {text:String(t.text||'').slice(0,60), done:!!isDone(t), hora:t.hora||'', crucial:!!t.crucial};
+    return {id:t.id, tick:!!(!(t.checklist&&t.checklist.length) && (t.qty||1)<=1 && !t.hasTimer), text:String(t.text||'').slice(0,60), done:!!isDone(t), hora:t.hora||'', crucial:!!t.crucial};
   });
   var done = items.filter(function(x){return x.done;}).length;
   var pending = items.filter(function(x){return !x.done;}).sort(function(a,b){
@@ -2934,13 +2934,47 @@ function pushWidgetData(){
     pl.update({json:snap});
   }catch(e){}
 }
-// Enlaces desde los widgets: gramifica://timer/<id> inicia esa rutina (solo en la app nativa).
+// Enlaces desde los widgets: cada zona abre lo suyo (solo en la app nativa).
+//   gramifica://timer/<id>  inicia esa rutina      gramifica://task/<id>  abre esa tarea
+//   gramifica://today       pestaña Hoy            gramifica://progress   progreso / racha
+//   gramifica://timers      pestaña de temporizadores
 function handleDeepLink(url){
   try{
-    var m = /^gramifica:\/\/timer\/([A-Za-z0-9_-]{1,64})\/?$/.exec(String(url||''));
-    if(m && typeof startTimerTpl==='function') startTimerTpl(m[1]);
+    url = String(url||'');
+    var m = /^gramifica:\/\/timer\/([A-Za-z0-9_-]{1,64})\/?$/.exec(url);
+    if(m){ if(typeof startTimerTpl==='function') startTimerTpl(m[1]); return; }
+    m = /^gramifica:\/\/task\/([A-Za-z0-9_-]{1,64})\/?$/.exec(url);
+    if(m){
+      if(S.tab!=='hoy' && S.tab!=='dia') setTab('hoy');
+      var id = m[1];
+      if(S.tasks.some(function(t){return t.id===id;})) setTimeout(function(){ try{ openEdit(id); }catch(e){} }, 120);
+      return;
+    }
+    if(/^gramifica:\/\/today\/?$/.test(url)){ setTab('hoy'); return; }
+    if(/^gramifica:\/\/progress\/?$/.test(url)){ setTab('progreso'); return; }
+    if(/^gramifica:\/\/timers\/?$/.test(url)){ setTab('timer'); return; }
   }catch(e){}
 }
+// Tareas tickeadas desde el widget: el widget las deja en una cola y acá se aplican.
+function applyWidgetOps(){
+  try{
+    var cap = window.Capacitor, pl = cap && cap.Plugins && cap.Plugins.GramificaWidget;
+    if(!pl || !pl.takeOps) return;
+    pl.takeOps().then(function(r){
+      var ops = (r && r.ops) || [], key = todayStr(), n = 0;
+      ops.forEach(function(o){
+        if(!o || o.date!==key) return;
+        var t = S.tasks.find(function(x){return x.id===o.id;});
+        if(!t || isDone(t) || (t.checklist&&t.checklist.length) || (t.qty||1)>1) return;
+        try{ tapTask(o.id); n++; }catch(e){}
+      });
+      if(n) toast(n===1?'Tarea marcada desde el widget':n+' tareas marcadas desde el widget');
+      try{ _widgetLast=''; pushWidgetData(); }catch(e){}
+    }).catch(function(){});
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(applyWidgetOps, 400); });
+setTimeout(applyWidgetOps, 2500);
 (function(){
   try{
     var A = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
@@ -10571,6 +10605,7 @@ function actStartDraw(){
     '<button class="st-row" onclick="actMapToggle()" style="margin-top:6px;"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Mapa de fondo</span><span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px;">'+(!actTileKey()?'Aún no disponible. Por ahora se dibuja solo la ruta.':(actMapOn()?'Descarga imágenes de mapa (CARTO / OpenStreetMap) con la zona que se ve. Sin conexión se muestra solo la ruta.':'Apagado: se dibuja solo la ruta. Al activarlo se descargan imágenes de mapa de CARTO / OpenStreetMap.'))+'</span></span><span style="font-size:12.5px;font-weight:700;color:'+(actMapOn()?'var(--accent-text)':'var(--muted)')+';">'+(!actTileKey()?'—':(actMapOn()?'Activado':'Apagado'))+'</span></button>'+
     '<details class="st-adv"><summary>Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
       '<button class="st-row" onclick="openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+(nsk?nsk+' elegida'+(nsk===1?'':'s'):'Opcional')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
+      '<button class="st-row" onclick="openActManual()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Registrar a mano (pesas, escalada, otra…)</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="removeOverlay(\'act-start\');openActHistory()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Todas mis actividades'+(n?' <span style="color:var(--muted);font-weight:600;">· '+n+'</span>':'')+'</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="openActDiff()"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Dificultad añadida</span><span class="act-diff-sum" style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(actDiffTxt(sel.diff)||'Ninguna · lastre, inclinación, terreno')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="actDiag()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Diagnóstico del GPS</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
@@ -10599,6 +10634,92 @@ function skpList(){
 function skpToggle(id){ var i = _skp.sel.indexOf(id); if(i>=0) _skp.sel.splice(i,1); else _skp.sel.push(id); skpList(); }
 function skpDone(){ var cb = _skp.cb, a = _skp.sel.slice(); removeOverlay('sk-picker'); if(cb) cb(a); }
 
+// ── Registro manual (sin GPS ni temporizador): pesas, escalada, yoga… o una caminata/carrera que no grabaste ──
+// Cuenta igual que una actividad grabada: queda en el historial de Enfoque (XP, habilidades, constancia).
+var ACT_MAN_NAMES = ['Pesas','Escalada','Natación','Yoga','Fútbol','Baile'];
+function actManRecentNames(){
+  var seen = {}, out = [];
+  actLive().slice().reverse().forEach(function(a){ if(a.type==='otro' && a.name && a.name!=='Otra' && !seen[a.name]){ seen[a.name]=1; out.push(a.name); } });
+  ACT_MAN_NAMES.forEach(function(n){ if(!seen[n]){ seen[n]=1; out.push(n); } });
+  return out.slice(0,10);
+}
+function openActManual(){
+  removeOverlay('act-manual'); removeOverlay('act-start');
+  window._actMan = {type:'otro', name:'', date:todayStr(), min:'', km:'', effort:2, skills:[]};
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='act-manual'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('act-manual'); });
+  document.body.appendChild(ov); actManDraw();
+}
+function actManDraw(){
+  var ov = document.getElementById('act-manual'); if(!ov) return; var m = window._actMan, c = actCol(m.type);
+  var chip = function(on, label, call){ return '<button onclick="'+call+'" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(label)+'</button>'; };
+  var types = ACT_TYPES.map(function(y){ return chip(m.type===y.id, y.id==='otro'?'Otra actividad':y.name, 'window._actMan.type=\''+y.id+'\';actManSync();actManDraw()'); }).join('');
+  var names = m.type==='otro' ? '<div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 0 6px;">¿Cuál?</div><input id="am-name" class="finp" maxlength="24" placeholder="Pesas, escalada, crossfit…" value="'+esc(m.name)+'" oninput="window._actMan.name=this.value"/>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">'+actManRecentNames().map(function(n){ return chip(m.name===n, n, 'window._actMan.name=\''+n.replace(/'/g,"\\'")+'\';actManSync();actManDraw()'); }).join('')+'</div>' : '';
+  var dist = m.type!=='otro' ? '<div style="flex:1;"><div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;">Distancia (km)</div><input id="am-km" class="finp" type="text" inputmode="decimal" placeholder="opcional" value="'+esc(m.km)+'" oninput="window._actMan.km=this.value"/></div>' : '';
+  var nsk = (m.skills||[]).filter(function(id){return !!skFindAny(id);}).length;
+  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:21px;">Registrar a mano</span><div class="st-sub">Para lo que hiciste sin grabarlo con la app.</div></div><button class="st-x" onclick="removeOverlay(\'act-manual\')" aria-label="Cerrar">×</button></div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0;">'+types+'</div>'+names+
+    '<div style="display:flex;gap:10px;margin-top:14px;"><div style="flex:1;"><div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;">Duración (min)</div><input id="am-min" class="finp" type="number" inputmode="numeric" min="1" max="720" placeholder="45" value="'+esc(m.min)+'" oninput="window._actMan.min=this.value"/></div>'+dist+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 0 6px;">Fecha</div><input id="am-date" class="finp" type="date" max="'+todayStr()+'" value="'+esc(m.date)+'" onchange="window._actMan.date=this.value||todayStr()"/>'+
+    '<div style="font-size:12px;color:var(--muted);font-weight:600;margin:14px 0 6px;">¿Qué tal estuvo el esfuerzo?</div><div style="display:flex;gap:8px;">'+[[1,'Suave'],[2,'Moderado'],[3,'Intenso']].map(function(x){ return chip(m.effort===x[0], x[1], 'window._actMan.effort='+x[0]+';actManSync();actManDraw()'); }).join('')+'</div>'+
+    '<button class="st-row" style="margin-top:10px;" onclick="actManSync();openSkPicker(window._actMan.skills, function(a){window._actMan.skills=a;actManDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja'+(nsk?' <span style="color:var(--muted);font-weight:600;">· '+nsk+'</span>':'')+'</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
+    '<button onclick="actManSave()" style="width:100%;margin-top:16px;padding:16px;border:none;border-radius:16px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button></div>');
+}
+function actManSync(){
+  var m = window._actMan; if(!m) return;
+  [['am-name','name'],['am-min','min'],['am-km','km'],['am-date','date']].forEach(function(p){ var e = document.getElementById(p[0]); if(e) m[p[1]] = e.value; });
+}
+function actManSave(){
+  actManSync(); var m = window._actMan; if(!m) return;
+  var min = Math.round(+m.min), km = Math.max(0, +String(m.km||'0').replace(',','.')||0);
+  if(!(min>=1) || min>720){ toast('Escribe cuántos minutos duró'); return; }
+  var date = /^\d{4}-\d{2}-\d{2}$/.test(m.date) ? m.date : todayStr(); if(date>todayStr()) date = todayStr();
+  var name = m.type==='otro' ? (String(m.name||'').trim().slice(0,24) || 'Otra') : actType(m.type).name;
+  var sec = min*60, startedAt = date===todayStr() ? Date.now()-sec*1000 : new Date(date+'T12:00:00').getTime();
+  var act = {id:uid(), ts:Date.now(), date:date, startedAt:startedAt, type:m.type, name:name, sec:sec, movSec:sec, km:Math.round(km*1000)/1000, gain:0, kg:+S.bodyKg||0,
+    skills:(m.skills||[]).filter(function(id){return !!skFindAny(id);}), updatedAt:Date.now(), src:'manual', effort:m.effort||2};
+  act.kcal = km>0 ? actKcal(m.type, km, act.kg) : null;
+  var h = {id:uid(), ts:act.ts, startedAt:startedAt, date:date, kind:'free', name:name, itemText:'', taskId:null, group:'Actividad', sec:sec, rounds:1, exercises:[], results:[], km:act.km, actId:act.id, manual:true, updatedAt:Date.now()};
+  if(act.skills.length) h.skills = act.skills.slice();
+  if(!S.timerHistory) S.timerHistory = []; S.timerHistory.push(h); timerHistAward(h); act.histId = h.id;
+  if(!S.activities) S.activities = []; S.activities.push(act);
+  try{ actCheckRecords(act); }catch(e){}
+  try{ actFeedSkills(act); }catch(e){}
+  try{ chalSync(); }catch(e){}
+  if(S.timerHistory.length>600) S.timerHistory = S.timerHistory.slice(-600);
+  window._actMan = null; removeOverlay('act-manual'); saveState(); render();
+  toast('✓ '+name+' registrada · '+min+' min');
+  if(act.skills.length) setTimeout(function(){ try{ showGains(h.id); }catch(e){} }, 700);
+}
+// ── «La hice por mi cuenta»: una rutina hecha sin usar el temporizador de la app ──
+function openRoutineManual(tplId){
+  var tp = timerTplAll().find(function(x){return x.id===tplId;}); if(!tp) return;
+  var est = 0; try{ est = tp.kind==='breath' ? brTotalSec(brNorm(tp.breath)) : timerEstimateTotalSec(tp.timer||{sets:[],rounds:1}); }catch(e){}
+  window._rtMan = {id:tplId, date:todayStr(), min:String(Math.max(1, Math.round(est/60)))};
+  removeOverlay('rt-manual');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='rt-manual'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('rt-manual'); });
+  document.body.appendChild(ov);
+  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:20px;">La hice por mi cuenta</span><div class="st-sub">«'+esc(tp.name)+'» · cuenta igual que si la hubieras corrido con el temporizador.</div></div><button class="st-x" onclick="removeOverlay(\'rt-manual\')" aria-label="Cerrar">×</button></div>'+
+    '<div style="display:flex;gap:10px;margin-top:8px;"><div style="flex:1;"><div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;">Duración (min)</div><input id="rm-min" class="finp" type="number" inputmode="numeric" min="1" max="720" value="'+esc(window._rtMan.min)+'"/></div>'+
+    '<div style="flex:1.3;"><div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;">Fecha</div><input id="rm-date" class="finp" type="date" max="'+todayStr()+'" value="'+todayStr()+'"/></div></div>'+
+    '<button class="sbtn" style="width:100%;margin-top:16px;" onclick="routineManualSave()">Guardar</button></div>');
+}
+function routineManualSave(){
+  var m = window._rtMan; if(!m) return; var tp = timerTplAll().find(function(x){return x.id===m.id;}); if(!tp) return;
+  var min = Math.round(+(document.getElementById('rm-min')||{}).value), date = (document.getElementById('rm-date')||{}).value || todayStr();
+  if(!(min>=1) || min>720){ toast('Escribe cuántos minutos duró'); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || date>todayStr()) date = todayStr();
+  var sec = min*60, startedAt = date===todayStr() ? Date.now()-sec*1000 : new Date(date+'T12:00:00').getTime();
+  var ex = [], seen = {}; ((tp.timer&&tp.timer.sets)||[]).forEach(function(st){ if(st.name && !seen[st.name]){ seen[st.name]=1; ex.push(st.name); } });
+  var rounds = (tp.timer&&tp.timer.rounds) || 1;
+  var h = {id:uid(), ts:Date.now(), startedAt:startedAt, date:date, kind:'free', name:tp.name, itemText:'', taskId:null, group:(tp.kind==='breath'?'Respiración':'Sin grupo'), sec:sec, rounds:rounds, exercises:ex.slice(0,40), results:[], manual:true, tplId:tp.id, updatedAt:Date.now()};
+  var sk = tplSkillIds(tp.id); if(sk.length) h.skills = sk;
+  if(!S.timerHistory) S.timerHistory = []; S.timerHistory.push(h); timerHistAward(h); try{ chalSync(); }catch(e){}
+  if(S.timerHistory.length>600) S.timerHistory = S.timerHistory.slice(-600);
+  window._rtMan = null; removeOverlay('rt-manual'); saveState(); render();
+  toast('✓ Rutina registrada · '+min+' min');
+  if(h.skills && h.skills.length) setTimeout(function(){ try{ showGains(h.id); }catch(e){} }, 700);
+}
 function actBegin(){
   if(ACT){ toast('Ya hay una actividad en curso'); return; }
   var sel = window._actSel||{type:'trote',skills:[]};
@@ -17399,11 +17520,11 @@ function timerNow(){
   var c = _timerCtx; return c ? c.currentTime : 0;
 }
 function timerHold(ctx){ // pausar
-  if(timerNative()){ if(_tnFrozen==null) _tnFrozen = Date.now()/1000 - _tnShift; try{ Platform.timer.cancel(true); }catch(e){} _tnGen++; return; }
+  if(timerNative()){ if(_tnFrozen==null) _tnFrozen = Date.now()/1000 - _tnShift; try{ Platform.timer.cancel(true); }catch(e){} _tnGen++; setTimeout(function(){ timerNotifUpdate(true); },0); return; }
   if(ctx) ctx.suspend();
 }
 function timerUnhold(ctx){ // reanudar
-  if(timerNative()){ if(_tnFrozen!=null){ _tnShift = Date.now()/1000 - _tnFrozen; _tnFrozen = null; } return; }
+  if(timerNative()){ if(_tnFrozen!=null){ _tnShift = Date.now()/1000 - _tnFrozen; _tnFrozen = null; } setTimeout(function(){ timerNotifUpdate(true); },0); return; }
   if(ctx) ctx.resume();
 }
 function timerVib(p){ if(timerNative()) return; vibrate(p); } // en nativo vibra el servicio
@@ -17427,6 +17548,33 @@ function _timerRenderSound(id, vol){
   playTimerSound(oc, id, 0, vol, 1);
   var p = oc.startRendering();
   return (p && p.then ? p : new Promise(function(ok){ oc.oncomplete = function(e){ ok(e.renderedBuffer); }; })).then(_timerWavB64);
+}
+// ── Notificación del temporizador (Android): ejercicio actual, cuenta regresiva y «Siguiente» en ejercicios por repeticiones ──
+var _tnNotifSig = '', _tnNextBound = false;
+function timerNotifUpdate(force){
+  try{
+    if(!timerNative() || !TR || TR.finished || !Platform.timer.notif) return;
+    var elapsed = timerElapsed(), idx = timerStepIndexAt(elapsed), st = TR.steps[idx]; if(!st) return;
+    var paused = _tnFrozen!=null, open = !!st.open;
+    var sig = [idx, paused?1:0, Math.round((st.startAt||0)+(st.sec||0)), open?1:0].join('|');
+    if(!force && sig===_tnNotifSig) return;
+    _tnNotifSig = sig;
+    if(!_tnNextBound){ _tnNextBound = true; try{ Platform.timer.onNext(function(){ if(TR && !TR.finished) timerSkip(1); }); }catch(e){} }
+    var works = TR.steps.filter(function(x){ return x.type==='work'; });
+    var pos = TR.steps.slice(0, idx+1).filter(function(x){ return x.type==='work'; }).length;
+    var nxt = null; for(var i=idx+1;i<TR.steps.length;i++){ if(TR.steps[i].type==='work'){ nxt = TR.steps[i]; break; } }
+    var title = st.type==='work' ? (st.name||'Ejercicio') : 'Descanso';
+    var parts = [];
+    if(st.type==='work'){
+      if(open && st.kind==='reps') parts.push(st.count+' repeticiones');
+      if(works.length>1) parts.push('Ejercicio '+pos+' de '+works.length);
+    } else if(nxt){ parts.push('Sigue: '+(nxt.name||'ejercicio')); }
+    var remain = Math.max(0, Math.round((st.startAt||0)+(st.sec||0)-elapsed));
+    if(paused) parts.unshift('En pausa'+(open?'':' · '+fmtDur(remain)));
+    var o = {title:title, text:parts.join(' · ')||'Temporizador en curso', next:open && !paused, paused:paused,
+             endAt: (!open && !paused) ? Math.round(Date.now()+remain*1000) : 0};
+    Platform.timer.notif(o);
+  }catch(e){}
 }
 function timerNativeEnsure(){
   var cfg = timerCfgNorm(), vol = cfg.volume, need = {};
@@ -17924,6 +18072,7 @@ function timerTick(){
     var cfg = timerCfgNorm(), st = TR.steps[idx];
     if(!first && cfg.vibrate) timerVib(st.type==='work'?[30,40,30]:18);
   }
+  timerNotifUpdate();
   timerRenderFrame();
 }
 function timerMarkTask(){
@@ -17946,7 +18095,7 @@ function timerFinish(){
   timerReleaseWakeLock();
   timerSweepBests(TR.steps.length, true);
   timerVib(timerCfgNorm().vibrate?[60,60,60]:50);
-  try{ if(timerNative()) Platform.timer.stop(); }catch(e){}
+  _tnNotifSig = ''; try{ if(timerNative()) Platform.timer.stop(); }catch(e){}
   try{ timerLogHistory(); }catch(e){}
   if(!TR.preview && TR.taskId && TR.itemIds){ TR.itemIds.forEach(function(id){ try{ timerMarkItem(id); }catch(e){} }); }
   else if(!TR.preview && TR.taskId && TR.itemId){ try{ timerMarkItem(); }catch(e){} }
@@ -18052,6 +18201,7 @@ function timerSkip(delta){
   timerRenderFrame(true);
 }
 function closeTimerRun(){
+  _tnNotifSig = '';
   try{ if(timerNative()) Platform.timer.stop(); }catch(e){}
   if(TR){
     timerAmbStop(.8);
@@ -19298,6 +19448,7 @@ function openTimerTplMenu(id){
   box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:16px;color:var(--ink);text-align:center;margin-bottom:14px;">'+esc(tp.name)+'</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTimerTplEditor(\''+id+'\')" style="'+b+'background:var(--accent);color:#fff;border:none;">Editar</button>'+
+    '<button onclick="this.closest(\'.conf-box\').remove();openRoutineManual(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">La hice por mi cuenta</button>'+
     '<button onclick="this.closest(\'.conf-box\').remove();openTplShare(\''+id+'\')" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);">Compartir (código o QR)</button>'+
     '<button onclick="'+(_lkC?'toast(\'Próximamente\')':'this.closest(\'.conf-box\').remove();openTimerSkills(\''+id+'\')')+'" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);'+(_lkC?'opacity:.5;':'')+'">'+(_lkC?'🔒 ':'')+'Habilidades'+((tp.skills||[]).length?' ('+tp.skills.length+')':'')+'</button>'+
     '<button onclick="'+(_lkC?'toast(\'Próximamente\')':'this.closest(\'.conf-box\').remove();tmPickZones(\''+id+'\')')+'" style="'+b+'background:var(--bg);color:var(--ink);border:1.5px solid var(--line);'+(_lkC?'opacity:.5;':'')+'">'+(_lkC?'🔒 ':'')+'Zonas del cuerpo'+((tp.zones||[]).length?' ('+tp.zones.length+')':'')+'</button>'+
@@ -30472,7 +30623,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.06.159';
+var APP_VERSION = '2026.11.09.161';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
