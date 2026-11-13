@@ -140,7 +140,11 @@
       prepare: function(sounds){ var P = plugin('GrTimer'); return P ? P.prepare({sounds: sounds}) : Promise.resolve(); },   // {clave: base64 WAV}
       schedule: function(events){ var P = plugin('GrTimer'); return P ? P.schedule({events: events}) : Promise.resolve(); }, // [{at: epochMs, sound: clave|null, vib: [ms]|null}]
       cancel: function(keepAlive){ var P = plugin('GrTimer'); return P ? P.cancel({keepAlive: !!keepAlive}).catch(function(){}) : Promise.resolve(); },
-      stop: function(){ var P = plugin('GrTimer'); return P ? P.stop().catch(function(){}) : Promise.resolve(); }
+      stop: function(){ var P = plugin('GrTimer'); return P ? P.stop().catch(function(){}) : Promise.resolve(); },
+      // Texto de la notificación en curso: {title, text, endAt (epoch ms, 0 = sin cuenta), next (bool), paused (bool)}
+      notif: function(o){ var P = plugin('GrTimer'); return (P && P.notif) ? P.notif(o).catch(function(){}) : Promise.resolve(); },
+      // Botón «Siguiente» de la notificación → cb()
+      onNext: function(cb){ var P = plugin('GrTimer'); if(P && P.addListener) try{ P.addListener('next', function(){ cb(); }); }catch(e){} }
     },
 
     // GPS con la pantalla apagada: servicio nativo en primer plano (plugin propio GrGeo).
@@ -178,10 +182,10 @@
         var P = plugin('Health'); if(!P) return Promise.resolve({available:false, reason:'no-plugin'});
         return P.isAvailable().catch(function(e){ return {available:false, reason:String(e && e.message || e)}; });
       },
-      // Pide permiso de lectura de entrenos, distancia y calorías. → true si se concedió al menos «workouts».
+      // Pide permiso de lectura de entrenos y distancia. → true si se concedió al menos «workouts».
       connect: function(){
         var P = plugin('Health'); if(!P) return Promise.resolve(false);
-        return P.requestAuthorization({read:['workouts','distance','calories']}).then(function(r){
+        return P.requestAuthorization({read:['workouts','distance']}).then(function(r){
           return !!(r && (r.readAuthorized||[]).indexOf('workouts') >= 0);
         }).catch(function(){ return false; });
       },

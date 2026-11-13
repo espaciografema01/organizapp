@@ -2477,7 +2477,7 @@ function renderPrevWeekView(){
       '<span style="width:20px;height:20px;border-radius:50%;border:2px solid var(--bad);flex-shrink:0;"></span>';
     var label = !detail ? '' : (x.st==='done'?'Hecha':(x.st==='skip'?'Ignorada':'No hecha'));
     return '<div style="display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line-soft);">'+icon+
-      '<div style="flex:1;min-width:0;"><div style="font-size:14px;color:var(--ink);'+(x.st==='skip'?'opacity:.55;':'')+'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</div>'+(cat?'<div style="font-size:10.5px;color:'+cat.color+';margin-top:1px;">'+esc(cat.name)+'</div>':'')+'</div>'+
+      '<div style="flex:1;min-width:0;"><div style="font-size:14px;color:var(--ink);'+(x.st==='skip'?'opacity:.55;':'')+'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+clTaskChip(t)+'</div>'+(cat?'<div style="font-size:10.5px;color:'+cat.color+';margin-top:1px;">'+esc(cat.name)+'</div>':'')+'</div>'+
       '<span style="font-size:11px;font-weight:700;color:'+(x.st==='done'?'var(--good)':(x.st==='miss'?'var(--bad)':'var(--muted)'))+';">'+label+'</span></div>';
   }).join('');
   return '<div style="padding:12px 16px 100px;">'+
@@ -2812,7 +2812,7 @@ function loadState(){
     try{var pcl=localStorage.getItem('og6-periodcloses');if(pcl)S.periodCloses=JSON.parse(pcl)||[];}catch(e){}
     try{var pnf=localStorage.getItem('og6-plannotify');if(pnf!==null)S.planNotify=pnf==='1';}catch(e){}
     try{var rpf=localStorage.getItem('og6-regprefill');if(rpf!==null)S.regPrefill=rpf==='1';}catch(e){}
-    try{var tpf=JSON.parse(localStorage.getItem('og6-timerprefs')||'null');if(tpf){ if(tpf.groupBy)S.timerGroupBy=tpf.groupBy; if(tpf.secNames)S.timerSecNames=tpf.secNames; if(tpf.goal)S.enfGoal=tpf.goal; if(tpf.layout)S.enfLayout=tpf.layout; }}catch(e){}
+    try{var tpf=JSON.parse(localStorage.getItem('og6-timerprefs')||'null');if(tpf){ if(tpf.groupBy)S.timerGroupBy=tpf.groupBy; if(tpf.secNames)S.timerSecNames=tpf.secNames; if(tpf.goal)S.enfGoal=tpf.goal; if(tpf.layout)S.enfLayout=tpf.layout; if(tpf.edLayout)S.edLayout=tpf.edLayout; }}catch(e){}
     try{var rrm=localStorage.getItem('og6-regreminder');if(rrm)S.regReminder=Object.assign({on:false,mode:'weekly',hh:20,mm:0,dow:6},JSON.parse(rrm));}catch(e){}
     try{var pwk=localStorage.getItem('og6-planweek');if(pwk)S.planWeekKey=pwk;}catch(e){}
     try{var tse=localStorage.getItem('og6-timersessions');if(tse)S.timerSessions=JSON.parse(tse)||{};}catch(e){}
@@ -3107,7 +3107,7 @@ function _saveStateNow(){
     _lsSet('og6-periodcloses',JSON.stringify((S.periodCloses||[]).slice(-24)));
     _lsSet('og6-plannotify',S.planNotify===false?'0':'1');
     _lsSet('og6-regprefill',S.regPrefill===false?'0':'1');
-    _lsSet('og6-timerprefs',JSON.stringify({groupBy:S.timerGroupBy||'',secNames:S.timerSecNames||{},goal:S.enfGoal||{},layout:S.enfLayout||''}));
+    _lsSet('og6-timerprefs',JSON.stringify({groupBy:S.timerGroupBy||'',secNames:S.timerSecNames||{},goal:S.enfGoal||{},layout:S.enfLayout||'',edLayout:S.edLayout||''}));
     _lsSet('og6-timersessions',JSON.stringify(S.timerSessions||{}));
     _lsSet('og6-tasklog',JSON.stringify(S.taskLog||{}));
     _lsSet('og6-planweek',S.planWeekKey||'');
@@ -3476,7 +3476,7 @@ function flushXP(){
 // El modo pruebas (solo en este dispositivo) se activa tocando 7 veces la marca
 // "desarrollado por" al final de Yo, y deja usar todo lo marcado.
 // Registro de ciclo ya está habilitado para todos (se quitó de esta lista).
-var SOON_FEATURES = {hexagon:'Habilidades en gráfico', coleccion:'Colección', actividad:'Actividades', retos:'Retos', planmes:'Planificación mensual', anim:'Animaciones de ejercicios', cycle:'Registro de ciclo', habilidades:'Habilidades', cuerpo:'Cuerpo', rutnivel:'Nivel de las rutinas', rutconex:'Conexión de rutinas con zonas y habilidades'};
+var SOON_FEATURES = {hexagon:'Habilidades en gráfico', coleccion:'Colección', retos:'Retos', planmes:'Planificación mensual', anim:'Animaciones de ejercicios', cycle:'Registro de ciclo', habilidades:'Habilidades', cuerpo:'Cuerpo', rutnivel:'Nivel de las rutinas', rutconex:'Conexión de rutinas con zonas y habilidades'};
 // Modo pruebas: manual (7 toques en "desarrollado por") o automático para la
 // cuenta de desarrollador (DEV_EMAILS). Es 100% local: NO depende de Firestore.
 function labOn(){ try{ if(typeof isDevUser==='function' && isDevUser()) return true; return localStorage.getItem('og6-lab')==='1'; }catch(e){ return false; } }
@@ -5353,7 +5353,7 @@ function renderHorarioSemanal(){
             'overflow:hidden;cursor:pointer;'+
             'text-decoration:'+(dn?'line-through':'none')+';'+
             'box-shadow:0 1px 4px rgba(0,0,0,.1);z-index:2;box-sizing:border-box;">'+
-            '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</div>'+
+            '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+clTaskChip(t)+'</div>'+
             (taskH>30?'<div style="font-size:8px;opacity:.7;white-space:nowrap;">'+esc(t.hora)+' · '+durLabel+'</div>':'')+
           '</div>';
         }).join('')+
@@ -7906,7 +7906,8 @@ function findTaskEntry(reg, t, itemId){
 //  - registrada como "Esperado": se abre ese mismo registro para confirmarlo o ajustarlo;
 //  - sin registro: se abre la hoja de siempre.
 function maybeOpenRegEntryForTask(taskId, extra){
-  var t = S.tasks.find(function(x){return x.id===taskId;}); var ids = taskRegIds(t); if(!ids.length) return;
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(t && t.clientRef) return; // tareas de pacientes/clientes: el cobro se lleva en su ficha, no se pregunta
+  var ids = taskRegIds(t); if(!ids.length) return;
   window._regQ = {taskId:taskId, extra:extra||null, rest:ids.slice(1)};
   if(!regOpenOne(taskId, extra, ids[0])) regQueueNext();
 }
@@ -8272,7 +8273,7 @@ function regEntryBodyHTML(){
       (EN.confirming?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperabas <b>'+fmtMoney(ex.amount,cur)+'</b>. Escribe lo que realmente '+(EN.dir==='in'?'recibiste':'pagaste')+'.</div>':'')+
       (!EN.confirming && ex && ex.status!=='expected' && ex.expectedAmount!=null?'<div style="font-size:12px;color:var(--muted);margin:-4px 0 8px;">Esperado: <b>'+fmtMoney(ex.expectedAmount,cur)+'</b> · diferencia: <b>'+fmtMoney(ex.amount-ex.expectedAmount,cur)+'</b></div>':'')+
       '<input id="en-amount" class="finp" type="text" inputmode="decimal" placeholder="'+(last&&last.amount?('Último: '+fmtNum(last.amount)):'0')+'" value="'+((!ex&&pf)?fmtNum(pf.amount).replace(/\./g,''):ex?fmtNum(ex.amount).replace(/\./g,''):'')+'" style="font-size:22px;font-weight:700;margin-bottom:14px;"/>'+
-      mSecLabel('Categoría')+'<div id="en-cats" style="margin-bottom:14px;">'+enCatsHTML()+'</div>'+
+      mSecLabel('Categoría')+'<div id="en-cats" style="margin-bottom:14px;">'+enCatsHTML()+'</div>'+enClientSelHTML(ex)+
       mSecLabel('Comentario (opcional)')+
       '<textarea id="en-label" class="finp" rows="2" maxlength="160" placeholder="Ej: compra grande del mes, para revisar después" style="margin-bottom:14px;resize:none;font-family:Inter,sans-serif;line-height:1.4;">'+esc(labelVal)+'</textarea>';
   } else {
@@ -8368,6 +8369,13 @@ function enSetStatus(k){
   var a = document.getElementById('en-amt-lbl'); if(a) a.innerHTML = mSecLabel(enAmtLabel());
   var d = document.getElementById('en-date-lbl'); if(d) d.innerHTML = mSecLabel(k==='expected'?'Fecha estimada':'Fecha');
 }
+function enClientSelHTML(ex){
+  if(EN.dir!=='in') return '';
+  var opts=[]; (S.projects||[]).forEach(function(p){ if(p.type!=='clients'||p.del) return; clEnsure(p).forEach(function(t){ (t.clients||[]).forEach(function(c){ opts.push([c.id, clDispName(c)]); }); }); });
+  if(!opts.length) return '';
+  var cur=ex&&ex.projClientId||EN.clientId||'';
+  return mSecLabel('Es pago de (paciente o cliente)')+'<select id="en-client" class="finp" style="margin-bottom:14px;"><option value="">— Ninguno —</option>'+opts.map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===cur?' selected':'')+'>'+esc(o[1])+'</option>'; }).join('')+'</select>';
+}
 function enCatsHTML(){
   var reg = regById(EN.regId); if(!reg) return '';
   var cats = regCats(reg, EN.dir), chip = function(on, t, call, col){ return '<button type="button" onclick="'+call+'" style="padding:6px 12px;border:1.5px solid '+(on?(col||'var(--accent)'):'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';border-radius:14px;font-size:12px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;">'+t+'</button>'; };
@@ -8395,6 +8403,9 @@ function saveRegEntry(){
     if(!(amt>0)){ toast('Escribe un monto'); return; }
     entry.dir = EN.dir; entry.amount = amt; entry.status = EN.status; entry.catId = EN.catId||null;
     var ex = EN.existing;
+    var _cs = document.getElementById('en-client');
+    if(_cs){ if(_cs.value) entry.projClientId = _cs.value; if(ex && ex.clAuto && ex.projClientId===_cs.value) entry.clAuto = ex.clAuto; }
+    else if(ex && ex.projClientId){ entry.projClientId = ex.projClientId; if(ex.clAuto) entry.clAuto = ex.clAuto; }
     if(EN.status==='expected'){ entry.expectedAmount = amt; toastMsg = 'Guardado como esperado'; }
     else if(ex){
       if(EN.confirming){
@@ -8664,6 +8675,16 @@ function regUpcomingHTML(reg, noHead){
       '<div style="flex:1;background:var(--bg);border-radius:10px;padding:8px 4px;text-align:center;"><div style="font-size:9.5px;color:var(--muted);">Gastos esperados</div><div style="font-size:13px;font-weight:800;color:var(--bad);">'+fmtMoney(eOut,cur)+'</div></div>'+
       '<div style="flex:1;background:var(--accent-bg);border-radius:10px;padding:8px 4px;text-align:center;"><div style="font-size:9.5px;color:var(--muted);">Cierre estimado</div><div style="font-size:13px;font-weight:800;color:var(--ink);">'+fmtMoney(netNow+eIn-eOut,cur)+'</div></div>'+
     '</div>';
+  (function(){
+    var mon0=new Date(); mon0.setHours(0,0,0,0); mon0.setDate(mon0.getDate()-((mon0.getDay()+6)%7)); var m0=localDateStr(mon0), wk={}, ks=[];
+    pend.forEach(function(e){ var d=parseLocalDate(e.date), mm=new Date(d); mm.setDate(d.getDate()-((d.getDay()+6)%7)); var k=localDateStr(mm); if(k<m0) k='late'; if(!wk[k]){ wk[k]={i:0,o:0}; ks.push(k); } wk[k][e.dir==='in'?'i':'o']+=e.amount; });
+    ks.sort(function(a,b){ return a==='late'?-1:(b==='late'?1:(a<b?-1:1)); });
+    if(!ks.length) return;
+    var rows=ks.slice(0,6).map(function(k){
+      var lab = k==='late' ? 'Atrasado' : (k===m0 ? 'Esta semana' : (Math.round((parseLocalDate(k)-parseLocalDate(m0))/604800000)===1 ? 'Próxima semana' : fmtShortDate(k)+' – '+fmtShortDate(localDateStr(new Date(parseLocalDate(k).getTime()+6*86400000)))));
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 2px;"><span style="color:var(--ink-soft);">'+lab+'</span><span>'+(wk[k].i?'<b style="color:var(--good);">+'+fmtMoney(wk[k].i,cur)+'</b>':'')+(wk[k].i&&wk[k].o?' · ':'')+(wk[k].o?'<b style="color:var(--bad);">−'+fmtMoney(wk[k].o,cur)+'</b>':'')+'</span></div>'; }).join('');
+    html += '<div style="background:var(--bg);border-radius:10px;padding:8px 10px;margin-bottom:8px;"><div style="font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">Por semana (esperado)</div>'+rows+'</div>';
+  })();
   html += pend.slice(0,5).map(function(e){
     return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 2px;border-bottom:1px solid var(--line-soft);"><span style="color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%;">'+fmtShortDate(e.date)+' · '+esc(e.label||e.taskName||(e.dir==='in'?'Ingreso':'Gasto'))+'</span><b style="color:'+(e.dir==='in'?'var(--good)':'var(--bad)')+';">'+(e.dir==='in'?'+':'−')+fmtMoney(e.amount,cur).replace('−','')+'</b></div>';
   }).join('')+(pend.length>5?'<div style="font-size:11px;color:var(--muted);margin-top:4px;">y '+(pend.length-5)+' más en Pendientes</div>':'');
@@ -8951,7 +8972,7 @@ function pendWhen(e){
   if(d<0 && pendSnoozed(e)) return {txt:'Pospuesto · venció hace '+(-d)+(d===-1?' día':' días'), col:'var(--muted)'};
   if(d<0) return {txt:'Vencido hace '+(-d)+(d===-1?' día':' días'), col:'var(--bad)'};
   if(d===0) return {txt:'Hoy', col:'var(--muted)'};
-  if(d<=7) return {txt:'En '+d+(d===1?' día':' días'), col:'var(--muted)'};
+  if(d<=14) return {txt:REG_DOW[new Date(e.date+'T12:00:00').getDay()]+' '+fmtShortDate(e.date)+' · en '+d+(d===1?' día':' días'), col:'var(--muted)'};
   return {txt:fmtShortDate(e.date), col:'var(--muted)'};
 }
 function pendRowHTML(reg, e, showReg){
@@ -8960,7 +8981,7 @@ function pendRowHTML(reg, e, showReg){
     '<div onclick="openExpectedQuick(\''+reg.id+'\',\''+e.id+'\')" style="display:flex;align-items:baseline;gap:10px;cursor:pointer;">'+
       '<div style="flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(e.label||e.taskName||(isIn?'Ingreso esperado':'Gasto esperado'))+'</div>'+
       '<span style="font-size:14px;font-weight:700;color:var(--ink);flex-shrink:0;">'+(isIn?'+':'−')+fmtMoney(e.amount,reg.currency).replace('−','')+'</span></div>'+
-    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4;">'+(showReg?esc(reg.name)+' · ':'')+'<span style="color:'+w.col+';">'+w.txt+'</span>'+(e.remindAt?' · te aviso el '+fmtShortDate(e.remindAt):'')+'</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4;">'+(showReg?esc(reg.name)+' · ':'')+'<span style="color:'+w.col+';">'+w.txt+'</span>'+(e.remindAt?' · '+(pendSnoozed(e)?'<b style="color:var(--ink-soft);">pospuesto hasta el '+fmtShortDate(e.remindAt)+'</b>':'te avisé el '+fmtShortDate(e.remindAt)):'')+'</div>'+pendTagsHTML(e)+
     '<div style="display:flex;gap:8px;margin-top:9px;width:100%;box-sizing:border-box;">'+
       '<button onclick="openSnoozeMenu(\''+reg.id+'\',\''+e.id+'\')" style="flex:1;min-width:0;background:none;border:1.5px solid var(--line);color:var(--ink-soft);border-radius:10px;padding:9px 8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;">'+ico('clock',13,2)+'Posponer</button>'+
       '<button onclick="openExpectedQuick(\''+reg.id+'\',\''+e.id+'\')" style="flex:1;min-width:0;background:var(--accent);border:none;color:#fff;border-radius:10px;padding:10px 8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Confirmar</button></div></div>';
@@ -8976,7 +8997,8 @@ function expSnoozeTo(regId, entryId, date){
   toast('Te preguntaré de nuevo el '+fmtShortDate(date));
 }
 // Confirmar de una vez los pendientes que vencen hoy (o ya vencidos) por el monto esperado
-function pendDueList(){ return pendingAll().filter(function(x){ return pendDiff(x.e)<=0 && !pendSnoozed(x.e); }); }
+function pendIsPlan(e){ return !!(e.clAuto && e.clKind==='plan'); }
+function pendDueList(){ return pendingAll().filter(function(x){ return pendDiff(x.e)<=0 && !pendSnoozed(x.e) && !pendIsPlan(x.e); }); }
 function confirmDueToday(){
   var list = pendDueList(); if(!list.length) return;
   var tt = pendTotals(list), cur = list[0].reg.currency||'$';
@@ -9006,13 +9028,34 @@ function doConfirmDue(){
     saveState(); refreshRegViews();
   });
 }
-// Agrupa por urgencia: Vencidos · Esta semana · Más adelante
+// Agrupa por calendario real: Vencidos · Hoy · Esta semana (hasta el domingo) · Próxima semana · Más adelante · Pospuestos
+function pendWeekEnd(k){ var d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+(6-((d.getDay()+6)%7))+7*k); return localDateStr(d); }
+function pendGroupKey(e){
+  if(pendSnoozed(e)) return 'snz';
+  if(pendIsPlan(e)) return 'plan';
+  var d=pendDiff(e); if(d<0) return 'late'; if(d===0) return 'today';
+  if(e.date<=pendWeekEnd(0)) return 'week'; if(e.date<=pendWeekEnd(1)) return 'next'; return 'later';
+}
+function pendTagsHTML(e){
+  var t=[], tag=function(txt,col){ t.push('<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;background:'+col+'22;color:'+col+';white-space:nowrap;">'+txt+'</span>'); };
+  if(e.clAuto || e.projClientId){
+    if(e.clAuto && e.clKind==='debt') tag(e.clPm==='eom'?'Ya atendido · cobro a fin de mes':'Ya atendido','#3f7fbf');
+    else if(e.clAuto) tag(e.clPm==='eom'?'Por atender · cobro a fin de mes':(e.clPm==='advance'?'Por atender · pago adelantado':'Por atender'),'#6b8f3f');
+    else tag('Ficha','#3f7fbf');
+  }
+  if(e.taskId) tag('Tarea con cobro','#a0762c');
+  if(e.recKey) tag('Mensual fijo','#6b5fa8');
+  if(e.postponedFrom && !pendSnoozed(e)) tag('Dejado pendiente','#8a7a68');
+  return t.length?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">'+t.join('')+'</div>':'';
+}
 function pendGroupsHTML(list, showReg){
-  var g = {late:[], week:[], later:[]};
-  list.slice().sort(function(a,b){ return a.e.date.localeCompare(b.e.date); }).forEach(function(x){ var d=pendDiff(x.e); (pendLate(x.e)?g.late:(d<=7||pendSnoozed(x.e)?g.week:g.later)).push(x); });
-  return [['late','Vencidos'],['week','Esta semana'],['later','Más adelante']].map(function(k){
-    var arr = g[k[0]]; if(!arr.length) return '';
-    return '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:'+(k[0]==='late'?'var(--bad)':'var(--muted)')+';margin:18px 0 2px;">'+k[1]+' · '+arr.length+'</div>'+arr.map(function(x){ return pendRowHTML(x.reg,x.e,showReg); }).join('');
+  var order=[['late','Vencidos'],['today','Hoy'],['week','Esta semana'],['next','Próxima semana'],['later','Más adelante'],['plan','Previsto'],['snz','Pospuestos']], g={};
+  list.slice().sort(function(a,b){ var sa=pendSnoozed(a.e)?a.e.remindAt:a.e.date, sb=pendSnoozed(b.e)?b.e.remindAt:b.e.date; return sa.localeCompare(sb)||a.e.date.localeCompare(b.e.date); }).forEach(function(x){ var k=pendGroupKey(x.e); (g[k]=g[k]||[]).push(x); });
+  return order.map(function(k){
+    var arr=g[k[0]]; if(!arr||!arr.length) return '';
+    var tt=pendTotals(arr), cur=arr[0].reg.currency||'$';
+    var sub = k[0]==='week' ? 'hasta el '+fmtShortDate(pendWeekEnd(0)) : (k[0]==='next' ? fmtShortDate(localDateStr(new Date(parseLocalDate(pendWeekEnd(0)).getTime()+86400000)))+' – '+fmtShortDate(pendWeekEnd(1)) : (k[0]==='snz' ? 'te los vuelvo a preguntar en su fecha de aviso' : (k[0]==='plan' ? 'sesiones que aún no se atienden: se cobran cuando ocurran' : '')));
+    return '<div style="margin:18px 0 2px;"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:'+(k[0]==='late'?'var(--bad)':'var(--muted)')+';">'+k[1]+' · '+arr.length+'</span><span style="font-size:11.5px;color:var(--muted);">'+(tt.inn?'<b style="color:var(--good);">+'+fmtMoney(tt.inn,cur)+'</b>':'')+(tt.inn&&tt.out?' · ':'')+(tt.out?'<b style="color:var(--bad);">−'+fmtMoney(tt.out,cur)+'</b>':'')+'</span></div>'+(sub?'<div style="font-size:11px;color:var(--muted-soft);margin-top:1px;">'+sub+'</div>':'')+'</div>'+arr.map(function(x){ return pendRowHTML(x.reg,x.e,showReg); }).join('');
   }).join('');
 }
 function regPendingHTML(reg){
@@ -9122,13 +9165,14 @@ function hoyPendStripHTML(){
   return ntcHTML({icon:'coin', tone:late?'bad':'warn', title:due.length+' movimiento'+(due.length===1?'':'s')+' por confirmar', sub:'Para hoy'+(late?' · '+late+' vencido'+(late===1?'':'s'):''), go:'openPendingScreen()'});
 }
 function pendStripHTML(){
-  var all = pendingAll(); if(!all.length) return '';
+  var all = pendingAll().filter(function(x){ return !pendIsPlan(x.e); }); if(!all.length) return '';
   var tt = pendTotals(all), cur = all[0].reg.currency||'$', late = all.filter(function(x){return pendLate(x.e);}).length;
   return '<button onclick="openPendingScreen()" style="width:100%;display:flex;align-items:center;gap:8px;text-align:left;background:var(--bg);border:1px solid var(--line-soft);border-radius:12px;padding:10px 12px;margin-bottom:14px;cursor:pointer;font-family:Inter,sans-serif;">'+
     '<span style="flex:1;min-width:0;font-size:12.5px;color:var(--ink-soft);line-height:1.5;"><b style="color:var(--ink);">'+all.length+' pendiente'+(all.length===1?'':'s')+'</b>'+(late?' · <span style="color:var(--bad);">'+late+' vencido'+(late===1?'':'s')+'</span>':'')+(tt.inn?' · por cobrar '+fmtMoney(tt.inn,cur):'')+(tt.out?' · por pagar '+fmtMoney(tt.out,cur):'')+'</span>'+
     '<span style="color:var(--muted-soft);font-size:18px;flex-shrink:0;">›</span></button>';
 }
 function pendingScreenBodyHTML(){
+  try{ clSyncAll(); }catch(e){}
   var all = pendingAll(), tt = pendTotals(all), cur = all.length ? (all[0].reg.currency||'$') : '$';
   return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="serif" style="font-weight:700;font-size:20px;">Pendientes</span><button onclick="closePendingScreen()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     (all.length ? '<div style="font-size:12.5px;color:var(--muted);">'+(tt.inn?'Por cobrar <b style="color:var(--ink);">'+fmtMoney(tt.inn,cur)+'</b>':'')+(tt.inn&&tt.out?' · ':'')+(tt.out?'Por pagar <b style="color:var(--ink);">'+fmtMoney(tt.out,cur)+'</b>':'')+'</div>'+
@@ -9331,6 +9375,7 @@ function regTabsHTML(reg, tabs, cur){
   }).join('')+'</div>';
 }
 function regViewBodyHTML(reg){
+  try{ clSyncAll(); }catch(e){}
   if(reg.kind==='cycle') return cycleViewHTML(reg);
   var _feeds = (S.levelTracks||[]).filter(function(tr){ return (tr.regSources||[]).some(function(x){return x.regId===reg.id;}); });
   if(_feeds.length) INFO_TIPS.regxp = 'Suma XP a: '+_feeds.map(function(tr){ var rs=tr.regSources.find(function(x){return x.regId===reg.id;}); var m=rs.mode==='metric'?(reg.metrics||[]).find(function(q){return q.id===rs.metricId;}):null; return tr.name+' ('+(m?rs.xp+' XP por '+(m.unit||m.name):rs.xp+' XP por anotación')+')'; }).join(', ')+'.';
@@ -11626,7 +11671,7 @@ function hcAnalyze(ws, acts){
   });
   // Mismo entreno guardado por dos apps de origen: se propone el que trae más datos.
   var cand = rows.filter(function(r){ return r.state==='new'; });
-  var score = function(r){ return (r.w.totalDistance>0?4:0)+(r.w.totalEnergyBurned>0?1:0)+r.dur/100000; };
+  var score = function(r){ return (r.w.totalDistance>0?4:0)+r.dur/100000; };
   cand.forEach(function(r, i){
     if(r.state!=='new') return;
     cand.forEach(function(q, j){
@@ -11642,7 +11687,7 @@ function actCreateHealth(w, type){
   var nm = type==='otro' ? (HC_NAME[w.workoutType] || actType('otro').name) : actType(type).name;
   var act = {id:uid(), ts:Date.now(), date:localDateStr(new Date(s)), startedAt:s, type:type, name:nm, sec:sec, movSec:sec, km:Math.round(km*1000)/1000, gain:0, kg:+S.bodyKg||0,
     skills:[], updatedAt:Date.now(), src:'hc', hcId:w.platformId || ('hc'+s), hcSrc:String(w.sourceId||'')};
-  act.kcal = w.totalEnergyBurned>0 ? Math.round(w.totalEnergyBurned) : actKcal(type, km, act.kg);
+  act.kcal = actKcal(type, km, act.kg);
   var h = {id:uid(), ts:act.ts, startedAt:s, date:act.date, kind:'free', name:act.name, itemText:'', taskId:null, group:'Actividad', sec:act.sec, rounds:1, exercises:[], results:[], km:act.km, actId:act.id, updatedAt:Date.now()};
   if(!S.timerHistory) S.timerHistory = []; S.timerHistory.push(h); timerHistAward(h); act.histId = h.id;
   if(!S.activities) S.activities = []; S.activities.push(act);
@@ -11707,7 +11752,7 @@ function hcDisclosure(){
       '<div class="serif" style="font-weight:700;font-size:21px;margin-bottom:6px;">Conectar con Health Connect</div>'+
       '<div style="font-size:13px;color:var(--ink-soft);line-height:1.55;margin-bottom:10px;">Gramifica puede traer a tu historial de <b>Entrenar</b> los entrenamientos que tu reloj u otras apps guardaron en Health Connect.</div>'+
       '<div style="font-size:12px;font-weight:800;color:var(--ink);margin:10px 0 4px;">Qué leeremos (solo lectura, con tu permiso)</div>'+
-      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">• Tus entrenamientos: tipo, fecha y hora, y duración<br>• La distancia de esos entrenamientos<br>• Las calorías activas de esos entrenamientos<br>De los últimos 30 días y, después, los nuevos.</div>'+
+      '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">• Tus entrenamientos: tipo, fecha y hora, y duración<br>• La distancia de esos entrenamientos (por ejemplo, los km de un trote)<br>De los últimos 30 días y, después, los nuevos.</div>'+
       '<div style="font-size:12px;font-weight:800;color:var(--ink);margin:12px 0 4px;">Para qué lo usamos</div>'+
       '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">Para mostrar esos entrenos en tu historial, sumarlos a tu progreso y evitar duplicados con los que ya registraste.</div>'+
       '<div style="font-size:12px;font-weight:800;color:var(--ink);margin:12px 0 4px;">Qué no hacemos</div>'+
@@ -11755,7 +11800,7 @@ function hcDraw(){
         else if(st==='dup') tag = '<span style="color:#b07a1e;font-weight:700;">Parece el mismo que «'+esc(r.match.name||'actividad')+'» de Gramifica</span>';
         else if(st==='dupsrc') tag = '<span style="color:#b07a1e;font-weight:700;">Repetido de '+esc(hcOrigin(r.match.w))+'</span>';
         else tag = '<span style="color:var(--accent-text);font-weight:700;">Nuevo</span>';
-        var kmTxt = w.totalDistance>0 ? ' · '+fmtNum(Math.round(w.totalDistance/10)/100)+' km' : '', kc = w.totalEnergyBurned>0 ? ' · '+Math.round(w.totalEnergyBurned)+' kcal' : '';
+        var kmTxt = w.totalDistance>0 ? ' · '+fmtNum(Math.round(w.totalDistance/10)/100)+' km' : '', kc = '';
         var dis = (st==='imported'||st==='deleted') ? ' style="opacity:.55;"' : '';
         return '<div'+dis+' onclick="hcToggle('+i+')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:'+(r.pick?'var(--accent-bg)':'var(--paper)')+';border:1px solid '+(r.pick?'var(--accent)':'var(--line-soft)')+';border-radius:12px;margin-bottom:8px;cursor:pointer;">'+
           '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(r.pick?'var(--accent)':'var(--muted-soft)')+';background:'+(r.pick?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(r.pick?chkSVG():'')+'</div>'+
@@ -13355,7 +13400,7 @@ function renderProjectsSection(){
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-weight:700;font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(p.name)+'</div>'+
           '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+
-            (p.type==='table' ? (p.rows||[]).length+' fila'+((p.rows||[]).length===1?'':'s')+' · '+(p.cols||[]).length+' columnas' : p.type==='clients' ? (function(){ var ct=clTotals(p); return clEnsure(p).reduce(function(a,t){return a+(t.clients||[]).length;},0)+' cliente'+((clEnsure(p).reduce(function(a,t){return a+(t.clients||[]).length;},0))===1?'':'s')+' · cobrado '+fmtMoney(ct.paid,clCur(p))+(ct.pend>0?' · por cobrar '+fmtMoney(ct.pend,clCur(p)):''); })() :
+            (p.type==='table' ? (p.rows||[]).length+' fila'+((p.rows||[]).length===1?'':'s')+' · '+(p.cols||[]).length+' columnas' : p.type==='clients' ? (function(){ var ct=clTotals(p,true), tm=clTerm(clTab(p)); return ct.n+' '+(ct.n===1?tm.s:tm.p)+' · cobrado '+fmtMoney(ct.paid,clCur(p))+(ct.pend>0?' · por cobrar '+fmtMoney(ct.pend,clCur(p)):''); })() :
             secCount+' sección'+(secCount===1?'':'es')+' · '+total+' tarea'+(total===1?'':'s')+
             (p.end?' · hasta '+formatDateShort(p.end):''))+
           '</div>'+
@@ -13406,12 +13451,13 @@ function openNewProjectModal(){
     '</div>'+
     '<label class="flbl">Nombre del proyecto</label>'+
     '<input id="np-name" class="finp" placeholder="Ej: Mudanza, Tesis, Campaña..." autofocus/>'+
+    '<div id="np-extra">'+
     '<label class="flbl" style="margin-top:10px;">Descripción (opcional)</label>'+
     '<input id="np-desc" class="finp" placeholder="¿De qué se trata?"/>'+
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
       '<div style="flex:1;"><label class="flbl">Fecha de inicio</label><input id="np-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-start\')" style="cursor:pointer;" value="'+todayStr()+'"/></div>'+
       '<div style="flex:1;"><label class="flbl">Fecha de fin</label><input id="np-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-end\')" style="cursor:pointer;"/></div>'+
-    '</div>'+
+    '</div></div>'+
     '<label class="flbl" style="margin-top:10px;">Color</label>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'+colorBtns+'</div>'+
     '<label class="flbl">Empezar</label>'+
@@ -13431,7 +13477,7 @@ function openNewProjectModal(){
 // Por defecto: el primer proyecto parte con la plantilla de tesis (como antes); los siguientes, en blanco.
 var NP_TEMPLATES = [
   ['thesis','Desarrollar una tesis','Carta Gantt con etapas de ejemplo (planificación, ejecución, cierre) para adaptar.'],
-  ['clients','Clientes','Planilla para llevar clientes: contacto, servicio, estado, montos, cobrado y por cobrar. Conectable a Finanzas y Tareas.']
+  ['clients','Clientes o pacientes','Fichas con contacto, estado, sesiones, arancel, cobrado y por cobrar. Se conecta con Tareas y Finanzas.']
 ];
 function npTplHTML(){
   if(window._npTpl===undefined) window._npTpl = (S.projects||[]).length===0 ? 'thesis' : null;
@@ -13453,7 +13499,7 @@ function npTplHTML(){
       '<span><b style="font-size:13.5px;">'+t[1]+'</b><div style="font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:2px;">'+t[2]+'</div></span></button>';
   }).join('');
 }
-function npSetTpl(v){ window._npTpl = v; var a=document.getElementById('np-tpl-area'); if(a) a.innerHTML = npTplHTML(); }
+function npSetTpl(v){ window._npTpl = v; var a=document.getElementById('np-tpl-area'); if(a) a.innerHTML = npTplHTML(); var x=document.getElementById('np-extra'); if(x) x.style.display = (v==='clients' || (v===null && window._npBlank==='table')) ? 'none' : ''; }
 
 
 function selectProjectColor(c,idx){
@@ -13701,7 +13747,7 @@ function renderProjectContent(){
   var neutralIconBtn = 'background:var(--bg);border:1.5px solid var(--line);border-radius:9px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);cursor:pointer;flex-shrink:0;';
 
   var isCl = p.type==='clients', isTb = p.type==='table', isSheet = isCl||isTb;
-  var clT = isCl ? clTotals(p) : null;
+  var clT = isCl ? clTotals(p,true) : null;
   overlay.innerHTML='<div style="height:4px;background:'+p.color+';flex-shrink:0;"></div>'+
   '<div id="pv-header" style="background:var(--paper);border-bottom:1px solid var(--line-soft);padding:14px 16px 10px;flex-shrink:0;">'+
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
@@ -13715,7 +13761,7 @@ function renderProjectContent(){
       '<button onclick="openProjectMenu(\''+p.id+'\',event)" style="'+neutralIconBtn+'" title="Más opciones">'+ICON_KEBAB+'</button>'+
     '</div>'+
     // Progreso global
-    (isTb ? '<div style="padding:2px 2px 0;font-size:11.5px;color:var(--muted);">'+(p.rows||[]).length+' fila'+((p.rows||[]).length===1?'':'s')+' · '+(p.cols||[]).length+' columnas</div>' : isCl ? '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 2px 0;"><span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Cobrado</span><span style="font-size:12.5px;font-weight:800;color:'+p.color+';">'+(clT.total?Math.round(clT.paid/clT.total*100):0)+'%</span></div><div style="height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:5px;"><div style="height:100%;width:'+(clT.total?Math.min(100,Math.round(clT.paid/clT.total*100)):0)+'%;background:'+p.color+';border-radius:3px;"></div></div>' :
+    (isTb ? '<div style="padding:2px 2px 0;font-size:11.5px;color:var(--muted);">'+(p.rows||[]).length+' fila'+((p.rows||[]).length===1?'':'s')+' · '+(p.cols||[]).length+' columnas</div>' : isCl ? '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 2px 0;"><span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Cobrado del mes</span><span style="font-size:12.5px;font-weight:800;color:'+p.color+';">'+(clT.total?Math.min(100,Math.round(clT.paid/clT.total*100)):0)+'%</span></div><div style="height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:5px;"><div style="height:100%;width:'+(clT.total?Math.min(100,Math.round(clT.paid/clT.total*100)):0)+'%;background:'+p.color+';border-radius:3px;"></div></div>' :
     '<div style="padding:2px 2px 0;">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">'+
         '<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Progreso general</span>'+
@@ -13739,7 +13785,7 @@ function renderProjectContent(){
   '</div>'+
   // FAB agregar sección
   '<div style="position:absolute;bottom:20px;right:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">'+
-    (isTb ? '<button onclick="tbRowEditor(\''+p.id+'\',null)" style="background:'+p.color+';color:white;border:none;border-radius:50px;padding:12px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.2);">+ Fila</button>' : isCl ? '<button onclick="openClientEditor(\''+p.id+'\',null)" style="background:'+p.color+';color:white;border:none;border-radius:50px;padding:12px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.2);">+ Cliente</button>' :
+    (isTb ? '<button onclick="tbRowEditor(\''+p.id+'\',null)" style="background:'+p.color+';color:white;border:none;border-radius:50px;padding:12px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.2);">+ Fila</button>' : isCl ? '<button onclick="openClientEditor(\''+p.id+'\',null)" style="background:'+p.color+';color:white;border:none;border-radius:50px;padding:12px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.2);">+ '+esc(clTerm(clTab(p)).S)+'</button>' :
     '<button onclick="openAddSectionModal(\''+p.id+'\')" style="background:'+p.color+';color:white;border:none;border-radius:50px;padding:12px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.2);">+ Sección</button>')+
   '</div>';
   // Restaurar posición de scroll en el siguiente frame (el DOM aún no está pintado)
@@ -13906,7 +13952,6 @@ function clState(k){ return CL_STATES.find(function(x){return x[0]===k;}) || CL_
 function clProj(pid){ return (S.projects||[]).find(function(x){return x.id===pid;})||null; }
 function clFinRegs(){ return regList().filter(function(r){return r.kind==='finance';}); }
 function clCur(p){ var r = p && p.finRegId ? regById(p.finRegId) : null; return (r&&r.currency)||'$'; }
-function clPend(c){ return Math.max(0,(+c.amount||0)-(+c.paid||0)); }
 // ── Clientes con varias tablas: p.ctables=[{id,name,clients:[],cols:[{id,name,type,opts}]}]; valores propios en c.x ──
 function clEnsure(p){
   if(!p.ctables || !p.ctables.length){ p.ctables=[{id:'t'+uid(), name:'Clientes', clients:p.clients||[], cols:[]}]; delete p.clients; }
@@ -13924,13 +13969,15 @@ function clTabsHTML(p){
 }
 function clTabNew(pid){
   var p=clProj(pid); if(!p) return; var t=clEnsure(p); if(t.length>=8){ toast('Máximo 8 tablas'); return; }
-  var nt={id:'t'+uid(), name:'Tabla '+(t.length+1), clients:[], cols:[]}; t.push(nt); p.updatedAt=new Date().toISOString(); saveState(); clTabSet(pid, nt.id); clTabMenu(pid);
+  var cu=clTab(p), nt={id:'t'+uid(), name:'Tabla '+(t.length+1), clients:[], cols:[], term:cu.term, defMode:cu.defMode}; t.push(nt); p.updatedAt=new Date().toISOString(); saveState(); clTabSet(pid, nt.id); clTabMenu(pid);
 }
 function clTabMenu(pid){
   var p=clProj(pid); if(!p) return; var t=clTab(p); removeOverlay('cl-tabmenu');
   var ov=document.createElement('div'); ov.className='overlay'; ov.id='cl-tabmenu'; ov.style.zIndex=850; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('cl-tabmenu'); });
   ov.innerHTML='<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span class="serif" style="font-weight:700;font-size:18px;">Tabla</span><button onclick="removeOverlay(\'cl-tabmenu\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     '<label class="flbl">Nombre</label><input id="cl-tabname" class="finp" maxlength="30" value="'+esc(t.name)+'" onchange="clTabRename(\''+pid+'\',this.value)"/>'+
+    '<label class="flbl" style="margin-top:12px;">¿Qué son las personas de esta tabla?</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">'+['cliente','paciente','alumno'].map(function(w){ var on=(t.term||'cliente')===w; return '<button type="button" onclick="clTabTerm(\''+pid+'\',\''+w+'\')" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+clCap(w)+'s</button>'; }).join('')+'</div><input class="finp" maxlength="20" placeholder="Otro nombre (ej: socio)" value="'+(['cliente','paciente','alumno'].indexOf(t.term||'cliente')<0?esc(t.term):'')+'" onchange="clTabTerm(\''+pid+'\',this.value)"/>'+
+    '<label class="flbl" style="margin-top:12px;">Cobro por defecto en fichas nuevas</label><div style="display:flex;gap:6px;">'+[['sess','Por sesiones'],['fixed','Monto acordado']].map(function(m){ var on=(t.defMode||'fixed')===m[0]; return '<button type="button" onclick="clTabDefMode(\''+pid+'\',\''+m[0]+'\')" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+m[1]+'</button>'; }).join('')+'</div>'+
     '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px;">Columnas propias</div>'+
     ((t.cols||[]).length?(t.cols||[]).map(function(c){ return '<button onclick="removeOverlay(\'cl-tabmenu\');tbColEditor(\''+pid+'\',\''+c.id+'\',\''+t.id+'\')" style="display:flex;justify-content:space-between;width:100%;background:var(--bg);border:none;border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;font-size:13px;color:var(--ink);"><b>'+esc(c.name)+'</b><span style="color:var(--muted);">'+esc((TB_TYPES.find(function(x){return x[0]===c.type;})||[0,''])[1])+' ›</span></button>'; }).join(''):'<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Aún no hay. Las columnas nuevas aparecen al editar cada cliente.</div>')+
     '<button class="cbtn" style="width:100%;margin-top:4px;" onclick="removeOverlay(\'cl-tabmenu\');tbColEditor(\''+pid+'\',null,\''+t.id+'\')">+ Columna</button>'+
@@ -13938,11 +13985,6 @@ function clTabMenu(pid){
   document.body.appendChild(ov);
 }
 function clTabRename(pid,v){ var p=clProj(pid); if(!p) return; v=(v||'').trim().slice(0,30); if(!v) return; clTab(p).name=v; p.updatedAt=new Date().toISOString(); saveState(); renderProjectContent(); }
-function clTabDelete(pid){
-  var p=clProj(pid); if(!p) return; var t=clTab(p), n=(t.clients||[]).length;
-  if(!confirm('¿Eliminar la tabla «'+t.name+'»'+(n?' y sus '+n+' cliente'+(n===1?'':'s'):'')+'?')) return;
-  p.ctables=p.ctables.filter(function(x){return x.id!==t.id;}); if(S._clTab) delete S._clTab[pid]; p.updatedAt=new Date().toISOString(); saveState(); removeOverlay('cl-tabmenu'); renderProjectContent();
-}
 function tbFieldHTML(col, v, tgt, redraw){
   var k=esc(col.id);
   if(col.type==='status') return '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+(col.opts||[]).map(function(o){ var on=v===o, c=tbOptColor(col,o); return '<button type="button" data-o="'+esc(o)+'" onclick="'+tgt+'[\''+k+'\']=('+tgt+'[\''+k+'\']===this.dataset.o?\'\':this.dataset.o);'+redraw+'" style="padding:7px 12px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?c:'var(--line)')+';background:'+(on?c+'22':'transparent')+';color:'+(on?c:'var(--ink-soft)')+';">'+esc(o)+'</button>'; }).join('')+'</div>';
@@ -13951,36 +13993,439 @@ function tbFieldHTML(col, v, tgt, redraw){
   if(col.type==='num') return '<input class="finp" type="text" inputmode="decimal" value="'+esc(v==null?'':v)+'" oninput="var n=parseNumInput(this.value);'+tgt+'[\''+k+'\']=isNaN(n)?\'\':n" style="margin:0;"/>';
   return '<input class="finp" type="text" value="'+esc(v||'')+'" oninput="'+tgt+'[\''+k+'\']=this.value" style="margin:0;"/>';
 }
-function clTotals(p){
-  var t={total:0,paid:0,pend:0};
-  clList(p).forEach(function(c){ t.total+=(+c.amount||0); t.paid+=(+c.paid||0); t.pend+=clPend(c); });
+// ═══ Clientes / Pacientes v2 · modelo de sesiones, arancel y cobros ═══════════════════════════════
+// c.mode: 'fixed' (monto acordado) | 'sess' (por sesiones: arancel × sesiones).
+// Fuente única de "cobrado": suma de pagos (c.pays) + ajuste manual previo (c.adj).
+// Sesiones realizadas: c.log=[{id,date,taskId|null,rate}] (se anotan solas al completar una tarea vinculada).
+// Lo que falta por cobrar se proyecta con las tareas vinculadas (c.taskIds) y se refleja en Finanzas como ingresos esperados automáticos.
+function clCap(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
+function clTerm(tab){
+  var w=((tab&&tab.term)||'cliente').trim()||'cliente', pl=/z$/i.test(w)?w.slice(0,-1)+'ces':(/[aeiouáéíóú]$/i.test(w)?w+'s':w+'es');
+  return {s:w,p:pl,S:clCap(w),P:clCap(pl)};
+}
+function clMk(d){ return (d||todayStr()).slice(0,7); }
+function clMonthStart(mk){ return mk+'-01'; }
+function clMonthEnd(mk){ return localDateStr(new Date(+mk.slice(0,4), +mk.slice(5,7), 0)); }
+function clNextMk(mk){ var d=new Date(+mk.slice(0,4), +mk.slice(5,7), 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function clDaysTo(iso){ return Math.round((parseLocalDate(iso)-parseLocalDate(todayStr()))/86400000); }
+function clIsSess(c){ return !!c && c.mode==='sess'; }
+function clRate(c){ return Math.max(0,+c.rate||0); }
+function clDateCmp(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); }
+function clSum(l,f){ return (l||[]).reduce(function(a,x){ return a+(+f(x)||0); },0); }
+function clPaidAll(c){ return clSum(c.pays,function(x){return x.amount;})+(+c.adj||0); }
+function clPaidM(c,mk){ return clSum((c.pays||[]).filter(function(x){return (x.date||'').slice(0,7)===mk;}),function(x){return x.amount;}); }
+function clDoneM(c,mk){ return (c.log||[]).filter(function(s){return (s.date||'').slice(0,7)===mk;}).length; }
+function clCharged(c){ return clIsSess(c) ? clSum(c.log,function(s){ return s.rate!=null?s.rate:clRate(c); }) : (+c.amount||0); }
+function clBalance(c){ return clCharged(c)-clPaidAll(c); }
+function clPend(c){ return Math.max(0,Math.round(clBalance(c))); }
+function clCredit(c){ return Math.max(0,Math.round(-clBalance(c))); }
+// ── Tareas vinculadas y sus ocurrencias (una tarea periódica "Atender" = una sesión posible por cada vez que cae) ──
+function clTasks(c){ return (c.taskIds||[]).map(function(id){ return (S.tasks||[]).find(function(t){return t.id===id && !t.del;}); }).filter(Boolean); }
+function clTaskDates(t, from, to){
+  var out=[]; if(!t || t.del || t.period!=='dia' || from>to) return out;
+  if(t.date){
+    if(!t.repeatEveryDays){ if(t.date>=from && t.date<=to) out.push(t.date); return out; }
+    var k=0, g=0, until=t.repeatUntil||'9999-12-31', d=parseLocalDate(t.date);
+    while(g++<500){
+      var ds=localDateStr(d); if(ds>to || ds>until) break;
+      if(ds>=from) out.push(ds);
+      k++; d=parseLocalDate(t.date);
+      if(t.repeatMonths>0) d.setMonth(d.getMonth()+k*t.repeatMonths); else d.setDate(d.getDate()+k*t.repeatEveryDays);
+    }
+    return out;
+  }
+  var home=(t.homeDay!=null)?t.homeDay:t.day; if(home==null) return out;
+  var d0=parseLocalDate(from), end=parseLocalDate(to);
+  for(var d1=d0; d1<=end; d1.setDate(d1.getDate()+1)){
+    var inCur=isSameWeekAsToday(d1), want=inCur?t.day:home;     // esta semana vale el día al que se movió; las siguientes vuelven al día de origen
+    if(dayIdxFromDate(d1)!==want) continue;
+    if(inCur && isSkipped(t)) continue;
+    out.push(localDateStr(d1));
+  }
+  return out;
+}
+function clOccIn(c, from, to){
+  var out=[]; clTasks(c).forEach(function(t){ clTaskDates(t,from,to).forEach(function(d){ out.push({date:d,taskId:t.id}); }); });
+  return out.sort(clDateCmp);
+}
+function clPlan(c, mk){
+  var occ = clTasks(c).length ? clOccIn(c, clMonthStart(mk), clMonthEnd(mk)).length : 0;
+  var done = clDoneM(c,mk), manual = (+c.max>0), max = manual ? Math.round(+c.max) : occ;
+  var exp = (+c.exp>0) ? Math.round(+c.exp) : max;
+  if(max>0 && exp>max) exp=max;
+  if(max<done) max=done; if(exp<done) exp=done;
+  return {exp:exp, max:max, done:done, occ:occ, manualMax:manual, expDefault:!(+c.exp>0)};
+}
+// Sesiones que aún se esperan en el mes (con su fecha probable: las próximas veces que cae la tarea).
+function clPlanned(c, mk){
+  if(!clIsSess(c) || c.status!=='activo' || !(clRate(c)>0)) return [];
+  var pl=clPlan(c,mk), n=Math.max(0,pl.exp-pl.done); if(!n) return [];
+  var today=todayStr(), from=mk>clMk(today)?clMonthStart(mk):today, to=clMonthEnd(mk); if(from>to) return [];
+  var slots=clOccIn(c,from,to).filter(function(s){ return !(c.log||[]).some(function(l){ return l.date===s.date && (l.taskId===s.taskId || !l.taskId); }); });
+  var out=[]; for(var i=0;i<n;i++) out.push({date: slots[i]?slots[i].date:to, slot:!!slots[i]});
+  return out;
+}
+// Cargos en orden (sesiones hechas + esperadas) cubiertos por los pagos (los más antiguos primero); lo no cubierto se agrupa por fecha de cobro.
+function clGroups(c){
+  var rate=clRate(c), L=[], mk=clMk();
+  if(clIsSess(c)){
+    (c.log||[]).slice().sort(clDateCmp).forEach(function(s){ L.push({date:s.date, amt:(s.rate!=null?s.rate:rate), k:'done'}); });
+    [mk,clNextMk(mk)].forEach(function(m){ clPlanned(c,m).forEach(function(s){ L.push({date:s.date, amt:rate, k:'plan'}); }); });
+  } else {
+    var a=+c.amount||0; if(a>0) L.push({date:c.due||todayStr(), amt:a, k:'done'});
+  }
+  var credit=clPaidAll(c), map={}, keys=[];
+  L.forEach(function(ch){
+    var cov=Math.min(ch.amt,credit); credit-=cov; var u=ch.amt-cov; if(u<0.5) return;
+    var due = (clIsSess(c) && c.payMode==='eom') ? clMonthEnd(ch.date.slice(0,7)) : ch.date;
+    if(!map[due]){ map[due]={date:due,amt:0,n:0,debt:false}; keys.push(due); }
+    var g=map[due]; g.amt+=u; if(clIsSess(c)) g.n++; if(ch.k==='done') g.debt=true;
+  });
+  return keys.sort().map(function(d){ var g=map[d]; g.amt=Math.round(g.amt); return g; });
+}
+function clNextDue(c){ var g=clGroups(c).filter(function(x){return x.debt;}); return g.length?g[0]:null; }
+// Cuántas de las sesiones realizadas del mes ya están cubiertas por pagos.
+function clPaidN(c, mk){ var r=clRate(c); return r>0 ? Math.floor(clPaidM(c,mk)/r+1e-6) : 0; }
+function clCoveredM(c, mk){
+  var credit=clPaidAll(c), n=0;
+  (c.log||[]).slice().sort(clDateCmp).forEach(function(s){ var a=(s.rate!=null?s.rate:clRate(c)), full=credit>=a-0.5; credit=Math.max(0,credit-a); if(full && (s.date||'').slice(0,7)===mk) n++; });
+  return n;
+}
+function clMoneyShort(n,cur){ n=Math.round(n||0); if(Math.abs(n)>=1000000){ var m=Math.round(Math.abs(n)/10000)/100; return (n<0?'−':'')+(cur||'$')+String(m).replace('.',',')+' M'; } return fmtMoney(n,cur); }
+// ── Normalización, migración y sincronía con Finanzas ──
+function clFinReg(p){ var r=p&&p.finRegId?regById(p.finRegId):null; if(r&&r.kind==='finance'&&!r.del) return r; var l=clFinRegs(); return l[0]||null; }
+function clFindClient(pid,cid){ var p=clProj(pid); if(!p) return null; var f=null; clEnsure(p).forEach(function(t){ (t.clients||[]).forEach(function(c){ if(c.id===cid) f=c; }); }); return f; }
+function clNorm(c){
+  var ch=false;
+  if(!c.mode){ c.mode='fixed'; ch=true; }
+  if(!Array.isArray(c.log)){ c.log=[]; ch=true; }
+  if(!Array.isArray(c.pays)){ c.pays=[]; ch=true; }
+  if(!Array.isArray(c.taskIds)){ c.taskIds=c.taskId?[c.taskId]:[]; ch=true; }
+  if(!c.payMode){ c.payMode='session'; ch=true; }
+  return ch;
+}
+function clAbsorb(c, regs){
+  if(!Array.isArray(regs)) regs=[regs];
+  var ch=false, ents=[], byId={}; regs.forEach(function(r){ (r.entries||[]).forEach(function(e){ ents.push(e); byId[e.id]=e; }); });
+  c.pays=(c.pays||[]).filter(function(p){ if(!p.entryId) return true; var e=byId[p.entryId]; if(!e || e.del){ ch=true; return false; } return true; });
+  (c.pays||[]).forEach(function(p){ var e=p.entryId&&byId[p.entryId]; if(e && e.status==='done' && (e.amount!==p.amount || e.date!==p.date)){ p.amount=e.amount; p.date=e.date; ch=true; } });
+  var known={}; (c.pays||[]).forEach(function(p){ if(p.entryId) known[p.entryId]=1; });
+  ents.forEach(function(e){ if(!e.del && e.projClientId===c.id && e.status==='done' && e.dir==='in' && !known[e.id]){ c.pays.push({id:uid(),date:e.date,amount:+e.amount||0,entryId:e.id}); ch=true; } });
+  return ch;
+}
+function clSyncClient(p, c, reg){
+  var now=Date.now(), prefix='cl_'+c.id+'_', ents=(reg.entries||[]).slice(), ch=false;
+  var wanted=(c.noFin===true)?[]:clGroups(c), keep={};
+  function find(id){ for(var i=0;i<ents.length;i++) if(ents[i].id===id) return i; return -1; }
+  wanted.forEach(function(g){
+    var id=prefix+g.date, k=1, i=find(id);
+    while(i>=0 && ents[i].status!=='expected'){ k++; id=prefix+g.date+'_'+k; i=find(id); }
+    var label=(clDispName(c)||'Cliente')+(g.n>1?' · '+g.n+' sesiones':(g.n===1?' · sesión':''));
+    var kind=g.debt?'debt':'plan';
+    if(i<0){ ents.push({id:id,status:'expected',dir:'in',amount:g.amt,expectedAmount:g.amt,date:g.date,label:label,taskId:null,itemId:null,taskName:null,ts:now,projClientId:c.id,clAuto:true,clKind:kind,clPm:c.payMode}); keep[id]=1; ch=true; return; }
+    var e=ents[i];
+    if(e.del){ if(!e.clGone) return; ents[i]=Object.assign({},e,{del:false,clGone:false,amount:g.amt,expectedAmount:g.amt,date:g.date,label:label,clKind:kind,clPm:c.payMode,ts:now}); keep[id]=1; ch=true; return; }
+    keep[id]=1;
+    if(e.amount!==g.amt || e.label!==label || e.date!==g.date || e.clKind!==kind || e.clPm!==c.payMode){ ents[i]=Object.assign({},e,{amount:g.amt,expectedAmount:g.amt,label:label,date:g.date,clKind:kind,clPm:c.payMode,ts:now}); ch=true; }
+  });
+  ents.forEach(function(e,i){
+    if(e.projClientId!==c.id || e.del || e.status!=='expected') return;
+    if(e.clAuto && !keep[e.id]){ ents[i]=Object.assign({},e,{del:true,clGone:true,label:'',ts:now}); ch=true; }
+    else if(!e.clAuto && c.expEntryId===e.id){ ents[i]=Object.assign({},e,{del:true,clGone:true,label:'',ts:now}); ch=true; }   // el esperado manual de la versión anterior lo reemplaza el automático
+  });
+  var dn=clDispName(c)||'Cliente';
+  ents.forEach(function(e,i){ if(e.projClientId===c.id && !e.del && e.status!=='expected' && (e.clPay||e.clAuto) && e.label!==dn){ ents[i]=Object.assign({},e,{label:dn,ts:now}); ch=true; } });
+  if(c.expEntryId){ c.expEntryId=null; ch=true; }
+  if(ch){ reg.entries=ents; reg.updatedAt=new Date().toISOString(); }
+  return ch;
+}
+var _clSyncAt=0, _clSyncBusy=false;
+function clSyncAll(force){
+  if(_clSyncBusy) return; if(!force && Date.now()-_clSyncAt<1500) return; _clSyncAt=Date.now(); _clSyncBusy=true;
+  try{
+    var changed=false, modalOpen=!!document.getElementById('task-modal');
+    (S.projects||[]).forEach(function(p){
+      if(p.type!=='clients' || p.del) return; var reg=clFinReg(p);
+      clEnsure(p).forEach(function(tab){
+        (tab.clients||[]).forEach(function(c){
+          if(clNorm(c)) changed=true;
+          if(!c.v2){
+            var before=0;
+            if(reg){ var n0=(c.pays||[]).length; if(clAbsorb(c,clFinRegs())) changed=true; before=clSum((c.pays||[]).slice(n0),function(x){return x.amount;}); }
+            c.adj=Math.max(0,(+c.paid||0)-before); c.v2=1; changed=true;
+          }
+          // vínculo tarea → cliente (y limpieza de tareas que ya no existen, salvo mientras se está creando una)
+          if(!modalOpen){ var alive=(c.taskIds||[]).filter(function(id){ return (S.tasks||[]).some(function(t){return t.id===id && !t.del;}); }); if(alive.length!==(c.taskIds||[]).length){ c.taskIds=alive; changed=true; } }
+          clTasks(c).forEach(function(t){ if(!t.clientRef || t.clientRef.cid!==c.id){ t.clientRef={pid:p.id,cid:c.id}; changed=true; } });
+          if(reg){ if(clAbsorb(c,clFinRegs())) changed=true; if(clSyncClient(p,c,reg)) changed=true; }
+        });
+      });
+    });
+    if(changed) saveState();
+  }catch(e){ try{ console.error('clSyncAll',e); }catch(_){} }
+  _clSyncBusy=false;
+}
+// Al completar (o desmarcar) una tarea vinculada a un cliente por sesiones, se anota la sesión sola.
+function clTaskHook(t){
+  if(!t || !t.clientRef) return;
+  var c=clFindClient(t.clientRef.pid, t.clientRef.cid), p=clProj(t.clientRef.pid); if(!c || !p || !clIsSess(c)) return;
+  var d=taskEntryDate(t); c.log=c.log||[];
+  var i=c.log.findIndex(function(l){ return l.taskId===t.id && l.date===d; });
+  if(isDone(t)){ if(i<0) c.log.push({id:uid(),date:d,taskId:t.id,rate:clRate(c)}); }
+  else if(i>=0) c.log.splice(i,1);
+  p.updatedAt=new Date().toISOString(); clSyncAll(true);
+  if(isDone(t) && i<0){ var pend=clPend(c), cr=clCredit(c); toast('Sesión anotada · '+clDispName(c)+(pend>0?' · debe '+fmtMoney(pend,clCur(p)):(cr>0?' · saldo a favor '+fmtMoney(cr,clCur(p)):''))); }
+}
+function clTaskLabel(t){
+  var hr=t.hora?' '+t.hora:'';
+  if(t.date) return (t.repeatEveryDays?'↻ ':'')+formatDateShort(t.date)+hr;
+  var home=(t.homeDay!=null)?t.homeDay:t.day;
+  return '↻ '+(DAYS[home]||'')+hr;
+}
+function clOpenUrl(u){ try{ if(window.Platform && Platform.isNative) Platform.openUrl(u); else window.open(u,'_blank'); }catch(e){} }
+function clContactActions(contact){
+  var s=String(contact||'').trim(), out=[]; if(!s) return out;
+  var mail=s.match(/[^\s@]+@[^\s@]+\.[^\s@]+/), digits=s.replace(/[^\d+]/g,'');
+  if(mail) out.push(['Correo','mailto:'+mail[0]]);
+  if(!mail && digits.replace(/\D/g,'').length>=7){
+    var dd=digits.replace(/\D/g,''); if(dd.length===9 && dd.charAt(0)==='9') dd='56'+dd;
+    out.push(['Llamar','tel:'+digits]); out.push(['WhatsApp','https://wa.me/'+dd]);
+  }
+  return out;
+}
+function clAsk(title, msg, okLbl, fn, tone){
+  var old=document.getElementById('cl-ask'); if(old) old.remove();
+  var box=document.createElement('div'); box.className='conf-box'+(tone?' t-'+tone:''); box.id='cl-ask'; window._clAskFn=fn;
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:8px;">'+esc(title)+'</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.55;margin-bottom:16px;">'+esc(msg)+'</div>'+
+    '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="document.getElementById(\'cl-ask\').remove()">Cancelar</button>'+
+    '<button class="sbtn" style="flex:1;" onclick="var f=window._clAskFn;document.getElementById(\'cl-ask\').remove();if(f)f();">'+esc(okLbl)+'</button></div></div>';
+  document.body.appendChild(box);
+}
+// ═══ Modo privado (alias en vez de nombres), contadores rápidos, resumen ═══
+var _clPrivCache=null;
+function clPrivGet(){ if(_clPrivCache) return _clPrivCache; try{ _clPrivCache=JSON.parse(localStorage.getItem('og6-priv')||'{}')||{}; }catch(e){ _clPrivCache={}; } return _clPrivCache; }
+function clPrivSet(o){ _clPrivCache=Object.assign(clPrivGet(),o); try{ localStorage.setItem('og6-priv',JSON.stringify(_clPrivCache)); }catch(e){} }
+function clPrivOn(){ return !!clPrivGet().on && !(S._privUntil && Date.now()<S._privUntil); }
+function clPinHash(p){ var h=5381; p=String(p); for(var i=0;i<p.length;i++) h=((h<<5)+h+p.charCodeAt(i))|0; return String(h); }
+function clInitials(name){ var w=String(name||'').trim().split(/\s+/).filter(Boolean); if(!w.length) return '—'; return w.slice(0,3).map(function(x){return x.charAt(0).toUpperCase();}).join('.')+'.'; }
+function clAlias(c){
+  if(c.alias) return c.alias;
+  var ini=clInitials(c.name), same=[]; (S.projects||[]).forEach(function(p){ if(p.type!=='clients'||p.del) return; clEnsure(p).forEach(function(t){ (t.clients||[]).forEach(function(x){ if(!x.alias && clInitials(x.name)===ini) same.push(x.id); }); }); });
+  var i=same.indexOf(c.id); return same.length>1 && i>=0 ? ini+(i+1) : ini;
+}
+function clDispName(c){ return clPrivOn() ? clAlias(c) : (c.name||''); }
+function clTaskChip(t){
+  if(!t || !t.clientRef) return '';
+  var c=clFindClient(t.clientRef.pid,t.clientRef.cid); if(!c) return '';
+  return ' <span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:var(--accent-bg);color:var(--accent-text);vertical-align:middle;white-space:nowrap;">'+esc(clDispName(c))+'</span>';
+}
+function clPrivRefresh(){ try{ clSyncAll(true); }catch(e){} try{ render(); }catch(e){} try{ if(document.getElementById('project-view')) renderProjectContent(); }catch(e){} if(CLE && document.getElementById('cl-editor')){ clReadFields(); clEditorDraw(); } if(document.getElementById('cl-priv')) clPrivDraw(); }
+function clPrivToggle(){ var on=!clPrivGet().on; clPrivSet({on:on}); S._privUntil=0; clPrivRefresh(); toast(on?'Modo privado activado: se ven alias':'Modo privado desactivado'); }
+function clPrivReveal(){
+  var pin=clPrivGet().pin;
+  var go=function(){ S._privUntil=Date.now()+60000; clPrivRefresh(); toast('Nombres visibles por 1 minuto'); setTimeout(function(){ if(S._privUntil && Date.now()>=S._privUntil){ S._privUntil=0; clPrivRefresh(); } }, 60500); };
+  if(!pin){ go(); return; }
+  var old=document.getElementById('cl-pin'); if(old) old.remove();
+  var box=document.createElement('div'); box.className='conf-box'; box.id='cl-pin';
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;">Código para ver los nombres</div><input id="cl-pin-in" class="finp" type="password" inputmode="numeric" maxlength="8" placeholder="Código" style="text-align:center;font-size:20px;letter-spacing:4px;"/><div id="cl-pin-err" style="font-size:11.5px;color:var(--bad);min-height:16px;margin:4px 0 8px;"></div><div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="document.getElementById(\'cl-pin\').remove()">Cancelar</button><button class="sbtn" style="flex:1;" onclick="clPinCheck()">Ver</button></div></div>';
+  window._clPinGo=go; document.body.appendChild(box); setTimeout(function(){ var i=document.getElementById('cl-pin-in'); if(i) i.focus(); },50);
+}
+function clPinCheck(){ var v=(document.getElementById('cl-pin-in')||{}).value||''; if(clPinHash(v)===clPrivGet().pin){ document.getElementById('cl-pin').remove(); window._clPinGo(); } else { var e=document.getElementById('cl-pin-err'); if(e) e.textContent='Código incorrecto'; } }
+function clPrivSetPin(){
+  var v=(document.getElementById('cl-newpin')||{}).value||'';
+  if(!v){ clPrivSet({pin:''}); toast('Código quitado'); clPrivDraw(); return; }
+  if(!/^\d{4,8}$/.test(v)){ toast('Usa 4 a 8 números'); return; }
+  clPrivSet({pin:clPinHash(v)}); toast('Código guardado'); clPrivDraw();
+}
+function clPrivMenu(){
+  var old=document.getElementById('cl-priv'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='cl-priv'; ov.style.zIndex=860; ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov); clPrivDraw();
+}
+function clPrivDraw(){
+  var ov=document.getElementById('cl-priv'); if(!ov) return; var g=clPrivGet(), on=!!g.on, hidden=clPrivOn();
+  ov.innerHTML='<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span class="serif" style="font-weight:800;font-size:20px;">Privacidad de nombres</span><button onclick="document.getElementById(\'cl-priv\').remove()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin-bottom:12px;">Con el modo privado, en vez del nombre se ve un <b>alias</b> (por defecto las iniciales, o el que tú elijas en la ficha) en las fichas, en Finanzas y como etiqueta en las tareas. Así puedes tener varias tareas «Atender» y distinguirlas sin exponer a nadie. Es solo para este dispositivo.</div>'+
+    '<button type="button" class="'+(on?'sbtn':'cbtn')+'" style="width:100%;margin-bottom:8px;" onclick="clPrivToggle()">'+(on?'Modo privado activado · desactivar':'Activar modo privado')+'</button>'+
+    (on&&hidden?'<button type="button" class="cbtn" style="width:100%;margin-bottom:8px;" onclick="clPrivReveal()">Ver nombres por 1 minuto</button>':'')+
+    '<label class="flbl" style="margin-top:10px;">Código para ver los nombres (opcional)</label><div style="display:flex;gap:8px;"><input id="cl-newpin" class="finp" type="password" inputmode="numeric" maxlength="8" placeholder="'+(g.pin?'Código guardado · escribe otro o deja vacío para quitarlo':'4 a 8 números')+'" style="margin:0;flex:1;"/><button type="button" class="cbtn" onclick="clPrivSetPin()">Guardar</button></div>'+
+    '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:8px;">Es una cortina visual para miradas ajenas, no un cifrado: los datos siguen guardados igual en tu cuenta.</div></div>';
+}
+// ── contadores rápidos en la tarjeta: +1 sesión / +1 pago sin abrir la ficha ──
+function clQuick(pid,cid,kind,d){
+  var p=clProj(pid), c=clFindClient(pid,cid); if(!p||!c) return; clNorm(c);
+  var snapLog=JSON.stringify(c.log), snapPays=JSON.stringify(c.pays), r=clRate(c), mk=clMk();
+  if(kind==='s'){
+    if(d>0) c.log.push({id:uid(),date:todayStr(),taskId:null,rate:r});
+    else { var i=-1,best=''; c.log.forEach(function(l,ix){ if(!l.taskId && l.date>=best){best=l.date;i=ix;} }); if(i<0) c.log.forEach(function(l,ix){ if(l.date>=best){best=l.date;i=ix;} }); if(i>=0) c.log.splice(i,1); }
+  } else {
+    if(!(r>0)){ toast('Primero define el arancel en la ficha'); return; }
+    if(d>0) clAddPay(c,p,r,todayStr()); else { var last=c.pays.slice().sort(clDateCmp).pop(); if(last) clPayReduce(c,p,last,r); }
+  }
+  p.updatedAt=new Date().toISOString(); saveState(); clSyncAll(true); renderProjectContent();
+  var pl=clPlan(c,mk);
+  toast((kind==='s'?'Sesiones ':'Pagadas ')+(kind==='s'?pl.done+'/'+pl.exp:clPaidN(c,mk)+'/'+Math.max(pl.exp,pl.done))+' · '+clDispName(c));
+}
+function clPayReduce(c,p,pay,amt){
+  var left=pay.amount-amt;
+  if(left<=0.5){ clPayDelIn(c,p,pay.id); return; }
+  pay.amount=left; var reg=pay.entryId&&clFinRegs().filter(function(r){return (r.entries||[]).some(function(e){return e.id===pay.entryId;});})[0];
+  if(reg){ reg.entries=reg.entries.map(function(e){ return e.id===pay.entryId?Object.assign({},e,{amount:left,ts:Date.now()}):e; }); reg.updatedAt=new Date().toISOString(); }
+}
+// números editables: "7/10" se cambia escribiendo, sin vínculo con tareas
+function clSetDone(n){ n=Math.max(0,Math.round(+n||0)); clAct(function(c){ var mk=clMk(), cur=clDoneM(c,mk); if(n>cur){ for(var i=cur;i<n;i++) c.log.push({id:uid(),date:todayStr(),taskId:null,rate:clRate(c)}); } else { for(var k=cur;k>n;k--){ var ix=-1,best=''; c.log.forEach(function(l,j){ if((l.date||'').slice(0,7)===mk && l.date>=best){best=l.date;ix=j;} }); if(ix>=0) c.log.splice(ix,1); } } }); }
+function clSetPaid(n){ n=Math.max(0,Math.round(+n||0)); clAct(function(c,p){ var r=clRate(c); if(!(r>0)){ toast('Primero define el arancel'); return; } var cur=clPaidN(c,clMk()), diff=n-cur; if(diff>0) clAddPay(c,p,diff*r,todayStr()); else if(diff<0){ var need=-diff*r; c.pays.slice().sort(clDateCmp).reverse().forEach(function(x){ if(need<=0.5) return; var take=Math.min(need,x.amount); clPayReduce(c,p,x,take); need-=take; }); } }); }
+function clSetExp(n){ clReadFields(); CLE.c.exp=Math.max(0,Math.round(+n||0)); if(CLE.c.max>0&&CLE.c.exp>CLE.c.max) CLE.c.exp=CLE.c.max; clEditorDraw(); }
+function clSetMax(n){ clReadFields(); CLE.c.max=Math.max(0,Math.round(+n||0)); if(CLE.c.max>0&&CLE.c.exp>CLE.c.max) CLE.c.exp=CLE.c.max; clEditorDraw(); }
+// ── Resumen por semana / mes ──
+function clSumRange(){
+  var v=S._clSum||(S._clSum={mode:'week',off:0}), t=new Date(); t.setHours(12,0,0,0);
+  if(v.mode==='month'){ var d=new Date(t.getFullYear(),t.getMonth()+v.off,1,12); var mk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); return {from:clMonthStart(mk),to:clMonthEnd(mk),label:clCap(REG_MONTHS_FULL[d.getMonth()])+' '+d.getFullYear()}; }
+  var mon=new Date(t); mon.setDate(t.getDate()-((t.getDay()+6)%7)+7*v.off); var sun=new Date(mon); sun.setDate(mon.getDate()+6);
+  return {from:localDateStr(mon),to:localDateStr(sun),label:(v.off===0?'Esta semana':(v.off===-1?'Semana pasada':'Semana'))+' · '+fmtShortDate(localDateStr(mon))+' – '+fmtShortDate(localDateStr(sun))};
+}
+function clSumOpen(pid){
+  window._clvPid=pid; S._clSum=S._clSum||{mode:'week',off:0};
+  var old=document.getElementById('cl-sum'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='cl-sum'; ov.style.zIndex=860; ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov); clSumDraw();
+}
+function clSumSet(k,v){ S._clSum[k]=v; if(k==='mode') S._clSum.off=0; clSumDraw(); }
+function clSumStep(d){ S._clSum.off=Math.min(0,S._clSum.off+d); clSumDraw(); }
+function clSumDraw(){
+  var ov=document.getElementById('cl-sum'), p=clProj(window._clvPid); if(!ov||!p) return;
+  var R=clSumRange(), v=S._clSum, cur=clCur(p), rows=[], tot={s:0,a:0,c:0};
+  clAllClients(p).forEach(function(c){
+    var ss=(c.log||[]).filter(function(l){return l.date>=R.from&&l.date<=R.to;}), pp=(c.pays||[]).filter(function(x){return x.date>=R.from&&x.date<=R.to;}), co=clSum(pp,function(x){return x.amount;});
+    var earned=clIsSess(c)?clSum(ss,function(l){return l.rate!=null?l.rate:clRate(c);}):0;
+    if(!ss.length && !co) return; rows.push({c:c,s:ss.length,a:earned,co:co}); tot.s+=ss.length; tot.a+=earned; tot.c+=co;
+  });
+  rows.sort(function(a,b){return b.co-a.co||b.s-a.s;});
+  var seg=function(m,l){ var on=v.mode===m; return '<button type="button" onclick="clSumSet(\'mode\',\''+m+'\')" style="flex:1;padding:8px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+l+'</button>'; };
+  var nb=function(t,fn,dis){ return '<button type="button" '+(dis?'disabled':'onclick="'+fn+'"')+' style="width:34px;height:34px;border-radius:50%;border:1.5px solid var(--line);background:var(--paper);font-size:18px;cursor:pointer;color:'+(dis?'var(--muted-soft)':'var(--ink)')+';">'+t+'</button>'; };
+  ov.innerHTML='<div class="sheet" style="max-height:88vh;overflow-y:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="serif" style="font-weight:800;font-size:20px;">Resumen</span><button onclick="document.getElementById(\'cl-sum\').remove()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:10px;">'+seg('week','Semana')+seg('month','Mes')+'</div>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+nb('‹','clSumStep(-1)')+'<div style="font-size:13.5px;font-weight:700;color:var(--ink);text-align:center;">'+esc(R.label)+'</div>'+nb('›','clSumStep(1)',v.off>=0)+'</div>'+
+    '<div style="display:flex;gap:7px;margin-bottom:12px;">'+[['Sesiones',String(tot.s),'var(--ink)'],['Ganado',clMoneyShort(tot.a,cur),'var(--ink)'],['Cobrado',clMoneyShort(tot.c,cur),'var(--accent-text)']].map(function(x){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:10px;padding:8px;"><div style="font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[2]+';white-space:nowrap;">'+x[1]+'</div></div>'; }).join('')+'</div>'+
+    (rows.length?rows.map(function(r){ return '<div style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line-soft);"><span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(clDispName(r.c))+'</span><span style="font-size:12px;color:var(--muted);">'+r.s+' ses.</span><b style="font-size:13px;color:var(--accent-text);min-width:70px;text-align:right;">'+(r.co?'+'+fmtMoney(r.co,cur):'—')+'</b></div>'; }).join(''):'<div style="text-align:center;font-size:13px;color:var(--muted);padding:24px 0;">Sin movimientos en este período.</div>')+'</div>';
+}
+function clAllClients(p){ var o=[]; clEnsure(p).forEach(function(t){ (t.clients||[]).forEach(function(c){ o.push(c); }); }); return o; }
+// Totales del mes: por sesiones = esperado (o hecho si ya lo supera) × arancel; con monto acordado = el monto. "Por cobrar" es la deuda real acumulada.
+function clTotals(p, all){
+  var list = all ? clAllClients(p) : clList(p), mk=clMk(), today=todayStr(), t={total:0,paid:0,pend:0,lateN:0,lateAmt:0,n:list.length,max:0};
+  list.forEach(function(c){
+    clNorm(c);
+    if(clIsSess(c)){ var pl=clPlan(c,mk); t.total+=Math.max(pl.exp,pl.done)*clRate(c); t.max+=pl.max*clRate(c); t.paid+=clPaidM(c,mk); }
+    else { t.total+=(+c.amount||0); t.max+=(+c.amount||0); t.paid+=clPaidAll(c); }
+    t.pend+=clPend(c);
+    var nd=clNextDue(c); if(nd && nd.date<today){ t.lateN++; t.lateAmt+=Math.min(nd.amt,clPend(c)); }
+  });
   return t;
 }
-function buildClientsView(p){
-  var cl = clList(p), tcols = clTab(p).cols||[], cur = clCur(p), t = clTotals(p), today = todayStr();
-  var card = function(lbl,val,col){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:12px;padding:10px 12px;"><div style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">'+lbl+'</div><div style="font-size:16px;font-weight:800;color:'+(col||'var(--ink)')+';margin-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+val+'</div></div>'; };
-  var html = '<div style="padding:14px 16px 100px;">'+clTabsHTML(p)+
-    '<div style="display:flex;gap:8px;margin-bottom:12px;">'+card('Acordado',fmtMoney(t.total,cur))+card('Cobrado',fmtMoney(t.paid,cur),'var(--accent-text)')+card('Por cobrar',fmtMoney(t.pend,cur),t.pend>0?'var(--bad)':'var(--ink)')+'</div>';
-  if(!cl.length){
-    html += '<div style="text-align:center;padding:36px 8px 10px;"><div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;">Aún no hay clientes</div><div style="font-size:12px;color:var(--muted);line-height:1.6;">Toca <b>+ Cliente</b> para anotar el primero.<br>Después puedes registrar sus cobros en Finanzas y crear tareas de seguimiento.</div></div>';
-    return html+'</div>';
+function clView(p){ if(!S._clv) S._clv={}; var v=S._clv[p.id]||(S._clv[p.id]={q:'',f:'all',s:'name',late:false}); return v; }
+function clDueText(c, nd, today){
+  if(!nd) return '';
+  var d=clDaysTo(nd.date);
+  if(clIsSess(c) && c.payMode==='eom' && d>=0) return 'paga a fin de mes ('+formatDateShort(nd.date)+')';
+  if(d<0) return 'vencido hace '+(-d)+(d===-1?' día':' días');
+  if(d===0) return 'vence hoy';
+  return 'vence en '+d+(d===1?' día':' días');
+}
+function clCardHTML(p, c, cur, today, tab){
+  var st=clState(c.status), pend=clPend(c), cr=clCredit(c), nd=clNextDue(c), late=!!(nd && nd.date<today), mk=clMk();
+  var sub='', hero='', col='var(--muted)';
+  if(clIsSess(c)){
+    var pl=clPlan(c,mk), cov=clPaidN(c,mk);
+    sub=pl.done+' de '+pl.exp+' sesiones'+(pl.max>pl.exp?' · máx. '+pl.max:'')+' · '+cov+' pagada'+(cov===1?'':'s')+(clRate(c)?' · '+fmtMoney(clRate(c),cur)+' c/u':'');
+  } else {
+    sub=(+c.amount>0?'Acordado '+fmtMoney(+c.amount,cur):'Sin monto')+(c.service?' · '+esc(c.service):'');
   }
-  var th = 'text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap;background:var(--bg);';
-  var td = 'padding:11px 10px;border-bottom:1px solid var(--line-soft);font-size:13px;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums;';
-  html += '<div style="overflow-x:auto;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch;"><table style="border-collapse:separate;border-spacing:0;min-width:'+(640+tcols.length*120)+'px;width:100%;">'+
-    '<thead><tr><th style="'+th+'position:sticky;left:0;z-index:2;">Cliente</th><th style="'+th+'">Servicio</th><th style="'+th+'">Estado</th><th style="'+th+'text-align:right;">Acordado</th><th style="'+th+'text-align:right;">Cobrado</th><th style="'+th+'text-align:right;">Pendiente</th><th style="'+th+'">Cobro</th>'+tcols.map(function(c){ return '<th onclick="event.stopPropagation();tbColEditor(\''+p.id+'\',\''+c.id+'\',\''+clTab(p).id+'\')" style="'+th+'cursor:pointer;'+(c.type==='num'?'text-align:right;':'')+'">'+esc(c.name)+'</th>'; }).join('')+'<th onclick="tbColEditor(\''+p.id+'\',null,\''+clTab(p).id+'\')" style="'+th+'text-align:center;color:var(--accent-text);cursor:pointer;">+</th></tr></thead><tbody>'+
-    cl.map(function(c){
-      var st = clState(c.status), pend = clPend(c), late = pend>0 && c.due && c.due<today;
+  if(pend>0){ hero='Debe '+fmtMoney(pend,cur)+(nd?' · '+clDueText(c,nd,today):''); col=late?'var(--bad)':'var(--ink)'; }
+  else if(cr>0){ hero='Saldo a favor '+fmtMoney(cr,cur)+(clIsSess(c)&&clRate(c)>0&&cr>=clRate(c)?' · '+Math.floor(cr/clRate(c))+' sesión'+(Math.floor(cr/clRate(c))===1?'':'es'):''); col='var(--accent-text)'; }
+  else if(clIsSess(c) ? clPlan(c,mk).done>0 || clPaidAll(c)>0 : (+c.amount>0)){ hero='Al día'; col='var(--good)'; }
+  var ratio=0; if(clIsSess(c)){ var pl2=clPlan(c,mk); ratio=pl2.exp>0?Math.min(1,pl2.done/pl2.exp):0; } else { ratio=(+c.amount>0)?Math.min(1,clPaidAll(c)/(+c.amount)):0; }
+  var acts=clContactActions(c.contact);
+  return '<div onclick="openClientEditor(\''+p.id+'\',\''+c.id+'\')" style="background:var(--paper);border:1px solid '+(late?'var(--bad)':'var(--line)')+';border-radius:14px;padding:12px 14px;margin-bottom:10px;cursor:pointer;">'+
+    '<div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;min-width:0;font-weight:800;font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(clDispName(c)||'—')+'</div>'+
+    '<span style="flex-shrink:0;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:10px;background:'+st[2]+'22;color:'+st[2]+';">'+st[1]+'</span></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:3px;">'+sub+'</div>'+
+    (hero?'<div style="font-size:14px;font-weight:800;color:'+col+';margin-top:7px;font-variant-numeric:tabular-nums;">'+hero+'</div>':'')+
+    ((clIsSess(c)||+c.amount>0)?'<div style="height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px;"><div style="height:100%;width:'+Math.round(ratio*100)+'%;background:'+p.color+';"></div></div>':'')+
+    (clIsSess(c)?'<div style="display:flex;gap:8px;margin-top:9px;" onclick="event.stopPropagation()">'+[['s','Sesión'],['p','Pago']].map(function(b){ var mm=function(d){ return '<button type="button" onclick="event.stopPropagation();clQuick(\''+p.id+'\',\''+c.id+'\',\''+b[0]+'\','+d+')" style="width:'+(d>0?'auto':'34px')+';flex:'+(d>0?'1':'0 0 auto')+';padding:7px 10px;border-radius:10px;border:1.5px solid '+(d>0?'var(--accent)':'var(--line)')+';background:'+(d>0?'var(--accent-bg)':'transparent')+';color:'+(d>0?'var(--accent-text)':'var(--muted)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(d>0?'＋ '+b[1]:'−')+'</button>'; }; return mm(-1)+mm(1); }).join('<span style="width:4px;"></span>')+'</div>':'')+
+    '</div>';
+}
+function clListHTML(p){
+  var v=clView(p), tab=clTab(p), cur=clCur(p), today=todayStr(), term=clTerm(tab), all=clList(p), q=(v.q||'').trim().toLowerCase();
+  var list=all.filter(function(c){
+    if(v.f!=='all' && c.status!==v.f) return false;
+    if(v.late){ var nd=clNextDue(c); if(!(nd && nd.date<today && clPend(c)>0)) return false; }
+    if(q){ var hay=((c.name||'')+' '+(c.contact||'')+' '+(c.service||'')+' '+(c.notes||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    return true;
+  });
+  list.sort(function(a,b){
+    if(v.s==='debt') return clPend(b)-clPend(a) || (a.name||'').localeCompare(b.name||'');
+    if(v.s==='due'){ var na=clNextDue(a), nb=clNextDue(b); if(na&&nb) return na.date<nb.date?-1:(na.date>nb.date?1:0); if(na) return -1; if(nb) return 1; return (a.name||'').localeCompare(b.name||''); }
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  if(!all.length) return '<div style="text-align:center;padding:36px 8px 10px;"><div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;">Aún no hay '+esc(term.p)+'</div><div style="font-size:12px;color:var(--muted);line-height:1.6;">Toca <b>+ '+esc(term.S)+'</b> para anotar el primero.<br>Los cobros y las sesiones se ordenan solos con tus tareas y Finanzas.</div></div>';
+  if(!list.length) return '<div style="text-align:center;padding:28px 8px;font-size:13px;color:var(--muted);">Nada coincide con el filtro.</div>';
+  if(v.v==='table') return clTableHTML(p, list);
+  return list.map(function(c){ return clCardHTML(p,c,cur,today,tab); }).join('');
+}
+function clTableHTML(p, list){
+  var tcols=clTab(p).cols||[], cur=clCur(p), today=todayStr(), mk=clMk(), anySvc=list.some(function(c){return c.service;}), anySess=list.some(clIsSess);
+  var th='text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap;background:var(--bg);';
+  var td='padding:11px 10px;border-bottom:1px solid var(--line-soft);font-size:13px;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums;';
+  return '<div style="overflow-x:auto;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch;"><table style="border-collapse:separate;border-spacing:0;min-width:'+(560+tcols.length*120)+'px;width:100%;">'+
+    '<thead><tr><th style="'+th+'position:sticky;left:0;z-index:2;">Nombre</th><th style="'+th+'">Estado</th>'+(anySess?'<th style="'+th+'">Sesiones</th>':'')+(anySvc?'<th style="'+th+'">Servicio</th>':'')+'<th style="'+th+'text-align:right;">Acordado</th><th style="'+th+'text-align:right;">Cobrado</th><th style="'+th+'text-align:right;">Pendiente</th><th style="'+th+'">Vence</th>'+
+    tcols.map(function(c){ return '<th onclick="event.stopPropagation();tbColEditor(\''+p.id+'\',\''+c.id+'\',\''+clTab(p).id+'\')" style="'+th+'cursor:pointer;'+(c.type==='num'?'text-align:right;':'')+'">'+esc(c.name||'—')+'</th>'; }).join('')+'</tr></thead><tbody>'+
+    list.map(function(c){
+      var st=clState(c.status), pend=clPend(c), nd=clNextDue(c), late=!!(nd&&nd.date<today), pl=clIsSess(c)?clPlan(c,mk):null;
+      var agreed=clIsSess(c)?Math.max(pl.exp,pl.done)*clRate(c):(+c.amount||0), paid=clIsSess(c)?clPaidM(c,mk):clPaidAll(c);
       return '<tr onclick="openClientEditor(\''+p.id+'\',\''+c.id+'\')" style="cursor:pointer;">'+
-        '<td style="'+td+'position:sticky;left:0;background:var(--paper);font-weight:700;max-width:150px;overflow:hidden;text-overflow:ellipsis;">'+esc(c.name||'—')+(c.contact?'<div style="font-size:10.5px;font-weight:500;color:var(--muted);overflow:hidden;text-overflow:ellipsis;">'+esc(c.contact)+'</div>':'')+'</td>'+
-        '<td style="'+td+'max-width:130px;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft);">'+esc(c.service||'')+'</td>'+
+        '<td style="'+td+'position:sticky;left:0;background:var(--paper);font-weight:700;max-width:150px;overflow:hidden;text-overflow:ellipsis;">'+esc(clDispName(c)||'—')+'</td>'+
         '<td style="'+td+'"><span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;background:'+st[2]+'22;color:'+st[2]+';">'+st[1]+'</span></td>'+
-        '<td style="'+td+'text-align:right;">'+fmtMoney(+c.amount||0,cur)+'</td>'+
-        '<td style="'+td+'text-align:right;color:var(--accent-text);">'+fmtMoney(+c.paid||0,cur)+'</td>'+
+        (anySess?'<td style="'+td+'">'+(pl?pl.done+'/'+pl.exp+(pl.max>pl.exp?' (máx '+pl.max+')':''):'—')+'</td>':'')+
+        (anySvc?'<td style="'+td+'max-width:130px;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft);">'+esc(c.service||'')+'</td>':'')+
+        '<td style="'+td+'text-align:right;">'+fmtMoney(agreed,cur)+'</td>'+
+        '<td style="'+td+'text-align:right;color:var(--accent-text);">'+fmtMoney(paid,cur)+'</td>'+
         '<td style="'+td+'text-align:right;font-weight:700;color:'+(pend>0?(late?'var(--bad)':'var(--ink)'):'var(--muted-soft)')+';">'+(pend>0?fmtMoney(pend,cur):'—')+'</td>'+
-        '<td style="'+td+'color:'+(late?'var(--bad)':'var(--muted)')+';">'+(c.due?formatDateShort(c.due):'')+(c.expEntryId?' <span title="Anotado como ingreso esperado en Finanzas">'+ico('book',11,2)+'</span>':'')+(c.taskId&&S.tasks.some(function(x){return x.id===c.taskId;})?' <span title="Tiene tarea">'+ico('check2',11,2)+'</span>':'')+'</td>'+tcols.map(function(col){ return '<td style="'+td+(col.type==='num'?'text-align:right;':'')+'">'+tbCell(col,(c.x||{})[col.id])+'</td>'; }).join('')+'<td style="'+td+'"></td></tr>';
-    }).join('')+'</tbody></table></div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">Toca una fila para editar el cliente, registrar un cobro o crear una tarea.</div>';
+        '<td style="'+td+'color:'+(late?'var(--bad)':'var(--muted)')+';">'+(nd?formatDateShort(nd.date):'')+'</td>'+
+        tcols.map(function(col){ return '<td style="'+td+(col.type==='num'?'text-align:right;':'')+'">'+tbCell(col,(c.x||{})[col.id])+'</td>'; }).join('')+'</tr>';
+    }).join('')+'</tbody></table></div>';
+}
+function clFilterRedraw(){ var p=window._clvPid&&clProj(window._clvPid); var el=document.getElementById('cl-list'); if(p&&el) el.innerHTML=clListHTML(p); var fb=document.getElementById('cl-fbar'); if(p&&fb) fb.innerHTML=clFilterBarHTML(p); }
+function clSetQ(pid,val){ var p=clProj(pid); if(!p) return; clView(p).q=val; var el=document.getElementById('cl-list'); if(el) el.innerHTML=clListHTML(p); }
+function clSetF(pid,f){ var p=clProj(pid); if(!p) return; clView(p).f=f; clFilterRedraw(); }
+function clSetSort(pid,s){ var p=clProj(pid); if(!p) return; clView(p).s=s; clFilterRedraw(); }
+function clToggleLate(pid){ var p=clProj(pid); if(!p) return; var v=clView(p); v.late=!v.late; renderProjectContent(); }
+function clSetViewMode(pid,m){ var p=clProj(pid); if(!p) return; clView(p).v=m; p.clView=m; saveState(); renderProjectContent(); }
+function clFilterBarHTML(p){
+  var v=clView(p), chip=function(on,t,fn){ return '<button type="button" onclick="'+fn+'" style="flex-shrink:0;padding:6px 11px;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+t+'</button>'; };
+  var states=[['all','Todos']].concat(CL_STATES.map(function(s){return [s[0],s[1]];}));
+  var sorts=[['name','Nombre'],['debt','Debe más'],['due','Vence antes']];
+  return '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:8px;">'+states.map(function(s){ return chip(v.f===s[0],s[1],'clSetF(\''+p.id+'\',\''+s[0]+'\')'); }).join('')+'</div>'+
+    '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;align-items:center;"><span style="font-size:11px;color:var(--muted);flex-shrink:0;">Orden</span>'+sorts.map(function(s){ return chip(v.s===s[0],s[1],'clSetSort(\''+p.id+'\',\''+s[0]+'\')'); }).join('')+'</div>';
+}
+function buildClientsView(p){
+  clSyncAll(); window._clvPid=p.id;
+  var tab=clTab(p), cur=clCur(p), t=clTotals(p,false), term=clTerm(tab), v=clView(p), today=todayStr(), mk=clMk();
+  if(!v.v) v.v=p.clView||(window.innerWidth>=700?'table':'cards');
+  var all=clTotals(p,true), multi=clEnsure(p).length>1;
+  var card=function(lbl,val,col){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:12px;padding:9px 9px;"><div style="font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">'+lbl+'</div><div style="font-size:14.5px;font-weight:800;color:'+(col||'var(--ink)')+';margin-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap;">'+val+'</div></div>'; };
+  var html='<div style="padding:14px 16px 100px;">'+clTabsHTML(p)+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span style="flex:1;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+REG_MONTHS_FULL[+mk.slice(5)-1]+(multi?' · '+esc(tab.name):'')+'</span><button type="button" onclick="clSumOpen(\''+p.id+'\')" style="background:var(--bg);border:none;border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Resumen</button><button type="button" onclick="clPrivMenu()" title="Privacidad" style="background:'+(clPrivGet().on?'var(--accent-bg)':'var(--bg)')+';border:none;border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700;color:'+(clPrivGet().on?'var(--accent-text)':'var(--ink-soft)')+';cursor:pointer;font-family:Inter,sans-serif;">'+(clPrivOn()?'Alias':(clPrivGet().on?'Visible':'Nombres'))+'</button></div>'+
+    '<div style="display:flex;gap:7px;margin-bottom:8px;">'+card('Esperado',clMoneyShort(t.total,cur))+card('Cobrado',clMoneyShort(t.paid,cur),'var(--accent-text)')+card('Por cobrar',clMoneyShort(t.pend,cur),t.pend>0?'var(--bad)':'var(--ink)')+'</div>'+
+    (t.max>t.total?'<div style="font-size:11px;color:var(--muted);margin:-2px 2px 8px;">Si se completan todas las sesiones posibles: <b style="color:var(--ink);">'+clMoneyShort(t.max,cur)+'</b></div>':'')+
+    (t.lateN>0?'<button type="button" onclick="clToggleLate(\''+p.id+'\')" style="display:block;width:100%;text-align:left;margin-bottom:10px;padding:9px 12px;border-radius:11px;border:1.5px solid var(--bad);background:'+(v.late?'var(--bad)':'transparent')+';color:'+(v.late?'#fff':'var(--bad)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">⚠ '+t.lateN+' con cobro vencido · '+fmtMoney(t.lateAmt,cur)+(v.late?' · quitar filtro':' · ver')+'</button>':'');
+  if(clList(p).length){
+    html+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;"><input class="finp" type="search" placeholder="Buscar" value="'+esc(v.q||'')+'" oninput="clSetQ(\''+p.id+'\',this.value)" style="margin:0;flex:1;"/>'+
+      '<div style="display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;flex-shrink:0;">'+[['cards','Fichas'],['table','Tabla']].map(function(m){ var on=v.v===m[0]; return '<button type="button" onclick="clSetViewMode(\''+p.id+'\',\''+m[0]+'\')" style="padding:9px 11px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+m[1]+'</button>'; }).join('')+'</div></div>'+
+      '<div id="cl-fbar">'+clFilterBarHTML(p)+'</div>';
+  }
+  html+='<div id="cl-list">'+clListHTML(p)+'</div>';
+  if(multi) html+='<div style="font-size:11px;color:var(--muted);margin-top:6px;">Entre todas las tablas: '+all.n+' · por cobrar '+fmtMoney(all.pend,cur)+'</div>';
   return html+'</div>';
 }
 // ── Proyecto "Tabla": planilla en blanco tipo Excel (clientes, pacientes, inventario…) ──
@@ -14096,114 +14541,242 @@ function tbExportCSV(pid){
   Platform.saveTextFile((p.name||'planilla').replace(/[^\w\-]+/g,'_')+'_'+todayStr()+'.csv', csv, 'text/csv;charset=utf-8').then(function(x){ toast(x.ok ? 'Planilla lista' : 'No se pudo exportar'); });
 }
 var CLE = null;
+var CL_DRAFT_KEYS = ['alias','name','contact','service','status','notes','mode','rate','exp','max','payMode','amount','due','x','noFin','adj'];
+function clDraftSig(c){ var o={}; CL_DRAFT_KEYS.forEach(function(k){ o[k]=c[k]==null?'':c[k]; }); return JSON.stringify(o); }
 function openClientEditor(pid, cid){
-  var p = clProj(pid); if(!p) return;
-  var ex = cid ? clList(p).find(function(c){return c.id===cid;}) : null;
-  CLE = {pid:pid, isNew:!ex, c: ex ? JSON.parse(JSON.stringify(ex)) : {id:uid(), name:'', contact:'', service:'', status:'activo', amount:0, paid:0, due:'', notes:'', x:{}}};
-  var old = document.getElementById('cl-editor'); if(old) old.remove();
-  var ov = document.createElement('div'); ov.className='overlay'; ov.id='cl-editor'; ov.style.zIndex = 850;
-  ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+  var p=clProj(pid); if(!p) return; clSyncAll(true);
+  var ex=cid ? clList(p).find(function(c){return c.id===cid;}) : null, tab=clTab(p);
+  var base={id:uid(), name:'', contact:'', service:'', status:'activo', mode:tab.defMode==='sess'?'sess':'fixed', rate:0, exp:0, max:0, payMode:'session', amount:0, due:'', notes:'', x:{}, log:[], pays:[], taskIds:[], adj:0, v2:1};
+  CLE={pid:pid, isNew:!ex, c: ex ? JSON.parse(JSON.stringify(ex)) : base, openSec:{}};
+  clNorm(CLE.c); CLE.snap=clDraftSig(CLE.c);
+  var old=document.getElementById('cl-editor'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='cl-editor'; ov.style.zIndex=850;
+  ov.addEventListener('click',function(e){ if(e.target===ov) clClose(); });
   document.body.appendChild(ov); clEditorDraw();
 }
-function clEditorDraw(){
-  var ov = document.getElementById('cl-editor'); if(!ov||!CLE) return;
-  var p = clProj(CLE.pid), c = CLE.c, cur = clCur(p), regs = clFinRegs();
-  var f = function(id,lbl,val,ph,extra){ return '<label class="flbl" style="margin-top:10px;">'+lbl+'</label><input id="'+id+'" class="finp" placeholder="'+(ph||'')+'" value="'+esc(val==null?'':String(val))+'" '+(extra||'')+'/>'; };
-  var conn = '';
-  if(!CLE.isNew){
-    var pend = clPend(c);
-    conn = '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line);"><div class="sec-lbl">Conexiones</div>'+
-      '<div style="font-size:12px;font-weight:700;color:var(--ink);margin:6px 0 4px;">Finanzas</div>'+
-      (regs.length ?
-        '<select id="cl-reg" class="finp" onchange="CLE.regId=this.value" style="margin-bottom:8px;">'+regs.map(function(r){ return '<option value="'+r.id+'"'+((CLE.regId||p.finRegId||regs[0].id)===r.id?' selected':'')+'>'+esc(r.name||'Finanzas')+'</option>'; }).join('')+'</select>'+
-        '<div style="display:flex;gap:8px;"><button type="button" class="cbtn" style="flex:1;font-size:12.5px;" onclick="clToFinance(\'expected\')">Anotar cobro esperado'+(pend>0?' ('+fmtMoney(pend,cur)+')':'')+'</button></div>'+
-        '<div style="display:flex;gap:8px;margin-top:8px;align-items:center;"><input id="cl-recv" class="finp" inputmode="decimal" placeholder="Monto recibido" value="'+(pend>0?pend:'')+'" style="flex:1;margin:0;"/><button type="button" class="sbtn" style="flex:0 0 auto;padding:11px 14px;font-size:12.5px;" onclick="clToFinance(\'done\')">Registrar cobro</button></div>'+
-        '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;">Se agrega como <b>ingreso</b> al registro elegido y se suma a «Cobrado».</div>'
-      : '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;">Crea un registro de tipo <b>Finanzas</b> en la pestaña Registros para poder anotar aquí los cobros.</div>')+
-      '<div style="font-size:12px;font-weight:700;color:var(--ink);margin:14px 0 4px;">Tareas</div>'+
-      '<button type="button" class="cbtn" style="width:100%;font-size:12.5px;" onclick="clToTask()">'+(c.taskId&&S.tasks.some(function(x){return x.id===c.taskId;})?'Abrir tarea vinculada':'Crear tarea de cobro / seguimiento')+'</button></div>';
-  }
-  ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:800;font-size:20px;">'+(CLE.isNew?'Nuevo cliente':'Cliente')+'</span><button onclick="document.getElementById(\'cl-editor\').remove()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    f('cl-name','Nombre',c.name,'Ej: Ana Pérez / Estudio Sur')+
-    f('cl-contact','Contacto (teléfono o correo)',c.contact,'')+
-    f('cl-service','Servicio / proyecto',c.service,'Ej: Diseño de logo')+
-    '<label class="flbl" style="margin-top:10px;">Estado</label><div style="display:flex;gap:6px;flex-wrap:wrap;">'+CL_STATES.map(function(x){ var a=c.status===x[0]; return '<button type="button" onclick="CLE.c.status=\''+x[0]+'\';clReadFields();clEditorDraw()" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(a?x[2]:'var(--line)')+';background:'+(a?x[2]+'22':'transparent')+';color:'+(a?'var(--ink)':'var(--muted)')+';">'+x[1]+'</button>'; }).join('')+'</div>'+
-    '<div style="display:flex;gap:10px;"><div style="flex:1;">'+f('cl-amount','Monto acordado ('+esc(cur)+')',c.amount||'','0','inputmode="decimal"')+'</div><div style="flex:1;">'+f('cl-paid','Cobrado ('+esc(cur)+')',c.paid||'','0','inputmode="decimal"')+'</div></div>'+
-    '<label class="flbl" style="margin-top:10px;">Fecha de cobro</label><input id="cl-due" class="finp" type="text" readonly onclick="openCustomDatePicker(\'cl-due\')" style="cursor:pointer;" placeholder="Sin fecha" value="'+esc(c.due||'')+'"/>'+
-    f('cl-notes','Notas',c.notes,'')+
-    (clTab(p).cols||[]).map(function(col){ if(!c.x) c.x={}; return '<label class="flbl" style="margin-top:10px;">'+esc(col.name)+'</label>'+tbFieldHTML(col, c.x[col.id], 'CLE.c.x', 'clReadFields();clEditorDraw()'); }).join('')+
-    conn+
-    '<div style="display:flex;gap:8px;margin-top:18px;">'+(CLE.isNew?'':'<button type="button" onclick="clDelete()" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+'<button class="sbtn" style="flex:1;" onclick="clSave()">Guardar</button></div></div>';
+function clClose(force){
+  if(!CLE){ var o0=document.getElementById('cl-editor'); if(o0) o0.remove(); return; }
+  clReadFields();
+  if(!force && clDraftSig(CLE.c)!==CLE.snap){ clAsk('¿Descartar los cambios?','Hay cambios sin guardar en esta ficha.','Descartar',function(){ clClose(true); },'warn'); return; }
+  var o=document.getElementById('cl-editor'); if(o) o.remove();
+  if(CLE && CLE.bg){ CLE.bg=false; renderProjectContent(); }
+}
+function clStored(){ return CLE ? clFindClient(CLE.pid, CLE.c.id) : null; }
+function clRefreshDraft(){
+  var s=clStored(); if(!s||!CLE) return;
+  ['log','pays','taskIds','adjAuto','v2'].forEach(function(k){ if(s[k]!==undefined) CLE.c[k]=JSON.parse(JSON.stringify(s[k])); });
 }
 function clReadFields(){
   if(!CLE) return; var g=function(id){ var e=document.getElementById(id); return e?e.value:null; }, c=CLE.c, v;
-  if((v=g('cl-name'))!=null) c.name=v.trim(); if((v=g('cl-contact'))!=null) c.contact=v.trim(); if((v=g('cl-service'))!=null) c.service=v.trim();
-  if((v=g('cl-amount'))!=null) c.amount=Math.max(0,parseNumInput(v)||0); if((v=g('cl-paid'))!=null) c.paid=Math.max(0,parseNumInput(v)||0);
-  if((v=g('cl-due'))!=null) c.due=v; if((v=g('cl-notes'))!=null) c.notes=v.trim();
+  if((v=g('cl-name'))!=null) c.name=v.trim(); if((v=g('cl-alias'))!=null) c.alias=v.trim(); if((v=g('cl-contact'))!=null) c.contact=v.trim(); if((v=g('cl-service'))!=null) c.service=v.trim();
+  if((v=g('cl-rate'))!=null) c.rate=Math.max(0,parseNumInput(v)||0);
+  if((v=g('cl-amount'))!=null) c.amount=Math.max(0,parseNumInput(v)||0);
+  if((v=g('cl-adj'))!=null) c.adj=Math.max(0,parseNumInput(v)||0);
+  if((v=g('cl-due'))!=null) c.due=v; if((v=g('cl-notes'))!=null) c.notes=v;
 }
 function clCommit(keepOpen){
-  var p = clProj(CLE.pid); if(!p) return false; clReadFields();
-  if(!CLE.c.name){ toast('Escribe el nombre del cliente'); return false; }
-  var tab = clTab(p), prevIdx = (tab.clients||[]).findIndex(function(x){return x.id===CLE.c.id;});
-  tab.clients = (tab.clients||[]).filter(function(x){return x.id!==CLE.c.id;});
-  tab.clients.splice(prevIdx>=0?prevIdx:tab.clients.length,0,CLE.c); p.updatedAt = new Date().toISOString();
-  if(CLE.regId) p.finRegId = CLE.regId;
-  CLE.isNew = false; saveState(); renderProjectContent(); return true;
+  var p=clProj(CLE.pid); if(!p) return false; clReadFields();
+  if(!CLE.c.name){ toast('Escribe el nombre'); return false; }
+  var tab=clTab(p), copy=JSON.parse(JSON.stringify(CLE.c)), prevIdx=(tab.clients||[]).findIndex(function(x){return x.id===copy.id;});
+  if(prevIdx>=0){ var st=tab.clients[prevIdx]; ['log','pays','taskIds','expEntryId','taskId'].forEach(function(k){ if(st[k]!==undefined) copy[k]=st[k]; }); }  // lo que se modifica con acciones propias no se pisa
+  tab.clients=(tab.clients||[]).filter(function(x){return x.id!==copy.id;});
+  tab.clients.splice(prevIdx>=0?prevIdx:tab.clients.length,0,copy); p.updatedAt=new Date().toISOString();
+  if(CLE.regId) p.finRegId=CLE.regId;
+  CLE.isNew=false; CLE.snap=clDraftSig(CLE.c); saveState(); clSyncAll(true); clRefreshDraft(); if(CLE) CLE.bg=true; return true;
 }
-function clSave(){ if(!clCommit()) return; var o=document.getElementById('cl-editor'); if(o) o.remove(); toast('Cliente guardado'); }
+function clSave(){ if(!clCommit()) return; var o=document.getElementById('cl-editor'); if(o) o.remove(); CLE.bg=false; renderProjectContent(); toast('Guardado'); }
 function clDelete(){
-  var p = clProj(CLE.pid); if(!p) return;
-  if(!confirm('¿Eliminar a este cliente de la planilla? (Los ingresos ya anotados en Finanzas se mantienen.)')) return;
-  clTab(p).clients = clList(p).filter(function(x){return x.id!==CLE.c.id;}); saveState(); renderProjectContent();
-  var o=document.getElementById('cl-editor'); if(o) o.remove();
+  var p=clProj(CLE.pid); if(!p) return; var nm=CLE.c.name||'esta ficha';
+  clAsk('¿Eliminar «'+nm+'»?','Se quitan sus sesiones, pagos y cobros pendientes automáticos. Los ingresos ya registrados en Finanzas se mantienen.','Eliminar',function(){
+    var c=clStored(); if(c){ var reg=clFinReg(p); if(reg){ var now=Date.now(); reg.entries=(reg.entries||[]).map(function(e){ return (e.projClientId===c.id && e.status==='expected' && !e.del) ? Object.assign({},e,{del:true,clGone:true,label:'',ts:now}) : e; }); reg.updatedAt=new Date().toISOString(); }
+      (c.taskIds||[]).forEach(function(id){ var t=S.tasks.find(function(x){return x.id===id;}); if(t) delete t.clientRef; }); }
+    clTab(p).clients=clList(p).filter(function(x){return x.id!==CLE.c.id;}); p.updatedAt=new Date().toISOString(); saveState(); renderProjectContent();
+    var o=document.getElementById('cl-editor'); if(o) o.remove();
+  },'bad');
 }
-// Conexión con Finanzas: 'expected' = ingreso esperado (pendiente de confirmar) · 'done' = cobro recibido.
-function clToFinance(kind){
-  var p = clProj(CLE.pid); if(!p) return; clReadFields();
-  var sel = document.getElementById('cl-reg'), reg = regById((sel&&sel.value)||CLE.regId||p.finRegId||(clFinRegs()[0]||{}).id);
-  if(!reg){ toast('Crea primero un registro de Finanzas'); return; }
-  CLE.regId = reg.id; var c = CLE.c;
-  var label = (c.name||'Cliente')+(c.service?' · '+c.service:''), today = todayStr();
-  if(kind==='expected'){
-    var amt = clPend(c); if(!(amt>0)){ toast('No hay monto pendiente por cobrar'); return; }
-    var prev = c.expEntryId && (reg.entries||[]).find(function(e){return e.id===c.expEntryId && !e.del && e.status==='expected';});
-    var date = c.due || today;
-    if(prev){ prev.amount = amt; prev.expectedAmount = amt; prev.date = date; prev.label = label; }
-    else {
-      c.expEntryId = uid();
-      reg.entries = (reg.entries||[]).concat([{id:c.expEntryId, status:'expected', dir:'in', amount:amt, expectedAmount:amt, date:date, label:label, taskId:null, itemId:null, taskName:null, ts:Date.now(), projClientId:c.id}]);
-    }
-    toast('Anotado como ingreso esperado');
-  } else {
-    var rv = document.getElementById('cl-recv'), amt2 = parseNumInput(rv?rv.value:'');
-    if(!(amt2>0)){ toast('Escribe el monto recibido'); return; }
-    var ex = c.expEntryId && (reg.entries||[]).find(function(e){return e.id===c.expEntryId && !e.del && e.status==='expected';});
-    if(ex){ ex.status='done'; ex.expectedAmount = ex.expectedAmount!=null?ex.expectedAmount:ex.amount; ex.expectedDate = ex.expectedDate||ex.date; ex.amount = amt2; ex.date = today; ex.remindAt = null; ex.ts = Date.now(); }
-    else reg.entries = (reg.entries||[]).concat([{id:uid(), status:'done', dir:'in', amount:amt2, date:today, label:label, taskId:null, itemId:null, taskName:null, ts:Date.now(), projClientId:c.id}]);
-    c.expEntryId = null; c.paid = (+c.paid||0)+amt2; var pf=document.getElementById('cl-paid'); if(pf) pf.value=c.paid; toast('Cobro registrado en Finanzas');
+// ── acciones sobre el cliente guardado (primero se guarda la ficha, así nada se pierde) ──
+function clAct(fn){
+  clReadFields(); if(!CLE.c.name){ toast('Primero escribe el nombre'); return; }
+  if(!clCommit(true)) return; var c=clStored(), p=clProj(CLE.pid); if(!c||!p) return;
+  fn(c,p); p.updatedAt=new Date().toISOString(); saveState(); clSyncAll(true); clRefreshDraft(); CLE.bg=true; clEditorDraw();
+}
+function clSetMode(m){ clReadFields(); CLE.c.mode=m; clEditorDraw(); }
+function clSetPayMode(m){ clReadFields(); CLE.c.payMode=m; clEditorDraw(); }
+function clStep(k,d){
+  clReadFields(); var c=CLE.c, pl=clPlan(c,clMk());
+  var cur = k==='exp' ? pl.exp : pl.max; c[k]=Math.max(0,cur+d);
+  if(k==='max' && c.max>0 && c.exp>c.max) c.exp=c.max;
+  if(k==='max' && d<0 && c.max===0) c.max=0;
+  clEditorDraw();
+}
+function clMaxAuto(){ clReadFields(); CLE.c.max=0; clEditorDraw(); }
+function clSessStep(d){
+  clAct(function(c){
+    if(d>0){ c.log.push({id:uid(),date:todayStr(),taskId:null,rate:clRate(c)}); }
+    else { var i=-1, best=''; c.log.forEach(function(l,ix){ if(l.date>=best){ best=l.date; i=ix; } }); if(i>=0){ var l0=c.log[i]; c.log.splice(i,1); if(l0.taskId){ var t=S.tasks.find(function(x){return x.id===l0.taskId;}); if(t && t.done){ t.done=false; t.prog=0; } } } }
+  });
+}
+function clLogDel(id){ clAct(function(c){ var l=c.log.find(function(x){return x.id===id;}); c.log=c.log.filter(function(x){return x.id!==id;}); if(l&&l.taskId){ var t=S.tasks.find(function(x){return x.id===l.taskId;}); if(t && t.done && taskEntryDate(t)===l.date){ t.done=false; t.prog=0; } } }); }
+function clAddPay(c, p, amount, date){
+  var reg=clFinReg(p), pay={id:uid(),date:date||todayStr(),amount:amount}, nm=clDispName(c)||'Cliente';
+  if(reg){
+    var eid=uid(); reg.entries=(reg.entries||[]).concat([{id:eid,status:'done',dir:'in',amount:amount,date:pay.date,label:nm,taskId:null,itemId:null,taskName:null,ts:Date.now(),projClientId:c.id,clPay:true}]);
+    reg.updatedAt=new Date().toISOString(); pay.entryId=eid; if(!p.finRegId) p.finRegId=reg.id;
   }
-  reg.updatedAt = new Date().toISOString(); p.finRegId = reg.id;
-  var ok = clCommit(); if(ok){ try{ refreshRegViews(); }catch(e){} clEditorDraw(); }
+  c.pays.push(pay);
 }
-// Conexión con Tareas: crea una tarea con la fecha de cobro (o abre la ya vinculada).
-function clToTask(){
-  var p = clProj(CLE.pid); if(!p) return; clReadFields(); var c = CLE.c;
-  if(c.taskId && S.tasks.some(function(x){return x.id===c.taskId;})){ var tid=c.taskId; if(!clCommit()) return; document.getElementById('cl-editor').remove(); openEdit(tid); setTimeout(function(){ var m=document.getElementById('task-modal'); if(m) m.style.zIndex=860; },30); return; }
-  if(!clCommit()) return;
-  var date = c.due && c.due>=todayStr() ? c.due : todayStr();
-  var o=document.getElementById('cl-editor'); if(o) o.remove();
-  openNewDatedTask(date, {text:'Cobrar / dar seguimiento a '+c.name});
-  if(typeof M!=='undefined' && M && M.task){ c.taskId = M.task.id; saveState(); }
-  setTimeout(function(){ var m=document.getElementById('task-modal'); if(m) m.style.zIndex=860; },30);
+function clPayAdd(){
+  var a=parseNumInput((document.getElementById('cl-pay')||{}).value||''), dt=(document.getElementById('cl-paydate')||{}).value||todayStr();
+  if(!(a>0)){ toast('Escribe el monto'); return; }
+  clAct(function(c,p){ clAddPay(c,p,a,dt); toast('Pago registrado'+(clFinReg(p)?' · anotado en Finanzas':'')); });
+}
+function clPayStep(d){
+  clAct(function(c,p){
+    var r=clRate(c); if(!(r>0)){ toast('Primero define el arancel'); return; }
+    if(d>0){ clAddPay(c,p,r,todayStr()); }
+    else { var last=c.pays.slice().sort(clDateCmp).pop(); if(last && Math.abs(last.amount-r)<0.5) clPayDelIn(c,p,last.id); else toast('Quita el pago desde el historial'); }
+  });
+}
+function clPayDelIn(c,p,id){
+  var pay=c.pays.find(function(x){return x.id===id;}); if(!pay) return;
+  if(pay.entryId){ var reg=clFinReg(p); if(reg){ reg.entries=(reg.entries||[]).map(function(e){ return e.id===pay.entryId ? Object.assign({},e,{del:true,label:'',ts:Date.now()}) : e; }); reg.updatedAt=new Date().toISOString(); } }
+  c.pays=c.pays.filter(function(x){return x.id!==id;});
+}
+function clPayDel(id){ clAct(function(c,p){ clPayDelIn(c,p,id); }); }
+function clSetReg(id){ CLE.regId=id; clAct(function(c,p){ p.finRegId=id; }); }
+function clSecToggle(k){ clReadFields(); CLE.openSec[k]=!CLE.openSec[k]; clEditorDraw(); }
+// ── vincular tareas ──
+function clTaskPicker(){
+  clAct(function(c,p){
+    var old=document.getElementById('cl-tp'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.className='overlay'; ov.id='cl-tp'; ov.style.zIndex=870; ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+    ov.innerHTML='<div class="sheet" style="max-height:80vh;display:flex;flex-direction:column;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span class="serif" style="font-weight:700;font-size:18px;">Vincular tarea</span><button onclick="document.getElementById(\'cl-tp\').remove()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+      '<input class="finp" placeholder="Buscar tarea" oninput="clTaskPickerDraw(this.value)" style="margin:0 0 8px;"/><div id="cl-tp-list" style="overflow-y:auto;flex:1;"></div></div>';
+    document.body.appendChild(ov); clTaskPickerDraw('');
+  });
+}
+function clTaskPickerDraw(q){
+  var c=clStored(), box=document.getElementById('cl-tp-list'); if(!c||!box) return; q=(q||'').toLowerCase();
+  var list=(S.tasks||[]).filter(function(t){ return t.period==='dia' && !t.del && (!t.clientRef || t.clientRef.cid===c.id) && (!q || (t.text||'').toLowerCase().indexOf(q)>=0); })
+    .sort(function(a,b){ var la=(c.taskIds||[]).indexOf(a.id)>=0?0:1, lb=(c.taskIds||[]).indexOf(b.id)>=0?0:1; return la-lb || (a.text||'').localeCompare(b.text||''); });
+  box.innerHTML=list.length?list.map(function(t){ var on=(c.taskIds||[]).indexOf(t.id)>=0;
+    return '<button type="button" onclick="clTaskToggle(\''+t.id+'\')" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:'+(on?'var(--accent-bg)':'var(--bg)')+';border:1.5px solid '+(on?'var(--accent)':'transparent')+';border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text||'(sin nombre)')+'</span><span style="font-size:11.5px;color:var(--muted);flex-shrink:0;">'+esc(clTaskLabel(t))+'</span><span style="font-size:16px;color:var(--accent-text);">'+(on?'✓':'')+'</span></button>'; }).join(''):'<div style="font-size:12.5px;color:var(--muted);padding:14px 4px;">No hay tareas disponibles. Puedes crear una nueva desde la ficha.</div>';
+}
+function clTaskToggle(tid){
+  var c=clStored(), p=clProj(CLE.pid); if(!c||!p) return; var t=S.tasks.find(function(x){return x.id===tid;}); if(!t) return;
+  var i=(c.taskIds||[]).indexOf(tid);
+  if(i>=0){ c.taskIds.splice(i,1); delete t.clientRef; } else { c.taskIds.push(tid); t.clientRef={pid:p.id,cid:c.id}; }
+  p.updatedAt=new Date().toISOString(); saveState(); clSyncAll(true); clRefreshDraft(); clTaskPickerDraw((document.querySelector('#cl-tp input')||{}).value||''); CLE.bg=true; clEditorDraw();
+}
+function clTaskUnlink(tid){ clTaskToggleAct(tid); }
+function clTaskToggleAct(tid){ clAct(function(c){ var t=S.tasks.find(function(x){return x.id===tid;}); c.taskIds=(c.taskIds||[]).filter(function(x){return x!==tid;}); if(t) delete t.clientRef; }); }
+function clTaskOpen(tid){ var o=document.getElementById('cl-editor'); if(o) o.remove(); if(CLE&&CLE.bg){ CLE.bg=false; renderProjectContent(); } openEdit(tid); setTimeout(function(){ var m=document.getElementById('task-modal'); if(m) m.style.zIndex=860; },30); }
+function clTaskNew(){
+  clAct(function(c,p){
+    var o=document.getElementById('cl-editor'); if(o) o.remove(); CLE.bg=false; renderProjectContent();
+    var tab=clTab(p), term=clTerm(tab), d=todayStr();
+    openNewDatedTask(d, {text:(clIsSess(c)?'Atender a ':'Seguimiento de ')+c.name});
+    if(typeof M!=='undefined' && M && M.task){ if(clIsSess(c)){ try{ mSetWhen('weekly'); }catch(e){} } c.taskIds.push(M.task.id); saveState(); }
+    setTimeout(function(){ var m=document.getElementById('task-modal'); if(m) m.style.zIndex=860; },30);
+  });
+}
+function clEditorDraw(){
+  var ov=document.getElementById('cl-editor'); if(!ov||!CLE) return;
+  var p=clProj(CLE.pid), c=CLE.c, cur=clCur(p), regs=clFinRegs(), tab=clTab(p), term=clTerm(tab), mk=clMk(), sess=clIsSess(c), today=todayStr();
+  var lbl=function(t){ return '<label class="flbl" style="margin-top:10px;">'+t+'</label>'; };
+  var f=function(id,l,val,ph,extra){ return lbl(l)+'<input id="'+id+'" class="finp" placeholder="'+(ph||'')+'" value="'+esc(val==null?'':String(val))+'" '+(extra||'')+'/>'; };
+  var blk=function(title,inner,right){ return '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><div class="sec-lbl">'+title+'</div>'+(right||'')+'</div>'+inner+'</div>'; };
+  var chip=function(on,t,fn){ return '<button type="button" onclick="'+fn+'" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+t+'</button>'; };
+  var stepper=function(label,val,fnM,fnP,sub,fnSet){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:12px;padding:8px 8px 9px;text-align:center;"><div style="font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);">'+label+'</div>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:4px;"><button type="button" onclick="'+fnM+'" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);background:var(--paper);font-size:18px;line-height:1;cursor:pointer;color:var(--ink);">−</button>'+(fnSet?'<input type="number" inputmode="numeric" min="0" value="'+val+'" onchange="'+fnSet+'" style="width:46px;text-align:center;font-size:20px;font-weight:800;color:var(--ink);border:none;border-bottom:1.5px dashed var(--line);background:transparent;padding:0;font-family:Inter,sans-serif;"/>':'<span style="font-size:20px;font-weight:800;color:var(--ink);min-width:24px;">'+val+'</span>')+'<button type="button" onclick="'+fnP+'" style="width:30px;height:30px;border-radius:50%;border:1.5px solid var(--accent);background:var(--accent-bg);font-size:18px;line-height:1;cursor:pointer;color:var(--accent-text);">+</button></div>'+(sub?'<div style="font-size:10px;color:var(--muted);margin-top:3px;">'+sub+'</div>':'')+'</div>'; };
+  var stat=function(l,v,col){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:10px;padding:7px 8px;"><div style="font-size:9.5px;color:var(--muted);">'+l+'</div><div style="font-size:13.5px;font-weight:800;color:'+(col||'var(--ink)')+';white-space:nowrap;font-variant-numeric:tabular-nums;">'+v+'</div></div>'; };
+  var saved=!CLE.isNew && clStored();
+  // ── Datos ──
+  var acts=saved?clContactActions(c.contact):[];
+  var datos=f('cl-name','Nombre',c.name,'Ej: Ana Pérez',clPrivOn()?'style="-webkit-text-security:disc;" autocomplete="off"':'')+f('cl-alias','Alias (lo que se ve en modo privado)',c.alias||'',clInitials(c.name)||'Iniciales')+
+    lbl('Estado')+'<div style="display:flex;gap:6px;flex-wrap:wrap;">'+CL_STATES.map(function(x){ var a=c.status===x[0]; return '<button type="button" onclick="clReadFields();CLE.c.status=\''+x[0]+'\';clEditorDraw()" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(a?x[2]:'var(--line)')+';background:'+(a?x[2]+'22':'transparent')+';color:'+(a?x[2]:'var(--muted)')+';">'+x[1]+'</button>'; }).join('')+'</div>'+
+    f('cl-contact','Contacto (teléfono o correo)',c.contact,'')+
+    (acts.length?'<div style="display:flex;gap:6px;margin-top:6px;">'+acts.map(function(a){ return '<button type="button" class="cbtn" style="font-size:12px;padding:7px 12px;" onclick="clOpenUrl(\''+a[1]+'\')">'+a[0]+'</button>'; }).join('')+'</div>':'')+
+    ((c.service||CLE.openSec.svc)?f('cl-service','Servicio o detalle (opcional)',c.service,'Ej: Terapia, diseño de logo'):'<button type="button" onclick="clReadFields();CLE.openSec.svc=true;clEditorDraw()" style="display:block;margin-top:8px;background:none;border:none;color:var(--accent-text);font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;padding:2px 0;">+ Agregar servicio o detalle</button>');
+  // ── Cobro ──
+  var cobro='<div style="display:flex;gap:6px;margin:6px 0 4px;">'+chip(sess,'Por sesiones','clSetMode(\'sess\')')+chip(!sess,'Monto acordado','clSetMode(\'fixed\')')+'</div>';
+  if(sess){
+    var pl=clPlan(c,mk), r=clRate(c), cov=saved?clPaidN(clStored(),mk):0, pend=saved?clPend(clStored()):0, cr=saved?clCredit(clStored()):0, paidM=saved?clPaidM(clStored(),mk):0;
+    cobro+=f('cl-rate','Arancel por sesión ('+esc(cur)+')',c.rate||'','0','inputmode="decimal"')+
+      '<div style="display:flex;gap:8px;margin-top:10px;">'+stepper('Esperadas este mes',pl.exp,'clStep(\'exp\',-1)','clStep(\'exp\',1)',pl.expDefault?'= todas las posibles':'','clSetExp(this.value)')+
+      stepper('Máximo posible',pl.max,'clStep(\'max\',-1)','clStep(\'max\',1)',pl.manualMax?'<span onclick="clMaxAuto()" style="color:var(--accent-text);cursor:pointer;">volver a automático</span>':(pl.occ?'automático: '+pl.occ+' en el mes':'define cuántas caben'),'clSetMax(this.value)')+'</div>'+
+      lbl('¿Cuándo paga?')+'<div style="display:flex;gap:6px;flex-wrap:wrap;">'+chip(c.payMode==='session','Cada sesión','clSetPayMode(\'session\')')+chip(c.payMode==='eom','A fin de mes','clSetPayMode(\'eom\')')+chip(c.payMode==='advance','Por adelantado','clSetPayMode(\'advance\')')+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:5px;">'+(c.payMode==='eom'?'Lo que se vaya acumulando se cobra el último día del mes; no se vuelve a preguntar antes.':(c.payMode==='advance'?'Los pagos quedan como saldo a favor y se van usando con cada sesión.':'Cada sesión realizada queda por cobrar hasta que registres el pago.'))+'</div>';
+    if(saved){
+      cobro+='<div style="display:flex;gap:8px;margin-top:12px;">'+stepper('Realizadas',pl.done,'clSessStep(-1)','clSessStep(1)','de '+pl.exp+' esperadas','clSetDone(this.value)')+stepper('Pagadas',cov,'clPayStep(-1)','clPayStep(1)',cr>=r&&r>0?'+'+Math.floor(cr/r)+' adelantada'+(Math.floor(cr/r)===1?'':'s'):'del mes','clSetPaid(this.value)')+'</div>'+
+        '<div style="display:flex;gap:6px;margin-top:8px;">'+stat('Esperado',clMoneyShort(pl.exp*r,cur))+stat('Máximo',clMoneyShort(pl.max*r,cur))+stat('Ganado',clMoneyShort(pl.done*r,cur))+'</div>'+
+        '<div style="display:flex;gap:6px;margin-top:6px;">'+stat('Cobrado en el mes',clMoneyShort(paidM,cur),'var(--accent-text)')+stat(cr>0&&pend<=0?'Saldo a favor':'Por cobrar',clMoneyShort(cr>0&&pend<=0?cr:pend,cur),pend>0?'var(--bad)':(cr>0?'var(--accent-text)':'var(--ink)'))+'</div>';
+    } else cobro+='<div style="font-size:11.5px;color:var(--muted);margin-top:10px;">Guarda la ficha para registrar sesiones y pagos.</div>';
+  } else {
+    cobro+=f('cl-amount','Monto acordado ('+esc(cur)+')',c.amount||'','0','inputmode="decimal"')+
+      lbl('Fecha de cobro')+'<input id="cl-due" class="finp" type="text" readonly onclick="openCustomDatePicker(\'cl-due\')" style="cursor:pointer;" placeholder="Sin fecha" value="'+esc(c.due||'')+'"/>';
+    if(saved){ var cs=clStored(); cobro+='<div style="display:flex;gap:6px;margin-top:10px;">'+stat('Cobrado',clMoneyShort(clPaidAll(cs),cur),'var(--accent-text)')+stat(clCredit(cs)>0?'Saldo a favor':'Pendiente',clMoneyShort(clCredit(cs)>0?clCredit(cs):clPend(cs),cur),clPend(cs)>0?'var(--bad)':'var(--ink)')+'</div>'; }
+  }
+  if(saved){
+    var cs2=clStored(), pendNow=clPend(cs2), hasDebt=pendNow>0;
+    cobro+='<div style="margin-top:12px;background:var(--accent-bg);border-radius:12px;padding:10px 12px;"><div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:6px;">'+(hasDebt?'Registrar pago recibido':(sess&&c.payMode==='advance'?'Registrar pago por adelantado':'Registrar pago'))+'</div>'+
+      '<div style="display:flex;gap:6px;align-items:center;"><input id="cl-pay" class="finp" inputmode="decimal" placeholder="Monto" value="'+(hasDebt?pendNow:'')+'" style="margin:0;flex:1;min-width:0;"/><input id="cl-paydate" class="finp" type="text" readonly onclick="openCustomDatePicker(\'cl-paydate\')" value="'+today+'" style="margin:0;width:112px;cursor:pointer;font-size:12.5px;"/><button type="button" class="sbtn" style="flex:0 0 auto;padding:11px 14px;font-size:12.5px;" onclick="clPayAdd()">Registrar</button></div>'+
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;">Se anota como ingreso en Finanzas y lo pendiente se recalcula solo.</div></div>';
+    if(+cs2.adj>0||CLE.openSec.adj) cobro+=f('cl-adj','Cobrado antes de usar la app (ajuste)',c.adj||'','0','inputmode="decimal"');
+    else cobro+='<button type="button" onclick="clReadFields();CLE.openSec.adj=true;clEditorDraw()" style="display:block;margin-top:8px;background:none;border:none;color:var(--muted);font-size:11.5px;cursor:pointer;font-family:Inter,sans-serif;padding:2px 0;">Ya me había pagado antes de anotarlo · ajustar</button>';
+  }
+  // ── Historial ──
+  var hist='';
+  if(saved){
+    var cs3=clStored(), items=[]; (cs3.log||[]).forEach(function(s){ items.push({k:'s',d:s.date,id:s.id,t:'Sesión'+(s.taskId?' · desde la tarea':''),a:(s.rate!=null?s.rate:clRate(cs3))}); }); (cs3.pays||[]).forEach(function(x){ items.push({k:'p',d:x.date,id:x.id,t:'Pago',a:x.amount}); });
+    items.sort(function(a,b){ return a.d<b.d?1:(a.d>b.d?-1:0); });
+    var open=CLE.openSec.hist;
+    hist=blk('Historial · '+items.length,'',
+      '<button type="button" onclick="clSecToggle(\'hist\')" style="background:none;border:none;color:var(--accent-text);font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(open?'Ocultar':'Ver')+'</button>');
+    if(open) hist=hist.replace(/<\/div>$/,'')+(items.length?items.slice(0,60).map(function(it){ return '<div style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line-soft);font-size:12.5px;"><span style="color:var(--muted);width:60px;flex-shrink:0;">'+formatDateShort(it.d)+'</span><span style="flex:1;color:var(--ink);">'+it.t+'</span>'+(it.k==='p'?'<b style="color:var(--accent-text);">+'+fmtMoney(it.a,cur)+'</b>':(sess?'<span style="color:var(--muted);">'+fmtMoney(it.a,cur)+'</span>':''))+'<button type="button" onclick="'+(it.k==='p'?'clPayDel':'clLogDel')+'(\''+it.id+'\')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;">×</button></div>'; }).join(''):'<div style="font-size:12px;color:var(--muted);padding:6px 0;">Todavía no hay movimientos.</div>')+'</div>';
+  }
+  // ── Tareas ──
+  var tareas='';
+  if(saved){
+    var cs4=clStored(), ts=clTasks(cs4);
+    tareas=blk('Tareas',
+      (ts.length?ts.map(function(t){ var occ=clOccIn(cs4,clMonthStart(mk),clMonthEnd(mk)).filter(function(o){return o.taskId===t.id;}).length;
+        return '<div style="display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:10px;padding:9px 11px;margin:6px 0;"><div onclick="clTaskOpen(\''+t.id+'\')" style="flex:1;min-width:0;cursor:pointer;"><div style="font-size:13px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text||'(sin nombre)')+'</div><div style="font-size:11px;color:var(--muted);">'+esc(clTaskLabel(t))+(sess?' · '+occ+' vez'+(occ===1?'':'es')+' este mes':'')+'</div></div><button type="button" onclick="clTaskUnlink(\''+t.id+'\')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;" title="Desvincular">×</button></div>'; }).join(''):'')+
+      '<div style="display:flex;gap:8px;margin-top:6px;"><button type="button" class="cbtn" style="flex:1;font-size:12.5px;" onclick="clTaskPicker()">Vincular tarea</button><button type="button" class="cbtn" style="flex:1;font-size:12.5px;" onclick="clTaskNew()">Crear tarea</button></div>'+
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;">'+(sess?'Si la tarea es periódica, el máximo de sesiones del mes son las veces que cae. Al completarla se anota la sesión sola y no se pregunta nada de cobro.':'Úsala como recordatorio de cobro o seguimiento.')+'</div>');
+    var fin=blk('Finanzas', regs.length?
+      '<select class="finp" onchange="clSetReg(this.value)" style="margin:6px 0 0;">'+regs.map(function(r){ return '<option value="'+r.id+'"'+((CLE.regId||p.finRegId||regs[0].id)===r.id?' selected':'')+'>'+esc(r.name||'Finanzas')+'</option>'; }).join('')+'</select>'+
+      '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;">Los pagos se anotan como ingresos y lo que falta por cobrar aparece como «esperado» en la fecha que corresponde (esta semana, las próximas y fin de mes). Si confirmas un esperado desde Finanzas, también cuenta aquí.</div>'
+      :'<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px;">Crea un registro de tipo <b>Finanzas</b> en la pestaña Registros para conectar los cobros.</div>');
+    tareas+=fin;
+  }
+  var cols=(tab.cols||[]).map(function(col){ if(!c.x) c.x={}; return lbl(esc(col.name))+tbFieldHTML(col, c.x[col.id], 'CLE.c.x', 'clReadFields();clEditorDraw()'); }).join('');
+  var _sh0=ov.querySelector('.sheet'), _st0=_sh0?_sh0.scrollTop:0;
+  ov.innerHTML='<div class="sheet" style="max-height:92vh;overflow-y:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:800;font-size:20px;">'+(CLE.isNew?'Nueva ficha':'Ficha de '+esc(term.s))+'</span><button onclick="clClose()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
+    datos+blk('Cobro',cobro)+hist+tareas+
+    blk('Notas','<textarea id="cl-notes" class="finp" rows="3" placeholder="Notas" style="margin-top:6px;resize:vertical;">'+esc(c.notes||'')+'</textarea>'+cols)+
+    '<div style="display:flex;gap:8px;margin-top:18px;">'+(CLE.isNew?'':'<button type="button" onclick="clDelete()" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+'<button class="sbtn" style="flex:1;" onclick="clSave()">Guardar</button></div></div>';
+  var _sh1=ov.querySelector('.sheet'); if(_sh1) _sh1.scrollTop=_st0;
 }
 function clExportCSV(pid){
-  var p = clProj(pid); if(!p) return;
-  var q=function(v){ v=(v==null?'':String(v)); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  var xc = clTab(p).cols||[];
-  var head=['Cliente','Contacto','Servicio','Estado','Acordado','Cobrado','Pendiente','Fecha de cobro','Notas'].concat(xc.map(function(c){return c.name;}));
-  var rows=clList(p).map(function(c){ return [c.name,c.contact,c.service,clState(c.status)[1],c.amount||0,c.paid||0,clPend(c),c.due||'',c.notes||''].concat(xc.map(function(col){ var v=(c.x||{})[col.id]; return col.type==='check'?(v?'Sí':''):(v==null?'':v); })); });
+  var p=clProj(pid); if(!p) return;
+  var q=function(v){ v=(v==null?'':String(v)); return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }, mk=clMk();
+  var xc=clTab(p).cols||[];
+  var head=['Nombre','Contacto','Servicio','Estado','Modo','Arancel','Sesiones esperadas','Máximo','Sesiones realizadas','Acordado / esperado','Cobrado','Pendiente','Vence','Notas'].concat(xc.map(function(c){return c.name;}));
+  var rows=clList(p).map(function(c){ clNorm(c); var s=clIsSess(c), pl=s?clPlan(c,mk):null, nd=clNextDue(c);
+    return [c.name,c.contact,c.service,clState(c.status)[1],s?'Por sesiones':'Monto acordado',s?clRate(c):'',s?pl.exp:'',s?pl.max:'',s?pl.done:'',s?Math.max(pl.exp,pl.done)*clRate(c):(c.amount||0),clPaidAll(c),clPend(c),nd?nd.date:'',c.notes||''].concat(xc.map(function(col){ var v=(c.x||{})[col.id]; return col.type==='check'?(v?'Sí':''):(v==null?'':v); })); });
   var csv='﻿'+[head].concat(rows).map(function(r){return r.map(q).join(',');}).join('\r\n');
   Platform.saveTextFile((p.name||'clientes').replace(/[^\w\-]+/g,'_')+'_'+todayStr()+'.csv', csv, 'text/csv;charset=utf-8').then(function(x){ toast(x.ok ? (x.via==='share' ? 'Planilla lista' : 'Planilla descargada') : (x.error==='cancelled' ? 'Cancelado' : 'No se pudo exportar')); });
+}
+function clTabTerm(pid,v){ var p=clProj(pid); if(!p) return; v=(v||'').trim().slice(0,20).toLowerCase(); var t=clTab(p); t.term=v||'cliente'; if(/^paciente/.test(t.term)) t.defMode='sess'; p.updatedAt=new Date().toISOString(); saveState(); renderProjectContent(); clTabMenu(pid); }
+function clTabDefMode(pid,m){ var p=clProj(pid); if(!p) return; clTab(p).defMode=m; p.updatedAt=new Date().toISOString(); saveState(); clTabMenu(pid); }
+function clTabDelete(pid){
+  var p=clProj(pid); if(!p) return; var t=clTab(p), n=(t.clients||[]).length;
+  clAsk('¿Eliminar la tabla «'+t.name+'»?', n?('Se eliminan también sus '+n+' ficha'+(n===1?'':'s')+'. Los ingresos ya registrados en Finanzas se mantienen.'):'La tabla está vacía.','Eliminar',function(){
+    var reg=clFinReg(p), now=Date.now(), ids={}; (t.clients||[]).forEach(function(c){ ids[c.id]=1; (c.taskIds||[]).forEach(function(id){ var k=S.tasks.find(function(x){return x.id===id;}); if(k) delete k.clientRef; }); });
+    if(reg){ reg.entries=(reg.entries||[]).map(function(e){ return (ids[e.projClientId] && e.status==='expected' && !e.del) ? Object.assign({},e,{del:true,clGone:true,label:'',ts:now}) : e; }); reg.updatedAt=new Date().toISOString(); }
+    p.ctables=p.ctables.filter(function(x){return x.id!==t.id;}); if(S._clTab) delete S._clTab[pid]; p.updatedAt=new Date().toISOString(); saveState(); removeOverlay('cl-tabmenu'); renderProjectContent();
+  },'bad');
 }
 
 function buildProjectContent(p, view){
@@ -15971,7 +16544,7 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       '<div style="flex:1;min-width:0;">'+
         '<div style="display:flex;align-items:center;gap:6px;">'+
           crucialMark+
-          '<span onclick="if(_selLpFired){_selLpFired=false;return;}openEdit(\''+t.id+'\')" id="tt-'+t.id+'" style="font-size:14px;color:'+(done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(done?'line-through':'none')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex:1;min-width:0;" title="Toca para editar">'+esc(t.text)+'</span>'+
+          '<span onclick="if(_selLpFired){_selLpFired=false;return;}openEdit(\''+t.id+'\')" id="tt-'+t.id+'" style="font-size:14px;color:'+(done?'var(--muted-soft)':'var(--ink)')+';text-decoration:'+(done?'line-through':'none')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex:1;min-width:0;" title="Toca para editar">'+esc(t.text)+clTaskChip(t)+'</span>'+
           skipTag+categoryTag+
           horaTag+nextTag+
           // Pedido: poder escribir el avance directo (no solo tocando el
@@ -16286,7 +16859,7 @@ function openCLSourcePicker(taskId){
       '<span class="serif" style="font-weight:700;font-size:19px;">Vincular</span>'+
       '<button onclick="closeLinkPicker()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
     ''+infoBtn('linkcl')+'</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin:0 0 12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</div>'+
+    '<div style="font-size:12px;color:var(--muted);margin:0 0 12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+clTaskChip(t)+'</div>'+
     wholeRow+
     rows+
     '<button class="cbtn" style="width:100%;margin-top:6px;" onclick="closeLinkPicker()">Cerrar</button>';
@@ -19547,6 +20120,7 @@ function enfColSheetHTML(){
   var an = S.enfAnim!==false;
   return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span class="serif" style="font-weight:700;font-size:19px;">Estilo de la pantalla</span><button onclick="removeOverlay(\'enf-col\')" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;">×</button></div>'+
     lbl('Diseño de la pantalla')+enfLayoutPickHTML()+
+    lbl('Diseño del editor de rutinas')+edLayoutPickHTML()+
     lbl('Enfoque')+ENF_TABS.map(function(t){ return row(t[0], t[0]==='entrenar'?'Entrenar':tmSecName(t[2]), false); }).join('')+
     lbl('Otras secciones')+SEC_COL.map(function(t){ return row(t[0], t[1], true); }).join('')+
     '<button onclick="enfAnimToggle()" style="display:flex;width:100%;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;color:var(--ink);font-size:13.5px;font-weight:700;"><span>Animación de fondo (Enfoque)</span><span style="color:'+(an?'var(--accent-text)':'var(--muted)')+';">'+(an?'Activada':'Desactivada')+'</span></button>';
@@ -19554,6 +20128,10 @@ function enfColSheetHTML(){
 function enfLayoutPickHTML(){
   var cur = enfLayoutCur(), o = [['a','Lista','Una acción principal y rutinas en filas. La más limpia.'],['b','Hoy y semana','Tarjeta de hoy, tu semana y rutinas en carrusel.'],['c','Cuadrícula','Tarjetas con color, filtros y botón ＋ flotante.']];
   return '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">'+o.map(function(x){ var on = cur===x[0]; return '<button onclick="enfLayoutSet(\''+x[0]+'\')" style="display:flex;align-items:center;gap:10px;text-align:left;background:'+(on?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';border-radius:14px;padding:11px 13px;cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;"><span style="display:block;font-size:13.5px;font-weight:800;color:var(--ink);">'+x[1]+(x[0]==='a'?' <span style="font-weight:600;color:var(--muted);font-size:11px;">· por defecto</span>':'')+'</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+x[2]+'</span></span><span style="width:18px;height:18px;border-radius:50%;border:2px solid '+(on?'var(--accent)':'var(--muted-soft)')+';background:'+(on?'var(--accent)':'transparent')+';flex-shrink:0;"></span></button>'; }).join('')+'</div>';
+}
+function edLayoutPickHTML(){
+  var cur = edLayoutCur(), o = [['a','Hoja única','Ejercicios con resumen de una línea. Lo más simple.'],['b','Pestañas','Ejercicios, Descansos y Detalles por separado.'],['c','Tarjetas con chips','Cada ejercicio con chips tocables: series, descanso, por lado, peso.']];
+  return '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">'+o.map(function(x){ var on = cur===x[0]; return '<button onclick="edLayoutSet(\''+x[0]+'\')" style="display:flex;align-items:center;gap:10px;text-align:left;background:'+(on?'var(--accent-bg)':'var(--paper)')+';border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';border-radius:14px;padding:11px 13px;cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;"><span style="display:block;font-size:13.5px;font-weight:800;color:var(--ink);">'+x[1]+(x[0]==='a'?' <span style="font-weight:600;color:var(--muted);font-size:11px;">· por defecto</span>':'')+'</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+x[2]+'</span></span><span style="width:18px;height:18px;border-radius:50%;border:2px solid '+(on?'var(--accent)':'var(--muted-soft)')+';background:'+(on?'var(--accent)':'transparent')+';flex-shrink:0;"></span></button>'; }).join('')+'</div>';
 }
 function enfColSheetRefresh(){ var sh = document.querySelector('#enf-col .sheet'); if(!sh) return; var y = sh.scrollTop; sh.innerHTML = enfColSheetHTML(); sh.scrollTop = y; }
 function openEnfColors(){
@@ -20351,7 +20929,7 @@ function calTaskRowHTML(t, canTicket, opts){
       (dn?'<svg width="11" height="9" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
     '</div>'+
     '<div onclick="openEdit(\''+t.id+'\')" style="flex:1;min-width:0;cursor:pointer;">'+
-      '<div style="font-size:14px;font-weight:'+(dn?400:600)+';color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.crucial?'<span style="color:var(--accent-text);">★ </span>':'')+esc(t.text)+'</div>'+
+      '<div style="font-size:14px;font-weight:'+(dn?400:600)+';color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.crucial?'<span style="color:var(--accent-text);">★ </span>':'')+esc(t.text)+clTaskChip(t)+'</div>'+
       (meta.length?'<div style="display:flex;align-items:center;gap:9px;font-size:10.5px;color:var(--muted);margin-top:2px;">'+meta.join('')+'</div>':'')+
     '</div>'+
     ((opts.time!==undefined?opts.time:t.hora)?'<span style="flex-shrink:0;font-size:12.5px;font-weight:700;color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+esc(opts.time!==undefined?opts.time:t.hora)+'</span>':'')+
@@ -20737,7 +21315,7 @@ function openDayDetail(dateKey){
         '<div onclick="'+checkOnclick+'" style="width:19px;height:19px;border-radius:5px;border:1.5px solid '+(dn?'var(--accent)':'var(--muted)')+';background:'+(dn?'var(--accent)':'transparent')+';flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;'+(canTicket?'':'opacity:.5;')+'">'+
           (dn?'<svg width="10" height="8" viewBox="0 0 8 6"><polyline points="1,3 3,5 7,1" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
         '</div>'+
-        '<span onclick="closeDayDetail();openEdit(\''+t.id+'\')" style="flex:1;font-size:13px;color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';cursor:pointer;">'+esc(t.text)+(t.date?'':' <span style="font-size:9px;color:var(--muted-soft);">· recurrente</span>')+'</span>'+
+        '<span onclick="closeDayDetail();openEdit(\''+t.id+'\')" style="flex:1;font-size:13px;color:'+(dn?'var(--muted)':'var(--ink)')+';text-decoration:'+(dn?'line-through':'none')+';cursor:pointer;">'+esc(t.text)+clTaskChip(t)+(t.date?'':' <span style="font-size:9px;color:var(--muted-soft);">· recurrente</span>')+'</span>'+
       '</div>';
     }).join('');
   } else if((!hist || inCurrentWeek) && !pausedList.length){
@@ -22142,7 +22720,7 @@ function openCLSheet(taskId){
   overlay.innerHTML='<div class="sheet">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">'+
       '<div style="flex:1;min-width:0;">'+
-        '<div class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</div>'+
+        '<div class="serif" style="font-weight:700;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+clTaskChip(t)+'</div>'+
         (t.clRule&&t.clRule.mode==='kofn'?'<div style="font-size:11.5px;color:var(--accent-text);font-weight:600;margin-top:2px;">✦ Con '+Math.max(1,Math.min(t.clRule.k||1,(t.checklist||[]).length))+' de '+(t.checklist||[]).length+' alcanza</div>':'')+
       '</div>'+
       '<button onclick="removeOverlay(\'cl-sheet\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;flex-shrink:0;">×</button>'+
@@ -22221,6 +22799,7 @@ function logTaskDone(t){
 function finishUpdate(updated, justCompleted, delta){
   var _sigsBefore = {}, _sigCount = S.tasks.length; S.tasks.forEach(function(t){ _sigsBefore[t.id] = taskSig(t); });
   try{ logTaskDone(updated); }catch(e){}
+  try{ clTaskHook(updated); }catch(e){}
   try{ trackSyncTask(updated, S.tasks.find(function(t){return t.id===updated.id;})); }catch(e){}
   S.tasks=S.tasks.map(function(t){return t.id===updated.id?updated:t;});
   S._justCompletedId = justCompleted ? updated.id : null;
@@ -25202,9 +25781,8 @@ function openTimerTplEditorGen(id, mode){
     '<button onclick="tteRequestClose()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     '<input id="tte-name" class="finp" placeholder="Nombre (ej. '+(mode==='set'?'Calentamiento':'Lectura 30/5')+')" maxlength="30" value="'+esc(TTE.name)+'" oninput="TTE.name=this.value" style="margin-bottom:14px;"/>'+
     (mode==='set'?'<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Color del bloque</div><div id="tte-style" style="margin-bottom:14px;">'+stylePickerHTML(TTE.color,TTE.icon,'tteStyle(')+'</div>':'')+
-    ((mode==='tpl' && id)?'<button type="button" onclick="openTimerDetMenu(TTE.id)" style="width:100%;display:flex;align-items:center;background:none;border:none;border-bottom:1px solid var(--line-soft);padding:8px 2px 12px;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;text-align:left;">Detalles de la rutina</span><span style="font-size:11.5px;font-weight:500;color:var(--muted);margin-right:6px;">objetivo, intensidad…</span><span style="color:var(--muted-soft);font-size:18px;">›</span></button>':'')+
     '<div id="m-timer-area">'+timerAreaHTML()+'</div>'+
-    '<div style="display:flex;gap:8px;margin-top:18px;">'+((mode==='set' && id)?'<button onclick="openShareMenu(\'set\',TTE.id)" style="background:none;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Compartir</button><button onclick="var _i=TTE.id;tteRequestClose();deleteLibItem(\'set\',_i)" style="background:none;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>':'')+'<button onclick="saveTimerTplEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button></div>'+
+    '<div style="position:sticky;bottom:0;z-index:2;display:flex;gap:8px;margin:18px -22px -50px;padding:12px 22px 28px;background:var(--paper);border-top:1px solid var(--line-soft);">'+((mode==='set' && id)?'<button onclick="openShareMenu(\'set\',TTE.id)" style="background:none;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Compartir</button><button onclick="var _i=TTE.id;tteRequestClose();deleteLibItem(\'set\',_i)" style="background:none;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>':'')+'<button onclick="previewTimerRun()" style="flex:1;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:10px;padding:12px;font-size:13.5px;font-weight:800;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;">▶ Probar</button><button onclick="saveTimerTplEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button></div>'+
   '</div>';
   document.body.appendChild(ov);
   TTE.snap = tteSnap();
@@ -27074,21 +27652,26 @@ function mUngroup(gid){
   mRerenderTimerArea();
 }
 function timerSetRowHTML(set, idx, nested){
+  var ed = (M && M._tplEdit) ? edLayoutCur() : '';
+  if(ed==='c' && !nested) return timerSetCardHTML(set, idx);
   var col = set.color || CATEGORY_COLORS[idx%CATEGORY_COLORS.length];
   var open = M._timerOpenSet===set.id;
   var custom = !!(set.lr||set.wOn||set.lastre>0||set.rpeOn||set.noteOn||set.note) || (set.reps>1) || set.restReps!=null || set.restAfter!=null || set.kind==='reps' || !!set.tap || !!set.regId || !!set.rec || set.autoEnd===false;
   var html = '<div '+(nested?'':'data-drag-item ')+'data-id="'+set.id+'" style="border-bottom:1px solid var(--line-soft);">'+
     '<div style="display:flex;align-items:center;gap:6px;padding:8px 0;">'+
       (nested?'':gripHTML('margin-left:-6px;'))+
-      '<button type="button" onclick="mCycleTimerSetColor(\''+set.id+'\')" title="Tocar para cambiar el color" style="width:'+(set.icon?26:22)+'px;height:'+(set.icon?26:22)+'px;border-radius:'+(set.icon?8:50)+'%;background:'+col+';flex-shrink:0;cursor:pointer;border:2px solid var(--paper);box-shadow:0 0 0 1.5px var(--line);padding:0;display:flex;align-items:center;justify-content:center;color:#fff;">'+(set.icon?exIconSVG(set.icon,14,'#fff',2):'')+'</button>'+
-      '<input type="text" placeholder="Ejercicio '+(idx+1)+'" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:6px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+      '<button type="button" onclick="'+(ed?'mToggleTimerSetOpen':'mCycleTimerSetColor')+'(\''+set.id+'\')" title="'+(ed?'Ajustes de este ejercicio':'Tocar para cambiar el color')+'" style="width:'+(set.icon?26:22)+'px;height:'+(set.icon?26:22)+'px;border-radius:'+(set.icon?8:50)+'%;background:'+col+';flex-shrink:0;cursor:pointer;border:2px solid var(--paper);box-shadow:0 0 0 1.5px var(--line);padding:0;display:flex;align-items:center;justify-content:center;color:#fff;">'+(set.icon?exIconSVG(set.icon,14,'#fff',2):'')+'</button>'+
+      (ed ? '<div style="flex:1;min-width:0;"><input type="text" placeholder="Ejercicio '+(idx+1)+'" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" style="width:100%;border:none;background:transparent;font-size:14px;font-weight:600;padding:4px 0 1px;font-family:Inter,sans-serif;color:var(--ink);"/><div style="font-size:11px;color:var(--muted);padding-bottom:2px;">'+(timerSetSummary(set)||(set.kind==='reps'?'Por cantidad':'Por tiempo'))+'</div></div>' : '<input type="text" placeholder="Ejercicio '+(idx+1)+'" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" style="flex:1;min-width:0;border:none;border-bottom:1.5px solid var(--line);background:transparent;font-size:13px;padding:6px 0;font-family:Inter,sans-serif;color:var(--ink);"/>')+
       (set.kind==='reps' ? repsInputHTML(set) : durInputHTML(set.sec||30,'set',set.id,'sec',false))+
-      '<button type="button" onclick="mToggleTimerSetOpen(\''+set.id+'\')" title="Ajustes de este ejercicio" style="background:'+(open||custom?'var(--accent-bg)':'none')+';border:1.5px solid '+(open||custom?'var(--accent)':'var(--line)')+';color:'+(open||custom?'var(--accent-text)':'var(--muted)')+';border-radius:8px;height:26px;padding:0 7px;font-size:11px;font-weight:700;flex-shrink:0;cursor:pointer;font-family:Inter,sans-serif;">⚙'+(set.reps>1?' ×'+set.reps:'')+'</button>'+
+      '<button type="button" onclick="mToggleTimerSetOpen(\''+set.id+'\')" title="Ajustes de este ejercicio" style="background:'+(open||custom?'var(--accent-bg)':'none')+';border:1.5px solid '+(open||custom?'var(--accent)':'var(--line)')+';color:'+(open||custom?'var(--accent-text)':'var(--muted)')+';border-radius:8px;height:26px;padding:0 7px;font-size:11px;font-weight:700;flex-shrink:0;cursor:pointer;font-family:Inter,sans-serif;">'+(ed ? (open?'⌃':'⌄') : '⚙'+(set.reps>1?' ×'+set.reps:''))+'</button>'+
       '<button type="button" onclick="mRemoveTimerSet(\''+set.id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:18px;flex-shrink:0;cursor:pointer;line-height:1;">×</button>'+
     '</div>';
-  if(open){
-    var isLast = idx===M.timer.sets.length-1;
-    html += '<div style="background:var(--bg);border-radius:10px;padding:4px 12px 8px;margin:0 0 10px;">'+
+  if(open) html += timerSetPanelHTML(set);
+  return html+'</div>';
+}
+function timerSetPanelHTML(set){
+  var isLast = set.id===M.timer.sets[M.timer.sets.length-1].id;
+  return '<div style="background:var(--bg);border-radius:10px;padding:4px 12px 8px;margin:0 0 10px;">'+
       (function(){ var kd = timerSetKindHTML(set), cut = kd.indexOf('<div class="frow"'); if(cut<0) cut = kd.length; return kd.slice(0,cut)+(set.kind==='reps'?'':timerQuickDurHTML(set))+
         mAdv('set'+set.id,'Más opciones',
           '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 0;">Series y descansos</div>'+
@@ -27101,8 +27684,6 @@ function timerSetRowHTML(set, idx, nested){
           '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 0;">Apariencia</div>'+timerSetStyleHTML(set)+animLinkHTML(set)+timerSetExtrasHTML(set,'ind')+
           timerSetSaveBtnHTML(set)); })()+
     '</div>';
-  }
-  return html+'</div>';
 }
 function mTimerSetAutoValue(set, field){
   if(field==='restReps') return timerAutoRestReps(M.timer);
@@ -27169,7 +27750,81 @@ function timerEstimateTotalSec(timer){
 function mAdv(key, title, body){
   return '<details class="st-adv" '+((M._adv||{})[key]?'open':'')+' ontoggle="(M._adv=M._adv||{})[\''+key+'\']=this.open"><summary>'+title+'</summary><div style="padding-bottom:12px;">'+body+'</div></details>';
 }
+
+// ── Editor de rutina: diseños A (hoja única), B (pestañas), C (tarjetas con chips) ──
+function edLayoutCur(){ var v = S.edLayout; return (v==='b'||v==='c') ? v : 'a'; }
+function edLayoutSet(v){ S.edLayout = v; saveState(); enfColSheetRefresh(); }
+function timerSetSummary(set){
+  var p = [];
+  if(set.reps>1) p.push(set.reps+' series');
+  if(set.restAfter!=null && set.restAfter!=='') p.push('descanso '+set.restAfter+' s');
+  if(set.lr) p.push('por lado');
+  if(set.wOn) p.push('peso');
+  if(set.rpeOn) p.push('esfuerzo');
+  if(set.noteOn) p.push('nota');
+  if(set.tap) p.push('toques');
+  return p.join(' · ');
+}
+function timerSetCardHTML(set, idx){
+  var col = set.color || CATEGORY_COLORS[0], open = M._timerOpenSet===set.id, id = set.id;
+  var chip = function(t, on, fn){ return '<button type="button" onclick="'+fn+'" style="margin:6px 5px 0 0;padding:4px 9px;border-radius:10px;font-size:11px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--bg)')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+t+'</button>'; };
+  var tg = function(prop){ return 'mSetSetProp(\''+id+'\',\''+prop+'\','+(set[prop]?'false':'true')+')'; };
+  return '<div data-drag-item data-id="'+id+'" style="background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:10px 11px;margin-bottom:9px;">'+
+    '<div style="display:flex;align-items:center;gap:6px;">'+gripHTML('margin-left:-6px;')+
+      '<button type="button" onclick="mToggleTimerSetOpen(\''+id+'\')" title="Ajustes de este ejercicio" style="width:'+(set.icon?26:20)+'px;height:'+(set.icon?26:20)+'px;border-radius:'+(set.icon?8:50)+'%;background:'+col+';flex-shrink:0;cursor:pointer;border:2px solid var(--paper);box-shadow:0 0 0 1.5px var(--line);padding:0;display:flex;align-items:center;justify-content:center;color:#fff;">'+(set.icon?exIconSVG(set.icon,14,'#fff',2):'')+'</button>'+
+      '<input type="text" placeholder="Ejercicio '+(idx+1)+'" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+id+'\',\'name\',this.value)" style="flex:1;min-width:0;border:none;background:transparent;font-size:14px;font-weight:700;padding:4px 0;font-family:Inter,sans-serif;color:var(--ink);"/>'+
+      (set.kind==='reps' ? repsInputHTML(set) : durInputHTML(set.sec||30,'set',id,'sec',false))+
+      '<button type="button" onclick="mRemoveTimerSet(\''+id+'\')" style="background:none;border:none;color:var(--muted-soft);font-size:18px;flex-shrink:0;cursor:pointer;line-height:1;">×</button></div>'+
+    '<div style="padding-left:2px;">'+
+      chip(set.reps>1 ? set.reps+' series' : '＋ series', set.reps>1, set.reps>1 ? 'mToggleTimerSetOpen(\''+id+'\')' : 'mChangeTimerSetField(\''+id+'\',\'reps\',1)')+
+      chip((set.restAfter!=null && set.restAfter!=='') ? 'descanso '+set.restAfter+' s' : '＋ descanso', set.restAfter!=null && set.restAfter!=='', 'mToggleTimerSetOpen(\''+id+'\')')+
+      chip(set.lr?'por lado':'＋ por lado', !!set.lr, tg('lr'))+
+      chip(set.wOn?'peso':'＋ peso', !!set.wOn, tg('wOn'))+
+      chip(set.rpeOn?'esfuerzo':'＋ esfuerzo', !!set.rpeOn, tg('rpeOn'))+
+      chip(open?'menos ⌃':'más ⌄', open, 'mToggleTimerSetOpen(\''+id+'\')')+
+    '</div>'+(open ? timerSetPanelHTML(set) : '')+'</div>';
+}
+function timerDetRowsHTML(){
+  var id = (typeof TTE!=='undefined' && TTE && TTE.mode==='tpl') ? TTE.id : null;
+  if(!id) return '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;padding:14px 2px;">Guarda la rutina para configurar su objetivo, intensidad, habilidades y zonas.</div>';
+  var tp = timerTplAll().find(function(x){return x.id===id;}) || {};
+  var _lkC = featureLocked('rutconex'), _lkN = featureLocked('rutnivel');
+  var row = function(fn, label, val){ return '<button type="button" onclick="'+fn+'" style="width:100%;display:flex;align-items:center;background:none;border:none;border-bottom:1px solid var(--line-soft);padding:13px 2px;font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;text-align:left;">'+label+'</span><span style="font-size:12px;color:var(--muted);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px;">'+(val||'')+'</span><span style="color:var(--muted-soft);font-size:18px;">›</span></button>'; };
+  return row('openTimerGoal(\''+id+'\')','Objetivo', tp.goal?esc(tp.goal):'')+
+    row('openTimerIntensity(\''+id+'\')','Intensidad', tp.intensity?INT_LEVELS[tp.intensity-1]:'')+
+    (_lkC?'':row('openTimerSkills(\''+id+'\')','Habilidades', (tp.skills||[]).length?String(tp.skills.length):''))+
+    (_lkC?'':row('tmPickZones(\''+id+'\')','Zonas del cuerpo', (tp.zones||[]).length?String(tp.zones.length):'auto'))+
+    (_lkN?'':row('tmLvToggle(\'t:'+id+'\')','Niveles', tmLvOn('t:'+id)?'activados':'desactivados'));
+}
+function timerAreaEdHTML(){
+  var ed = edLayoutCur(), timer = M.timer, tot = 0; try{ tot = timerEstimateTotalSec(timer); }catch(e){}
+  var nLib = 0; try{ nLib = timerTplList().length + setLibList().length + exLibList().length; }catch(e){}
+  var addBtn = 'flex:1;background:none;border:1.5px dashed var(--line);border-radius:12px;padding:10px;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;font-family:Inter,sans-serif;';
+  var add = '<div style="display:flex;gap:8px;margin-top:6px;"><button type="button" onclick="mAddTimerSet()" style="'+addBtn+'">＋ Ejercicio</button>'+(nLib?'<button type="button" onclick="openTimerLibPicker()" style="'+addBtn+'">Desde guardados</button>':'')+'</div>';
+  var rows = '<div id="timer-sets-list" data-drag-list data-drag-cb="timerSets">'+timerRowsHTML(timer)+'</div>';
+  var rounds = timerFieldStepperHTML('Rondas de toda la rutina','rounds',1,'');
+  var rests = timerDurFieldHTML('Descanso entre ejercicios','restBetween')+(timer.rounds>1?timerDurFieldHTML('Descanso entre rondas','restBetweenRounds'):'');
+  var total = '<div style="text-align:center;font-size:11.5px;color:var(--muted);margin-top:12px;">Duración total '+fmtDur(tot)+'</div>';
+  var hasId = (typeof TTE!=='undefined' && TTE && TTE.mode==='tpl' && TTE.id);
+  if(ed==='b'){
+    var tab = M._edTab || 'ej';
+    var tb = function(k,t){ var on = tab===k; return '<button type="button" onclick="M._edTab=\''+k+'\';mRerenderTimerArea()" style="flex:1;background:none;border:none;border-bottom:2.5px solid '+(on?'var(--accent)':'transparent')+';padding:10px 0;font-size:12.5px;font-weight:'+(on?800:600)+';color:'+(on?'var(--accent-text)':'var(--muted)')+';cursor:pointer;font-family:Inter,sans-serif;">'+t+'</button>'; };
+    var tabs = '<div style="display:flex;border-bottom:1px solid var(--line);margin-bottom:10px;">'+tb('ej','Ejercicios')+tb('de','Descansos')+tb('dt','Detalles')+'</div>';
+    if(tab==='de'){
+      var per = timer.sets.map(function(st,i){
+        var nm = esc(st.name||('Ejercicio '+(i+1)));
+        return timerSetStepperHTML(st,'restAfter', nm+' · descanso al terminar','s',5)+(st.reps>1?timerSetStepperHTML(st,'restReps', nm+' · entre series','s',5):'');
+      }).join('');
+      return tabs+rests+'<div style="font-size:10.5px;font-weight:800;color:var(--muted);letter-spacing:.06em;margin:14px 0 2px;">POR EJERCICIO</div>'+per;
+    }
+    if(tab==='dt') return tabs+timerDetRowsHTML()+total;
+    return tabs+rows+add+rounds+total;
+  }
+  var det = hasId ? '<button type="button" onclick="openTimerDetMenu(TTE.id)" style="width:100%;display:flex;align-items:center;background:none;border:none;border-bottom:1px solid var(--line-soft);padding:8px 2px 12px;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;text-align:left;">Detalles de la rutina</span><span style="font-size:11.5px;font-weight:500;color:var(--muted);margin-right:6px;">objetivo, intensidad…</span><span style="color:var(--muted-soft);font-size:18px;">›</span></button>' : '';
+  return det+rows+add+'<div style="height:6px;"></div>'+rounds+rests+total;
+}
 function timerAreaHTML(){
+  if(M && M._tplEdit) return timerAreaEdHTML();
   var timer = M.timer;
   var totalSec = timerEstimateTotalSec(timer);
   var n = timerTplList().length + setLibList().length + exLibList().length;
@@ -31490,7 +32145,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.11.172';
+var APP_VERSION = '2026.11.13.177';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
