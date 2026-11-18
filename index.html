@@ -4081,6 +4081,7 @@ function goProgress(){
   setTimeout(function(){ var el=document.getElementById('hero-progress-card'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); },150);
 }
 function setTab(t){
+  if(S._privUntil){ S._privUntil=0; try{ clSyncAll(true); }catch(e){} }
   try{ closeFabMenu(); }catch(e){}
   // Los modos ya no tienen pestaña: se cambian desde la etiqueta del header y se gestionan en Yo → Modos.
   if(t==='energia'||t==='modos'){ setTab('yo'); setTimeout(function(){ openYoScreen('modos'); },30); return; }
@@ -9180,6 +9181,7 @@ function pendingScreenBodyHTML(){
                 : '<div style="text-align:center;font-size:13px;color:var(--muted);padding:36px 0;">No tienes pendientes.</div>');
 }
 function openPendingScreen(){
+  if(clGateNeeded() && !window._gateOk){ clGate(function(){ window._gateOk=true; try{ openPendingScreen(); }finally{ window._gateOk=false; } }); return; }
   removeOverlay('pending-screen');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='pending-screen'; ov.style.zIndex = 600;
   ov.addEventListener('click',function(e){ if(e.target===ov) closePendingScreen(); });
@@ -9410,6 +9412,7 @@ function regViewBodyHTML(reg){
 }
 function openRegistryView(regId){
   var reg = regById(regId); if(!reg) return;
+  if(clGateNeeded() && !window._gateOk && reg.kind==='finance'){ clGate(function(){ window._gateOk=true; try{ openRegistryView(regId); }finally{ window._gateOk=false; } }); return; }
   if(regLocked(reg)){ regLockedTap(); return; }
   removeOverlay('reg-view');
   var overlay = document.createElement('div'); overlay.className='overlay'; overlay.id='reg-view';
@@ -10919,7 +10922,7 @@ function actStartDraw(){
     '<div style="display:flex;gap:10px;margin:6px 0 4px;">'+typ+'</div>'+
     '<button onclick="actBegin()" style="width:100%;margin-top:20px;padding:17px;border:none;border-radius:16px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px '+c[1]+'44;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar</button>'+
     '<div class="st-sub" style="text-align:center;margin-top:10px;">Usamos tu ubicación solo mientras dura la actividad. El recorrido queda en tu dispositivo.<br>'+actBgHint()+'</div>'+
-    '<button class="st-row" onclick="actMapToggle()" style="margin-top:6px;"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Mapa de fondo</span><span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px;">'+(!actTileKey()?'Aún no disponible. Por ahora se dibuja solo la ruta.':(actMapOn()?'Descarga imágenes de mapa (CARTO / OpenStreetMap) con la zona que se ve. Sin conexión se muestra solo la ruta.':'Apagado: se dibuja solo la ruta. Al activarlo se descargan imágenes de mapa de CARTO / OpenStreetMap.'))+'</span></span><span style="font-size:12.5px;font-weight:700;color:'+(actMapOn()?'var(--accent-text)':'var(--muted)')+';">'+(!actTileKey()?'—':(actMapOn()?'Activado':'Apagado'))+'</span></button>'+
+    actMapRowHTML()+
     '<details class="st-adv"><summary>Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
       '<button class="st-row" onclick="openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+(nsk?nsk+' elegida'+(nsk===1?'':'s'):'Opcional')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="openActManual()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Registrar a mano (pesas, escalada, otra…)</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
@@ -11310,7 +11313,7 @@ function actRunDraw(){
     '<div style="margin:-42px 16px 0;background:var(--paper);border-radius:22px;box-shadow:0 10px 28px rgba(0,0,0,.10);display:flex;flex-shrink:0;">'+met('act-time','Tiempo','0:00','<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')+div+met('act-pace','ritmo /km','--:--','<path d="M4 18a9 9 0 1116 0"/><path d="M12 18l4-6"/>')+div+met('act-x','kcal','0','<path d="M12 3s5 4 5 9a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3 0-6 1-8z"/>')+'</div>'+
     (ACT.state==='ready' ? '<button onclick="openActDiff()" style="margin:12px 16px 0;padding:11px 14px;border-radius:14px;background:var(--paper);border:1.5px solid var(--line);display:flex;align-items:center;gap:10px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;flex-shrink:0;"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13.5px;color:var(--ink);">Dificultad añadida</span><span class="act-diff-sum" style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(actDiffTxt(ACT.diff)||'Ninguna · lastre, inclinación, terreno')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>' : '')+
     '<div id="act-lap" style="display:none;margin:12px 16px 0;padding:9px 14px;border-radius:14px;background:var(--paper);border:1px solid var(--line-soft);font-size:12.5px;font-weight:700;color:var(--ink);text-align:center;flex-shrink:0;"></div>'+
-    '<div style="flex:1;min-height:0;margin:12px 16px;background:#ebe8e1;border:1px solid var(--line-soft);border-radius:22px;position:relative;overflow:hidden;"><canvas id="act-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas><button id="act-fit" onclick="actToggleFollow()" style="position:absolute;top:10px;right:10px;border:none;cursor:pointer;font-family:Inter,sans-serif;background:rgba(255,255,255,.94);color:#222;border-radius:14px;padding:7px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.18);">Ver todo</button><div id="act-empty" style="position:absolute;left:12px;right:12px;bottom:26px;display:none;text-align:center;padding:9px 12px;font-size:12.5px;color:#333;line-height:1.4;pointer-events:none;background:rgba(255,255,255,.92);border-radius:12px;"></div></div>'+
+    '<div style="flex:1;min-height:0;margin:12px 16px;background:#ebe8e1;border:1px solid var(--line-soft);border-radius:22px;position:relative;overflow:hidden;"><canvas id="act-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>'+actMapBtnHTML('act-mapbtn',1)+'<button id="act-fit" onclick="actToggleFollow()" style="position:absolute;top:10px;right:10px;border:none;cursor:pointer;font-family:Inter,sans-serif;background:rgba(255,255,255,.94);color:#222;border-radius:14px;padding:7px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.18);">Ver todo</button><div id="act-empty" style="position:absolute;left:12px;right:12px;bottom:26px;display:none;text-align:center;padding:9px 12px;font-size:12.5px;color:#333;line-height:1.4;pointer-events:none;background:rgba(255,255,255,.92);border-radius:12px;"></div></div>'+
     (ACT.state==='ready' ? '<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;"><button onclick="actCancelReady()" style="'+rb+'height:62px;padding:0 22px;border-radius:31px;background:var(--paper);color:var(--ink-soft);border:1.5px solid var(--line);font-size:14px;font-weight:700;">Cancelar</button><button onclick="actGo()" style="'+rb+'flex:1;height:62px;border-radius:31px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px '+c[1]+'55;"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar entrenamiento</button></div>' : '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;">'+
       '<button onclick="actPause()" aria-label="'+(paused?'Reanudar':'Pausar')+'" style="'+rb+'width:68px;height:68px;border-radius:50%;'+(paused?'background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;box-shadow:0 8px 20px '+c[1]+'55;':'background:var(--paper);color:'+c[1]+';border:1.5px solid var(--line);')+'">'+(paused?'<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>')+'</button>'+
       '<button onclick="actFinishAsk()" style="'+rb+'height:68px;padding:0 38px;border-radius:34px;background:#e0523c;color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px #e0523c44;"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>Terminar</button></div>')+'</div>';
@@ -11401,15 +11404,34 @@ function actCreate(o){
 var ACT_TILE_KEY = '';
 function actTileKey(){ var k = ''; try{ k = (ADS_CFG && ADS_CFG.tileKey) || ''; }catch(e){} return String(k || ACT_TILE_KEY || '').replace(/[^A-Za-z0-9_.-]/g,''); }
 var ACT_TILE_URL = 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key={k}';
-var ACT_TILE_ATTR = '© OpenStreetMap contributors, © CARTO';
+var ACT_TILE_OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// Orden: tileUrl (Firestore config/ads, p. ej. MapTiler/Stadia con {k}) → CARTO si hay clave → OpenStreetMap (sin clave).
+function actTileTpl(){ var u = ''; try{ u = (ADS_CFG && ADS_CFG.tileUrl) || ''; }catch(e){} if(/^https:\/\//.test(u)) return u; return actTileKey() ? ACT_TILE_URL : ACT_TILE_OSM; }
+function actTileAttr(){ var t = actTileTpl(); return t===ACT_TILE_OSM ? '© OpenStreetMap contributors' : '© OpenStreetMap contributors, © CARTO'; }
 var _tc = {}, _tcN = 0;
 // El mapa de fondo es opcional (apagado por defecto): al activarlo, el teléfono descarga imágenes de mapa de CARTO/OpenStreetMap
 // y esos servidores reciben la zona aproximada que se ve en pantalla. Sin él se dibuja solo la ruta sobre una cuadrícula.
-function actMapOn(){ if(!actTileKey()) return false; try{ return localStorage.getItem('og6-actmap')==='1'; }catch(e){ return false; } }
-function actMapToggle(){
-  if(!actTileKey()){ toast('El mapa de fondo aún no está disponible'); return; }
-  try{ localStorage.setItem('og6-actmap', actMapOn()?'0':'1'); }catch(e){}
-  actStartDraw();
+function actMapRowHTML(){
+  var on = actMapOn();
+  return '<button id="act-map-row" class="st-row" onclick="actMapToggle()" style="margin-top:6px;"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Mapa de fondo</span><span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:2px;">'+(on?'Descarga imágenes de mapa (OpenStreetMap) con la zona que se ve. Sin conexión se muestra solo la ruta.':'Apagado: se dibuja solo la ruta. Al activarlo se descargan imágenes de mapa de OpenStreetMap con la zona que se ve.')+'</span></span><span style="font-size:12.5px;font-weight:700;color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+(on?'Activado':'Apagado')+'</span></button>';
+}
+function actMapBtnHTML(id,left){
+  var on = actMapOn();
+  return '<button type="button" '+(id?'id="'+id+'" ':'')+'onclick="event.stopPropagation();actMapToggle()" style="position:absolute;top:10px;'+(left?'left':'right')+':10px;z-index:3;padding:6px 11px;border-radius:12px;border:none;font-size:11.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:'+(on?'var(--accent)':'rgba(255,255,255,.92)')+';color:'+(on?'#fff':'#444')+';box-shadow:0 2px 8px rgba(0,0,0,.18);">'+(on?'Mapa ✓':'Mapa')+'</button>';
+}
+function actMapOn(){ try{ return localStorage.getItem('og6-actmap')==='1'; }catch(e){ return false; } }
+function actMapApply(on){
+  try{ localStorage.setItem('og6-actmap', on?'1':'0'); }catch(e){}
+  try{ if(document.getElementById('act-start')) actStartDraw(); var lv=document.getElementById('act-cv'); if(lv) actMapQueue(lv); var lb=document.getElementById('act-mapbtn'); if(lb) lb.outerHTML=actMapBtnHTML('act-mapbtn',1); }catch(e){}
+  if(ACTV && document.getElementById('act-card')) actSumDraw();
+  var st=document.getElementById('act-map-row'); if(st) st.outerHTML = actMapRowHTML();
+}
+function actMapToggle(then){
+  if(actMapOn()){ actMapApply(false); return; }
+  var ok=false; try{ ok = localStorage.getItem('og6-actmap-ok')==='1'; }catch(e){}
+  var go = function(){ try{ localStorage.setItem('og6-actmap-ok','1'); }catch(e){} actMapApply(true); if(typeof then==='function') then(); };
+  if(ok){ go(); return; }
+  clAsk('Activar el mapa de fondo','Para dibujar el mapa, el teléfono descarga imágenes de OpenStreetMap con la zona aproximada que se ve en pantalla (no se envía tu nombre ni tus datos). Puedes apagarlo cuando quieras; sin conexión se muestra solo la ruta.','Activar',go);
 }
 function actMx(lon, z){ return (lon+180)/360*256*Math.pow(2,z); }
 function actMy(lat, z){ var s = Math.sin(lat*Math.PI/180); s = Math.max(-0.9999, Math.min(0.9999, s)); return (0.5 - Math.log((1+s)/(1-s))/(4*Math.PI))*256*Math.pow(2,z); }
@@ -11425,19 +11447,25 @@ function actTileImg(z, x, y, cv){
   if(_tcN>300){ Object.keys(_tc).slice(0,100).forEach(function(q){ if(_tc[q].ok){ delete _tc[q]; _tcN--; } }); }
   var img = new Image(); e = _tc[k] = {img:img, ok:false, bad:0, cvs:[cv]}; _tcN++;
   img.onload = function(){ e.ok = true; e.cvs.forEach(actMapQueue); e.cvs = []; };
-  img.onerror = function(){ e.bad = Date.now(); e.cvs = []; };
-  img.src = ACT_TILE_URL.replace('{k}',encodeURIComponent(actTileKey())).replace('{z}',z).replace('{x}',x).replace('{y}',y).replace('{r}',(window.devicePixelRatio||1)>=1.5?'@2x':'');
+  img.onerror = function(){
+    if(!e.nocors){ e.nocors = 1; var im2 = new Image(); e.img = im2; e.taint = 1; im2.onload = function(){ e.ok = true; e.cvs.forEach(actMapQueue); e.cvs = []; }; im2.onerror = function(){ e.bad = Date.now(); var q = e.cvs; e.cvs = []; setTimeout(function(){ q.forEach(actMapQueue); }, 21000); }; im2.src = img.src; return; }
+    e.bad = Date.now(); e.cvs = [];
+  };
+  img.crossOrigin = 'anonymous'; img.src = actTileTpl().replace('{k}',encodeURIComponent(actTileKey())).replace('{z}',z).replace('{x}',x).replace('{y}',y).replace('{r}',(actTileTpl()===ACT_TILE_OSM || (window.devicePixelRatio||1)<1.5)?'':'@2x');
   return null;
 }
 function actMapQueue(cv){
   if(!cv || cv._rq || !cv.isConnected || !cv._mp) return; cv._rq = 1;
-  requestAnimationFrame(function(){ cv._rq = 0; if(cv.isConnected && cv._mp) actMapDraw(cv, cv._mp.pts, cv._mp.opt); });
+  requestAnimationFrame(function(){ cv._rq = 0; if(!cv.isConnected || !cv._mp) return; if(cv._re) cv._re(); else actMapDraw(cv, cv._mp.pts, cv._mp.opt); });
 }
 function actMapDraw(cv, pts, opt){
   if(!cv) return; opt = opt||{}; cv._mp = {pts:pts, opt:opt};
-  var dpr = 2, W = cv.clientWidth, H = cv.clientHeight; if(!W || !H) return;
+  var dpr = 2, W = cv.clientWidth, H = cv.clientHeight; if(!W || !H){ cv._try = (cv._try||0)+1; if(cv._try<20) setTimeout(function(){ if(cv.isConnected) actMapDraw(cv, pts, opt); }, 80); return; } cv._try = 0;
   if(cv.width!==W*dpr || cv.height!==H*dpr){ cv.width = W*dpr; cv.height = H*dpr; }
   var g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  actMapPaint(g, W, H, pts, opt, cv);
+}
+function actMapPaint(g, W, H, pts, opt, cv){
   g.fillStyle = '#ebe8e1'; g.fillRect(0,0,W,H); g.strokeStyle = 'rgba(0,0,0,.06)'; g.lineWidth = 1;
   for(var gx=0; gx<W; gx+=32){ g.beginPath(); g.moveTo(gx,0); g.lineTo(gx,H); g.stroke(); } for(var gy=0; gy<H; gy+=32){ g.beginPath(); g.moveTo(0,gy); g.lineTo(W,gy); g.stroke(); }
   var P = (pts||[]).filter(function(p){ return p && isFinite(p[0]) && isFinite(p[1]); }); if(!P.length) return;
@@ -11450,7 +11478,7 @@ function actMapDraw(cv, pts, opt){
   }
   var left = cx-W/2, top = cy-H/2, n = Math.pow(2,z);
   for(var ty=Math.floor(top/256); ty<=Math.floor((top+H)/256); ty++){ if(ty<0||ty>=n) continue;
-    for(var tx=Math.floor(left/256); tx<=Math.floor((left+W)/256); tx++){ var im = actTileImg(z, ((tx%n)+n)%n, ty, cv); if(im) g.drawImage(im, Math.round(tx*256-left), Math.round(ty*256-top), 256, 256); } }
+    for(var tx=Math.floor(left/256); tx<=Math.floor((left+W)/256); tx++){ var im = actTileImg(z, ((tx%n)+n)%n, ty, cv); if(im && opt.noTaint){ var _te = _tc[z+'/'+(((tx%n)+n)%n)+'/'+ty]; if(_te && _te.taint) im = null; } if(im) g.drawImage(im, Math.round(tx*256-left), Math.round(ty*256-top), 256, 256); } }
   var X = function(p){ return actMx(p[1],z)-left; }, Y = function(p){ return actMy(p[0],z)-top; }, lw = opt.lw||5, col = opt.color||'#169a3f';
   var trace = function(){ g.beginPath(); P.forEach(function(p,i){ var q = P[i-1], gap = i>0 && ((p[2]<1e9 && (p[2]-q[2])>90) || (p[2]>1e9 && (p[2]-q[2])>90000)); if(i===0 || gap) g.moveTo(X(p),Y(p)); else g.lineTo(X(p),Y(p)); }); };
   g.lineJoin = 'round'; g.lineCap = 'round'; trace(); g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = lw+4; g.stroke(); trace(); g.strokeStyle = col; g.lineWidth = lw; g.stroke();
@@ -11458,7 +11486,7 @@ function actMapDraw(cv, pts, opt){
   if(P.length>1) dot(P[0], lw*.9, '#2bb673');
   var en = P[P.length-1]; if(opt.live){ g.beginPath(); g.arc(X(en),Y(en),lw*2.8,0,7); g.fillStyle = col+'33'; g.fill(); }
   dot(en, lw*1.1, opt.live ? col : '#e0523c');
-  if(actMapOn()){ g.font = '600 9px Inter, sans-serif'; var tw = g.measureText(ACT_TILE_ATTR).width; g.fillStyle = 'rgba(255,255,255,.78)'; g.fillRect(0, H-15, tw+12, 15); g.fillStyle = '#444'; g.textAlign = 'left'; g.fillText(ACT_TILE_ATTR, 6, H-5); }
+  if(actMapOn()){ var _ap = opt.attrPx||9; g.font = '600 '+_ap+'px Inter, sans-serif'; var _at = actTileAttr(), tw = g.measureText(_at).width; g.fillStyle = 'rgba(255,255,255,.78)'; g.fillRect(0, H-_ap*1.65, tw+_ap*1.3, _ap*1.65); g.fillStyle = '#444'; g.textAlign = 'left'; g.fillText(_at, _ap*.65, H-_ap*.5); }
 }
 // ── Parciales por kilómetro (tiempo en movimiento) ──
 function actSplits(pts, maxMs){
@@ -11524,7 +11552,7 @@ function actDrawRoute(ctx, pts, box, color, lw, dot){
 var ACTV = null;
 function openActSummary(id){
   var a = (S.activities||[]).find(function(x){return x.id===id;}); if(!a) return;
-  ACTV = {a:a, design:'clasico', size:1, photo:null, transparent:false, mark:true};
+  ACTV = {a:a, design:'clasico', size:1, photo:null, transparent:false, mark:true, map:actMapOn()};
   removeOverlay('act-sum'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='act-sum'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('act-sum'); });
   document.body.appendChild(ov); actSumDraw();
 }
@@ -11547,18 +11575,19 @@ function actSumDraw(){
   var keep = document.getElementById('act-name'), nm = keep ? keep.value : a.name;
   brPutSheet(ov, '<div class="sheet"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><span class="st-ico" style="background:var(--accent-bg);color:var(--accent-text);">'+tmIcon(ACT_ICO[ty.id]||ACT_ICO.otro,22)+'</span><div style="flex:1;min-width:0;"><input id="act-name" class="finp" maxlength="30" value="'+esc(nm)+'" onchange="actRename(this.value)" style="margin:0;font-weight:800;font-size:18px;border:none;padding:0;background:transparent;"/><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">'+esc(timerHistDayLabel(a.date))+'</div></div><button class="st-x" onclick="removeOverlay(\'act-sum\')" aria-label="Cerrar">×</button></div>'+
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'+cell(st.km,'km')+cell(st.time,'tiempo')+cell(st.pace,st.paceL)+cell(a.kcal!=null?a.kcal:st.gain, a.kcal!=null?'kcal':'desn. m')+'</div>'+
-    (hasMap ? '<div style="border-radius:16px;overflow:hidden;margin-bottom:14px;height:220px;border:1px solid var(--line-soft);"><canvas id="act-map" style="width:100%;height:100%;display:block;"></canvas></div>' : '<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;">La ruta está solo en el dispositivo donde se grabó.</div>')+
+    (hasMap ? '<div style="border-radius:16px;overflow:hidden;margin-bottom:14px;height:220px;border:1px solid var(--line-soft);position:relative;"><canvas id="act-map" style="width:100%;height:100%;display:block;"></canvas>'+actMapBtnHTML()+'</div>' : '<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;">La ruta está solo en el dispositivo donde se grabó.</div>')+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">'+tiles.join('')+'</div>'+
     actSplitsHTML(a)+actElevHTML(a)+
     '<div style="font-weight:800;font-size:14px;color:var(--ink);margin:4px 0 8px;">Imagen para compartir</div>'+
     '<div style="display:flex;justify-content:center;margin-bottom:14px;"><canvas id="act-card" style="max-width:100%;max-height:42vh;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.2);"></canvas></div>'+
     '<div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="actCardOut(false)">Descargar</button><button class="sbtn" style="flex:1.4;" onclick="actCardOut(true)">Compartir</button></div>'+
     '<details class="st-adv"><summary>Personalizar la tarjeta</summary><div style="padding-bottom:14px;"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'+[['clasico','Clásico'],['minimal','Minimal'],['franja','Franja']].map(function(d){return chip(ACTV.design===d[0], d[1], 'ACTV.design=\''+d[0]+'\';actSumDraw()');}).join('')+'</div>'+
-    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+QC_SIZES.map(function(z,i){return chip(ACTV.size===i, z[0], 'ACTV.size='+i+';actSumDraw()');}).join('')+chip(ACTV.transparent,'Fondo transparente','ACTV.transparent=!ACTV.transparent;actSumDraw()')+'</div>'+shareBrandChipsHTML('actSumDraw')+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+QC_SIZES.map(function(z,i){return chip(ACTV.size===i, z[0], 'ACTV.size='+i+';actSumDraw()');}).join('')+chip(ACTV.transparent,'Fondo transparente','ACTV.transparent=!ACTV.transparent;actSumDraw()')+chip(ACTV.map&&actMapOn(),'Mapa de fondo','ACTV.map=!ACTV.map;if(ACTV.map&&!actMapOn())actMapToggle(actSumDraw);else actSumDraw()')+'</div>'+shareBrandChipsHTML('actSumDraw')+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px;">Poner tus datos sobre una foto:</div><input type="file" accept="image/*" onchange="actCardPhoto(this)" style="font-size:12.5px;"/></div></details>'+
     '<details class="st-adv"><summary>Más opciones</summary><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:14px;"><button class="cbtn" onclick="actGpxOut()">Exportar GPX</button><button class="cbtn" onclick="openTimerHistToReg(\''+esc(a.histId||'')+'\')">Anotar en un registro</button><button class="cbtn" style="color:var(--bad);" onclick="actDelete(\''+a.id+'\')">Eliminar actividad</button></div></details></div>');
   if(hasMap) actMapDraw(document.getElementById('act-map'), a.route, {color:actCol(a.type)[1], follow:false});
   actCardRender(document.getElementById('act-card'));
+  setTimeout(function(){ var m = document.getElementById('act-map'); if(m && m._mp) actMapDraw(m, m._mp.pts, m._mp.opt); }, 450);
 }
 function actRename(v){ v = (v||'').trim().slice(0,30)||actType(ACTV.a.type).name; ACTV.a.name = v; ACTV.a.updatedAt = Date.now(); saveState(); actSumDraw(); }
 function actCardPhoto(inp){ var f = inp.files && inp.files[0]; if(!f) return; var im = new Image(); im.onload = function(){ ACTV.photo = im; ACTV.transparent = false; actSumDraw(); }; im.onerror = function(){ toast('No se pudo abrir la imagen'); }; im.src = URL.createObjectURL(f); }
@@ -11571,8 +11600,17 @@ function actCardDiff(c, a, x, y, maxW, align){
   c.fillStyle = '#fff'; c.textAlign = 'center'; F('800',19); c.globalAlpha = .85; c.fillText('DIFICULTAD AÑADIDA', x0+w/2, y+34); c.globalAlpha = 1; F('700',px); c.fillText(txt, x0+w/2, y+72); c.restore();
   return h;
 }
+function actCardRoute(c, route, box, rc, lw){
+  if(ACTV.map && actMapOn() && ACTV._cv && (route||[]).length>1){
+    c.save(); c.shadowBlur = 0; c.beginPath(); if(c.roundRect) c.roundRect(box.x,box.y,box.w,box.h,36); else c.rect(box.x,box.y,box.w,box.h); c.clip();
+    c.translate(box.x, box.y); actMapPaint(c, box.w, box.h, route, {color:'#e8590c', lw:lw*0.7, pad:60, attrPx:20, maxZ:17, noTaint:1}, ACTV._cv); c.restore();
+    c.save(); c.shadowBlur = 0; c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 3; c.beginPath(); if(c.roundRect) c.roundRect(box.x,box.y,box.w,box.h,36); else c.rect(box.x,box.y,box.w,box.h); c.stroke(); c.restore();
+    return;
+  }
+  actDrawRoute(c, route, box, rc, lw, true);
+}
 function actCardRender(cv){
-  if(!cv||!ACTV) return; var a = ACTV.a, st = actStatsOf(a), z = QC_SIZES[ACTV.size], W = z[1], H = z[2], c = cv.getContext('2d'); cv.width = W; cv.height = H; c.clearRect(0,0,W,H);
+  if(!cv||!ACTV) return; var a = ACTV.a, st = actStatsOf(a), z = QC_SIZES[ACTV.size], W = z[1], H = z[2], c = cv.getContext('2d'); cv.width = W; cv.height = H; c.clearRect(0,0,W,H); ACTV._cv = cv; cv._mp = {pts:a.route||[], opt:{}}; cv._re = function(){ actCardRender(cv); };
   var ph = ACTV.photo && !ACTV.transparent;
   if(!ACTV.transparent){
     if(ph){ var im = ACTV.photo, r = Math.max(W/im.width, H/im.height), w = im.width*r, h = im.height*r; c.drawImage(im,(W-w)/2,(H-h)/2,w,h); var g = c.createLinearGradient(0,H*0.35,0,H); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.72)'); c.fillStyle = g; c.fillRect(0,0,W,H); }
@@ -11585,18 +11623,18 @@ function actCardRender(cv){
   if(ACTV.design==='clasico'){
     F('600',30); c.textAlign = 'center'; c.globalAlpha = .85; c.fillText(label, W/2, pad+10); c.globalAlpha = 1;
     var _dh = actCardDiff(c, a, W/2, pad+34, W-pad*2, 'center'); if(_dh) _dh += 14;
-    actDrawRoute(c, route, {x:pad, y:pad+50+_dh, w:W-pad*2, h:H*0.46-_dh*0.6}, rc, 14, true);
+    actCardRoute(c, route, {x:pad, y:pad+50+_dh, w:W-pad*2, h:H*0.46-_dh*0.6}, rc, 14);
     var y = H-pad-30, cols = [[st.km,'KM'],[st.time,'TIEMPO'],[st.pace,'RITMO '+st.paceL]];
     cols.forEach(function(cc,i){ var x = pad + (W-pad*2)*(i+0.5)/3; c.textAlign='center'; F('800',i===0?92:70); c.fillText(cc[0], x, y-40); F('600',24); c.globalAlpha=.8; c.fillText(cc[1], x, y+6); c.globalAlpha=1; });
   } else if(ACTV.design==='minimal'){
-    actDrawRoute(c, route, {x:W*0.5, y:pad, w:W*0.5-pad, h:H*0.3}, rc, 10, true);
+    actCardRoute(c, route, {x:W*0.5, y:pad, w:W*0.5-pad, h:H*0.3}, rc, 10);
     actCardDiff(c, a, pad, pad+H*0.3+20, W-pad*2, 'left');
     c.textAlign = 'left'; F('600',30); c.globalAlpha = .85; c.fillText(label, pad, H-pad-330); c.globalAlpha = 1;
     F('800',230); c.fillText(st.km, pad, H-pad-110); F('700',46); c.fillText('km', pad+ c.measureText(st.km).width*0 + 4, H-pad-50);
     F('600',40); c.fillText(st.time+'   ·   '+st.pace+' '+st.paceL, pad, H-pad+10);
   } else {
     var _dh2 = actCardDiff(c, a, pad, pad, W-pad*2, 'left');
-    actDrawRoute(c, route, {x:pad, y:pad+30+(_dh2?_dh2:0), w:W-pad*2, h:H*0.5-(_dh2?_dh2*0.8:0)}, rc, 14, true);
+    actCardRoute(c, route, {x:pad, y:pad+30+(_dh2?_dh2:0), w:W-pad*2, h:H*0.5-(_dh2?_dh2*0.8:0)}, rc, 14);
     c.shadowBlur = 0; var by = H-pad-250; c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, by, W, 250); c.fillStyle = '#fff'; c.shadowBlur = 0;
     var items = [[st.km,'KM'],[st.time,'TIEMPO'],[st.pace,st.paceL==='/km'?'RITMO':'KM/H'],[a.kcal!=null?a.kcal:st.gain, a.kcal!=null?'KCAL':'DESN. M']];
     items.forEach(function(cc,i){ var x = W*(i+0.5)/4; c.textAlign='center'; F('800',58); c.fillText(String(cc[0]), x, by+112); F('600',22); c.globalAlpha=.75; c.fillText(cc[1], x, by+156); c.globalAlpha=1; });
@@ -13444,27 +13482,28 @@ function openNewProjectModal(){
   var colorBtns = PROJECT_COLORS.map(function(c,i){
     return '<button id="pc-'+i+'" onclick="selectProjectColor(\''+c+'\','+i+')" style="width:28px;height:28px;border-radius:50%;background:'+c+';border:'+(i===0?'3px solid var(--ink)':'2px solid transparent')+';cursor:pointer;"></button>';
   }).join('');
+  var rowS = 'display:flex;align-items:center;gap:12px;min-height:52px;border-bottom:1px solid var(--line-soft);font-size:14.5px;font-weight:500;color:var(--ink);';
+  var inpS = 'flex:1;min-width:0;text-align:right;border:none;outline:none;background:none;font-size:14px;color:var(--ink-soft);font-family:Inter,sans-serif;padding:8px 0;margin:0;';
+  colorBtns = PROJECT_COLORS.map(function(c,i){
+    return '<button id="pc-'+i+'" type="button" aria-label="Color" onclick="selectProjectColor(\''+c+'\','+i+')" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(i===0?'3px solid var(--ink)':'2px solid transparent')+';cursor:pointer;padding:0;flex:none;"></button>';
+  }).join('');
   overlay.innerHTML='<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
-      '<span class="serif" style="font-weight:800;font-size:22px;">Nuevo proyecto</span>'+
-      '<button onclick="this.closest(\'.overlay\').remove()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
+      '<span class="serif" style="font-weight:700;font-size:24px;">Nuevo proyecto</span>'+
+      '<button onclick="this.closest(\'.overlay\').remove()" aria-label="Cerrar" style="background:none;border:none;font-size:28px;color:var(--muted);cursor:pointer;line-height:1;width:44px;height:44px;">×</button>'+
     '</div>'+
-    '<label class="flbl">Nombre del proyecto</label>'+
-    '<input id="np-name" class="finp" placeholder="Ej: Mudanza, Tesis, Campaña..." autofocus/>'+
-    '<div id="np-extra">'+
-    '<label class="flbl" style="margin-top:10px;">Descripción (opcional)</label>'+
-    '<input id="np-desc" class="finp" placeholder="¿De qué se trata?"/>'+
-    '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Fecha de inicio</label><input id="np-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-start\')" style="cursor:pointer;" value="'+todayStr()+'"/></div>'+
-      '<div style="flex:1;"><label class="flbl">Fecha de fin</label><input id="np-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'np-end\')" style="cursor:pointer;"/></div>'+
-    '</div></div>'+
-    '<label class="flbl" style="margin-top:10px;">Color</label>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'+colorBtns+'</div>'+
-    '<label class="flbl">Empezar</label>'+
+    '<input id="np-name" type="text" aria-label="Nombre del proyecto" placeholder="Nombre del proyecto" autofocus style="width:100%;box-sizing:border-box;border:none;border-bottom:1.5px solid var(--line);outline:none;background:none;font-size:20px;font-weight:600;font-family:Inter,sans-serif;color:var(--ink);padding:10px 0;"/>'+
+    '<div id="np-extra" style="margin-top:14px;border:1.5px solid var(--line);border-radius:18px;background:var(--paper);padding:0 16px;">'+
+      '<div style="'+rowS+'"><span>Descripción</span><input id="np-desc" type="text" placeholder="¿De qué se trata?" style="'+inpS+'"/></div>'+
+      '<div style="'+rowS+'"><span>Inicio</span><input id="np-start" type="text" readonly onclick="openCustomDatePicker(\'np-start\')" value="'+todayStr()+'" style="'+inpS+'cursor:pointer;"/></div>'+
+      '<div style="'+rowS+'"><span>Fin</span><input id="np-end" type="text" readonly placeholder="Sin fecha" onclick="openCustomDatePicker(\'np-end\')" style="'+inpS+'cursor:pointer;"/></div>'+
+      '<div style="'+rowS+'border-bottom:none;flex-wrap:wrap;padding:10px 0;"><span style="width:100%;">Color</span><div style="display:flex;gap:9px;flex-wrap:wrap;">'+colorBtns+'</div></div>'+
+    '</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:20px 4px 8px;">EMPEZAR CON</div>'+
     '<div id="np-tpl-area">'+npTplHTML()+'</div>'+
-    '<div style="display:flex;gap:8px;margin-top:16px;">'+
-      '<button class="sbtn" onclick="saveNewProject()">Crear proyecto</button>'+
-      '<button class="cbtn" onclick="this.closest(\'.overlay\').remove()">Cancelar</button>'+
+    '<div style="display:flex;gap:10px;margin-top:20px;">'+
+      '<button class="cbtn" style="height:52px;border-radius:16px;" onclick="this.closest(\'.overlay\').remove()">Cancelar</button>'+
+      '<button class="sbtn" style="height:52px;border-radius:16px;font-size:16px;" onclick="saveNewProject()">Crear proyecto</button>'+
     '</div>'+
   '</div>';
   document.body.appendChild(overlay);
@@ -13602,35 +13641,29 @@ function saveNewProject(){
 function openEditSectionModal(pid, sid){
   var p = (S.projects||[]).find(function(x){return x.id===pid;});
   if(!p) return;
-  var s = (p.sections||[]).find(function(x){return x.id===sid;});
-  if(!s) return;
-  var box = document.createElement('div'); box.className='conf-box';
-  box.innerHTML='<div class="conf-inner">'+
-    '<div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:14px;">Editar sección</div>'+
-    '<input id="edit-sec-name" type="text" value="'+esc(s.name)+'" maxlength="60" style="width:100%;border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;font-size:14px;font-family:Inter,sans-serif;color:var(--ink);background:var(--paper);margin-bottom:14px;">'+
-    '<div style="display:flex;gap:8px;">'+
-      '<button class="sbtn" onclick="saveEditSection(\''+pid+'\',\''+sid+'\')">Guardar</button>'+
-      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
-    '</div>'+
-    '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px;">'+
-      '<button class="tbtn" style="color:var(--bad);text-decoration:none;font-weight:700;" onclick="deleteSectionConfirm(\''+pid+'\',\''+sid+'\')">Eliminar sección</button>'+
-    '</div>'+
-  '</div>';
-  pRoot().appendChild(box);
+  var s0 = (p.sections||[]).find(function(x){return x.id===sid;});
+  if(!s0) return;
+  removeOverlay('sec-ov');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='sec-ov'; ov.style.zIndex=700;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('sec-ov'); });
+  ov.innerHTML = secSheetHTML('Editar sección', s0.name, 'Nombre de la sección','Guardar','saveEditSection(\''+pid+'\',\''+sid+'\')',
+    '<button type="button" onclick="deleteSectionConfirm(\''+pid+'\',\''+sid+'\')" style="display:block;margin:14px auto 0;background:none;border:none;color:var(--bad);font-size:14px;font-weight:700;padding:8px 14px;cursor:pointer;font-family:Inter,sans-serif;">Eliminar sección</button>');
+  pRoot().appendChild(ov);
 }
 function saveEditSection(pid,sid){
   var p=(S.projects||[]).find(function(x){return x.id===pid;});
   var s=p&&(p.sections||[]).find(function(x){return x.id===sid;});
-  var inp=document.getElementById('edit-sec-name');
+  var inp=document.getElementById('sec-name');
   if(!s||!inp||!inp.value.trim()){toast('Escribe un nombre');return;}
   s.name=inp.value.trim();
   saveState();
-  document.querySelectorAll('.conf-box').forEach(function(b){b.remove();});
+  removeOverlay('sec-ov');
   renderProjectContent();
 }
 function deleteSectionConfirm(pid,sid){
   var p=(S.projects||[]).find(function(x){return x.id===pid;});
   if(!p)return;
+  removeOverlay('sec-ov');
   document.querySelectorAll('.conf-box').forEach(function(b){b.remove();});
   var box=document.createElement('div');box.className='conf-box';
   box.innerHTML='<div class="conf-inner">'+
@@ -13675,6 +13708,7 @@ function doDeleteProject(id){
 
 // ── Vista de proyecto (fullscreen overlay) ─────────────────────────────────
 function openProjectView(id){
+  var _gp=(S.projects||[]).find(function(x){return x.id===id;}); if(_gp && _gp.type==='clients' && clGateNeeded() && !window._gateOk){ clGate(function(){ window._gateOk=true; try{ openProjectView(id); }finally{ window._gateOk=false; } }); return; }
   S.activeProjectId = id;
   var existing = document.getElementById('project-view');
   if(existing) existing.remove();
@@ -14066,11 +14100,11 @@ function clPlanned(c, mk){
   return out;
 }
 // Cargos en orden (sesiones hechas + esperadas) cubiertos por los pagos (los más antiguos primero); lo no cubierto se agrupa por fecha de cobro.
-function clGroups(c){
+function clGroups(c,p){
   var rate=clRate(c), L=[], mk=clMk();
   if(clIsSess(c)){
     (c.log||[]).slice().sort(clDateCmp).forEach(function(s){ L.push({date:s.date, amt:(s.rate!=null?s.rate:rate), k:'done'}); });
-    [mk,clNextMk(mk)].forEach(function(m){ clPlanned(c,m).forEach(function(s){ L.push({date:s.date, amt:rate, k:'plan'}); }); });
+    (p&&p.clNextMonth?[mk,clNextMk(mk)]:[mk]).forEach(function(m){ clPlanned(c,m).forEach(function(s){ L.push({date:s.date, amt:rate, k:'plan'}); }); });
   } else {
     var a=+c.amount||0; if(a>0) L.push({date:c.due||todayStr(), amt:a, k:'done'});
   }
@@ -14115,7 +14149,7 @@ function clAbsorb(c, regs){
 }
 function clSyncClient(p, c, reg){
   var now=Date.now(), prefix='cl_'+c.id+'_', ents=(reg.entries||[]).slice(), ch=false;
-  var wanted=(c.noFin===true)?[]:clGroups(c), keep={};
+  var wanted=(c.noFin===true)?[]:clGroups(c,p), keep={};
   function find(id){ for(var i=0;i<ents.length;i++) if(ents[i].id===id) return i; return -1; }
   wanted.forEach(function(g){
     var id=prefix+g.date, k=1, i=find(id);
@@ -14215,11 +14249,33 @@ function clAlias(c){
   var i=same.indexOf(c.id); return same.length>1 && i>=0 ? ini+(i+1) : ini;
 }
 function clDispName(c){ return clPrivOn() ? clAlias(c) : (c.name||''); }
+function clFirst(c){ return String(c.name||'').trim().split(/\s+/)[0]||''; }
 function clTaskChip(t){
   if(!t || !t.clientRef) return '';
   var c=clFindClient(t.clientRef.pid,t.clientRef.cid); if(!c) return '';
-  return ' <span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:var(--accent-bg);color:var(--accent-text);vertical-align:middle;white-space:nowrap;">'+esc(clDispName(c))+'</span>';
+  if(clPrivOn()) return ' <span style="display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;background:var(--accent-bg);color:var(--accent-text);vertical-align:middle;white-space:nowrap;">'+esc(clAlias(c))+'</span>';
+  return ' <span style="font-weight:700;color:var(--accent-text);">'+esc(clFirst(c))+'</span>';
 }
+function clTaskPlain(t){ if(!t||!t.clientRef) return ''; var c=clFindClient(t.clientRef.pid,t.clientRef.cid); if(!c) return ''; return ' '+(clPrivOn()?clAlias(c):clFirst(c)); }
+function clNextMonthSet(pid,on){ var p=clProj(pid); if(!p) return; p.clNextMonth=!!on; p.clAskedMk=clMk(); p.updatedAt=new Date().toISOString(); saveState(); clSyncAll(true); renderProjectContent(); toast(on?'Finanzas también muestra el mes que viene':'Finanzas muestra solo este mes'); }
+function clNextMonthBanner(p){
+  var t=new Date(), left=new Date(t.getFullYear(),t.getMonth()+1,0).getDate()-t.getDate();
+  var mkNext=REG_MONTHS_FULL[(t.getMonth()+1)%12];
+  if(p.clNextMonth) return '<div style="font-size:11px;color:var(--muted);margin:-2px 2px 8px;">Finanzas incluye lo previsto de '+mkNext+' · <span onclick="clNextMonthSet(\''+p.id+'\',false)" style="color:var(--accent-text);font-weight:700;cursor:pointer;">dejar solo este mes</span></div>';
+  if(left<=6 && p.clAskedMk!==clMk()) return '<div style="background:var(--accent-bg);border-radius:12px;padding:10px 12px;margin-bottom:10px;"><div style="font-size:12.5px;color:var(--ink);line-height:1.5;margin-bottom:8px;">Queda poco de este mes. ¿Quieres ver también en Finanzas lo previsto de <b>'+mkNext+'</b>?</div><div style="display:flex;gap:8px;"><button type="button" class="cbtn" style="flex:1;padding:8px;" onclick="clNextMonthSet(\''+p.id+'\',false)">No, solo este mes</button><button type="button" class="sbtn" style="flex:1;padding:8px;" onclick="clNextMonthSet(\''+p.id+'\',true)">Sí, incluirlo</button></div></div>';
+  return '';
+}
+function clPrivEnd(){ if(S._privUntil){ S._privUntil=0; clPrivRefresh(); } }
+document.addEventListener('visibilitychange',function(){ if(document.hidden){ if(S._privUntil){ S._privUntil=0; try{ clSyncAll(true); }catch(e){} } S._unlockUntil=0; } });
+function clGateNeeded(){ var g=clPrivGet(); return !!(g.on && g.pin && g.lock && !(S._unlockUntil && Date.now()<S._unlockUntil)); }
+function clGate(fn){
+  if(!clGateNeeded()){ fn(); return; }
+  var old=document.getElementById('cl-pin'); if(old) old.remove();
+  var box=document.createElement('div'); box.className='conf-box'; box.id='cl-pin';
+  box.innerHTML='<div class="conf-inner"><div class="serif" style="font-weight:700;font-size:17px;color:var(--ink);margin-bottom:10px;">Sección protegida</div><input id="cl-pin-in" class="finp" type="password" inputmode="numeric" maxlength="8" placeholder="Código" style="text-align:center;font-size:20px;letter-spacing:4px;"/><div id="cl-pin-err" style="font-size:11.5px;color:var(--bad);min-height:16px;margin:4px 0 8px;"></div><div style="display:flex;gap:8px;"><button class="cbtn" style="flex:1;" onclick="document.getElementById(\'cl-pin\').remove()">Cancelar</button><button class="sbtn" style="flex:1;" onclick="clPinCheck()">Entrar</button></div></div>';
+  window._clPinGo=function(){ S._unlockUntil=Date.now()+300000; fn(); }; document.body.appendChild(box); setTimeout(function(){ var i=document.getElementById('cl-pin-in'); if(i) i.focus(); },50);
+}
+function clPrivLockToggle(){ var g=clPrivGet(); if(!g.pin){ toast('Primero guarda un código'); return; } clPrivSet({lock:!g.lock}); S._unlockUntil=Date.now()+300000; clPrivDraw(); }
 function clPrivRefresh(){ try{ clSyncAll(true); }catch(e){} try{ render(); }catch(e){} try{ if(document.getElementById('project-view')) renderProjectContent(); }catch(e){} if(CLE && document.getElementById('cl-editor')){ clReadFields(); clEditorDraw(); } if(document.getElementById('cl-priv')) clPrivDraw(); }
 function clPrivToggle(){ var on=!clPrivGet().on; clPrivSet({on:on}); S._privUntil=0; clPrivRefresh(); toast(on?'Modo privado activado: se ven alias':'Modo privado desactivado'); }
 function clPrivReveal(){
@@ -14249,8 +14305,8 @@ function clPrivDraw(){
     '<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;margin-bottom:12px;">Con el modo privado, en vez del nombre se ve un <b>alias</b> (por defecto las iniciales, o el que tú elijas en la ficha) en las fichas, en Finanzas y como etiqueta en las tareas. Así puedes tener varias tareas «Atender» y distinguirlas sin exponer a nadie. Es solo para este dispositivo.</div>'+
     '<button type="button" class="'+(on?'sbtn':'cbtn')+'" style="width:100%;margin-bottom:8px;" onclick="clPrivToggle()">'+(on?'Modo privado activado · desactivar':'Activar modo privado')+'</button>'+
     (on&&hidden?'<button type="button" class="cbtn" style="width:100%;margin-bottom:8px;" onclick="clPrivReveal()">Ver nombres por 1 minuto</button>':'')+
-    '<label class="flbl" style="margin-top:10px;">Código para ver los nombres (opcional)</label><div style="display:flex;gap:8px;"><input id="cl-newpin" class="finp" type="password" inputmode="numeric" maxlength="8" placeholder="'+(g.pin?'Código guardado · escribe otro o deja vacío para quitarlo':'4 a 8 números')+'" style="margin:0;flex:1;"/><button type="button" class="cbtn" onclick="clPrivSetPin()">Guardar</button></div>'+
-    '<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:8px;">Es una cortina visual para miradas ajenas, no un cifrado: los datos siguen guardados igual en tu cuenta.</div></div>';
+    '<label class="flbl" style="margin-top:10px;">Código para ver los nombres y proteger secciones (opcional)</label><div style="display:flex;gap:8px;"><input id="cl-newpin" class="finp" type="password" inputmode="numeric" maxlength="8" placeholder="'+(g.pin?'Código guardado · escribe otro o deja vacío para quitarlo':'4 a 8 números')+'" style="margin:0;flex:1;"/><button type="button" class="cbtn" onclick="clPrivSetPin()">Guardar</button></div>'+
+    ''+(g.pin?'<button type="button" class="'+(g.lock?'sbtn':'cbtn')+'" style="width:100%;margin-top:10px;" onclick="clPrivLockToggle()">'+(g.lock?'Pedir código al entrar a Trabajos y Finanzas · activado':'Pedir código al entrar a Trabajos y Finanzas')+'</button>':'')+'<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:8px;">Es una cortina visual para miradas ajenas, no un cifrado: los datos siguen guardados igual en tu cuenta.</div></div>';
 }
 // ── contadores rápidos en la tarjeta: +1 sesión / +1 pago sin abrir la ficha ──
 function clQuick(pid,cid,kind,d){
@@ -14339,7 +14395,7 @@ function clCardHTML(p, c, cur, today, tab){
     var pl=clPlan(c,mk), cov=clPaidN(c,mk);
     sub=pl.done+' de '+pl.exp+' sesiones'+(pl.max>pl.exp?' · máx. '+pl.max:'')+' · '+cov+' pagada'+(cov===1?'':'s')+(clRate(c)?' · '+fmtMoney(clRate(c),cur)+' c/u':'');
   } else {
-    sub=(+c.amount>0?'Acordado '+fmtMoney(+c.amount,cur):'Sin monto')+(c.service?' · '+esc(c.service):'');
+    sub=(+c.amount>0?'Acordado '+fmtMoney(+c.amount,cur):'Sin monto')+(c.service&&!clPrivOn()?' · '+esc(c.service):'');
   }
   if(pend>0){ hero='Debe '+fmtMoney(pend,cur)+(nd?' · '+clDueText(c,nd,today):''); col=late?'var(--bad)':'var(--ink)'; }
   else if(cr>0){ hero='Saldo a favor '+fmtMoney(cr,cur)+(clIsSess(c)&&clRate(c)>0&&cr>=clRate(c)?' · '+Math.floor(cr/clRate(c))+' sesión'+(Math.floor(cr/clRate(c))===1?'':'es'):''); col='var(--accent-text)'; }
@@ -14360,7 +14416,7 @@ function clListHTML(p){
   var list=all.filter(function(c){
     if(v.f!=='all' && c.status!==v.f) return false;
     if(v.late){ var nd=clNextDue(c); if(!(nd && nd.date<today && clPend(c)>0)) return false; }
-    if(q){ var hay=((c.name||'')+' '+(c.contact||'')+' '+(c.service||'')+' '+(c.notes||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+    if(q){ var hay=(clPrivOn()?(clAlias(c)+' '+(c.alias||'')):((c.name||'')+' '+(c.contact||'')+' '+(c.service||'')+' '+(c.notes||''))).toLowerCase(); if(hay.indexOf(q)<0) return false; }
     return true;
   });
   list.sort(function(a,b){
@@ -14374,7 +14430,7 @@ function clListHTML(p){
   return list.map(function(c){ return clCardHTML(p,c,cur,today,tab); }).join('');
 }
 function clTableHTML(p, list){
-  var tcols=clTab(p).cols||[], cur=clCur(p), today=todayStr(), mk=clMk(), anySvc=list.some(function(c){return c.service;}), anySess=list.some(clIsSess);
+  var tcols=clTab(p).cols||[], cur=clCur(p), today=todayStr(), mk=clMk(), anySvc=!clPrivOn()&&list.some(function(c){return c.service;}), anySess=list.some(clIsSess);
   var th='text-align:left;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap;background:var(--bg);';
   var td='padding:11px 10px;border-bottom:1px solid var(--line-soft);font-size:13px;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums;';
   return '<div style="overflow-x:auto;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch;"><table style="border-collapse:separate;border-spacing:0;min-width:'+(560+tcols.length*120)+'px;width:100%;">'+
@@ -14418,7 +14474,7 @@ function buildClientsView(p){
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span style="flex:1;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">'+REG_MONTHS_FULL[+mk.slice(5)-1]+(multi?' · '+esc(tab.name):'')+'</span><button type="button" onclick="clSumOpen(\''+p.id+'\')" style="background:var(--bg);border:none;border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Resumen</button><button type="button" onclick="clPrivMenu()" title="Privacidad" style="background:'+(clPrivGet().on?'var(--accent-bg)':'var(--bg)')+';border:none;border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700;color:'+(clPrivGet().on?'var(--accent-text)':'var(--ink-soft)')+';cursor:pointer;font-family:Inter,sans-serif;">'+(clPrivOn()?'Alias':(clPrivGet().on?'Visible':'Nombres'))+'</button></div>'+
     '<div style="display:flex;gap:7px;margin-bottom:8px;">'+card('Esperado',clMoneyShort(t.total,cur))+card('Cobrado',clMoneyShort(t.paid,cur),'var(--accent-text)')+card('Por cobrar',clMoneyShort(t.pend,cur),t.pend>0?'var(--bad)':'var(--ink)')+'</div>'+
     (t.max>t.total?'<div style="font-size:11px;color:var(--muted);margin:-2px 2px 8px;">Si se completan todas las sesiones posibles: <b style="color:var(--ink);">'+clMoneyShort(t.max,cur)+'</b></div>':'')+
-    (t.lateN>0?'<button type="button" onclick="clToggleLate(\''+p.id+'\')" style="display:block;width:100%;text-align:left;margin-bottom:10px;padding:9px 12px;border-radius:11px;border:1.5px solid var(--bad);background:'+(v.late?'var(--bad)':'transparent')+';color:'+(v.late?'#fff':'var(--bad)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">⚠ '+t.lateN+' con cobro vencido · '+fmtMoney(t.lateAmt,cur)+(v.late?' · quitar filtro':' · ver')+'</button>':'');
+    clNextMonthBanner(p)+(t.lateN>0?'<button type="button" onclick="clToggleLate(\''+p.id+'\')" style="display:block;width:100%;text-align:left;margin-bottom:10px;padding:9px 12px;border-radius:11px;border:1.5px solid var(--bad);background:'+(v.late?'var(--bad)':'transparent')+';color:'+(v.late?'#fff':'var(--bad)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">⚠ '+t.lateN+' con cobro vencido · '+fmtMoney(t.lateAmt,cur)+(v.late?' · quitar filtro':' · ver')+'</button>':'');
   if(clList(p).length){
     html+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;"><input class="finp" type="search" placeholder="Buscar" value="'+esc(v.q||'')+'" oninput="clSetQ(\''+p.id+'\',this.value)" style="margin:0;flex:1;"/>'+
       '<div style="display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;flex-shrink:0;">'+[['cards','Fichas'],['table','Tabla']].map(function(m){ var on=v.v===m[0]; return '<button type="button" onclick="clSetViewMode(\''+p.id+'\',\''+m[0]+'\')" style="padding:9px 11px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';">'+m[1]+'</button>'; }).join('')+'</div></div>'+
@@ -14560,6 +14616,7 @@ function clClose(force){
   if(!force && clDraftSig(CLE.c)!==CLE.snap){ clAsk('¿Descartar los cambios?','Hay cambios sin guardar en esta ficha.','Descartar',function(){ clClose(true); },'warn'); return; }
   var o=document.getElementById('cl-editor'); if(o) o.remove();
   if(CLE && CLE.bg){ CLE.bg=false; renderProjectContent(); }
+  clPrivEnd();
 }
 function clStored(){ return CLE ? clFindClient(CLE.pid, CLE.c.id) : null; }
 function clRefreshDraft(){
@@ -14692,12 +14749,12 @@ function clEditorDraw(){
   var stat=function(l,v,col){ return '<div style="flex:1;min-width:0;background:var(--bg);border-radius:10px;padding:7px 8px;"><div style="font-size:9.5px;color:var(--muted);">'+l+'</div><div style="font-size:13.5px;font-weight:800;color:'+(col||'var(--ink)')+';white-space:nowrap;font-variant-numeric:tabular-nums;">'+v+'</div></div>'; };
   var saved=!CLE.isNew && clStored();
   // ── Datos ──
-  var acts=saved?clContactActions(c.contact):[];
+  var acts=(saved&&!clPrivOn())?clContactActions(c.contact):[];
   var datos=f('cl-name','Nombre',c.name,'Ej: Ana Pérez',clPrivOn()?'style="-webkit-text-security:disc;" autocomplete="off"':'')+f('cl-alias','Alias (lo que se ve en modo privado)',c.alias||'',clInitials(c.name)||'Iniciales')+
     lbl('Estado')+'<div style="display:flex;gap:6px;flex-wrap:wrap;">'+CL_STATES.map(function(x){ var a=c.status===x[0]; return '<button type="button" onclick="clReadFields();CLE.c.status=\''+x[0]+'\';clEditorDraw()" style="padding:7px 12px;border-radius:15px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(a?x[2]:'var(--line)')+';background:'+(a?x[2]+'22':'transparent')+';color:'+(a?x[2]:'var(--muted)')+';">'+x[1]+'</button>'; }).join('')+'</div>'+
-    f('cl-contact','Contacto (teléfono o correo)',c.contact,'')+
+    f('cl-contact','Contacto (teléfono o correo)',c.contact,'',clPrivOn()?'style="-webkit-text-security:disc;" autocomplete="off"':'')+
     (acts.length?'<div style="display:flex;gap:6px;margin-top:6px;">'+acts.map(function(a){ return '<button type="button" class="cbtn" style="font-size:12px;padding:7px 12px;" onclick="clOpenUrl(\''+a[1]+'\')">'+a[0]+'</button>'; }).join('')+'</div>':'')+
-    ((c.service||CLE.openSec.svc)?f('cl-service','Servicio o detalle (opcional)',c.service,'Ej: Terapia, diseño de logo'):'<button type="button" onclick="clReadFields();CLE.openSec.svc=true;clEditorDraw()" style="display:block;margin-top:8px;background:none;border:none;color:var(--accent-text);font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;padding:2px 0;">+ Agregar servicio o detalle</button>');
+    ((c.service||CLE.openSec.svc)?f('cl-service','Servicio o detalle (opcional)',c.service,'Ej: Terapia, diseño de logo',clPrivOn()?'style="-webkit-text-security:disc;" autocomplete="off"':''):'<button type="button" onclick="clReadFields();CLE.openSec.svc=true;clEditorDraw()" style="display:block;margin-top:8px;background:none;border:none;color:var(--accent-text);font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;padding:2px 0;">+ Agregar servicio o detalle</button>');
   // ── Cobro ──
   var cobro='<div style="display:flex;gap:6px;margin:6px 0 4px;">'+chip(sess,'Por sesiones','clSetMode(\'sess\')')+chip(!sess,'Monto acordado','clSetMode(\'fixed\')')+'</div>';
   if(sess){
@@ -14753,8 +14810,8 @@ function clEditorDraw(){
   var cols=(tab.cols||[]).map(function(col){ if(!c.x) c.x={}; return lbl(esc(col.name))+tbFieldHTML(col, c.x[col.id], 'CLE.c.x', 'clReadFields();clEditorDraw()'); }).join('');
   var _sh0=ov.querySelector('.sheet'), _st0=_sh0?_sh0.scrollTop:0;
   ov.innerHTML='<div class="sheet" style="max-height:92vh;overflow-y:auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;"><span class="serif" style="font-weight:800;font-size:20px;">'+(CLE.isNew?'Nueva ficha':'Ficha de '+esc(term.s))+'</span><button onclick="clClose()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    datos+blk('Cobro',cobro)+hist+tareas+
-    blk('Notas','<textarea id="cl-notes" class="finp" rows="3" placeholder="Notas" style="margin-top:6px;resize:vertical;">'+esc(c.notes||'')+'</textarea>'+cols)+
+    (clPrivOn()?'<div style="background:var(--accent-bg);border-radius:10px;padding:8px 11px;margin:6px 0 2px;font-size:12px;color:var(--accent-text);display:flex;align-items:center;gap:8px;"><span style="flex:1;">Modo privado: nombre, contacto, servicio y notas ocultos.</span><button type="button" onclick="clPrivReveal()" style="background:none;border:none;font-weight:800;color:var(--accent-text);cursor:pointer;font-family:Inter,sans-serif;font-size:12px;">Ver 1 min</button></div>':'')+datos+blk('Cobro',cobro)+hist+tareas+
+    blk('Notas','<textarea id="cl-notes" class="finp" rows="3" placeholder="Notas" style="margin-top:6px;resize:vertical;'+(clPrivOn()?'-webkit-text-security:disc;':'')+'">'+esc(c.notes||'')+'</textarea>'+cols)+
     '<div style="display:flex;gap:8px;margin-top:18px;">'+(CLE.isNew?'':'<button type="button" onclick="clDelete()" style="background:none;border:1.5px solid var(--bad);border-radius:10px;padding:12px 16px;font-size:13px;font-weight:700;color:var(--bad);cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>')+'<button class="sbtn" style="flex:1;" onclick="clSave()">Guardar</button></div></div>';
   var _sh1=ov.querySelector('.sheet'); if(_sh1) _sh1.scrollTop=_st0;
 }
@@ -15498,26 +15555,33 @@ function cdpRender(){
 }
 
 // ── Agregar / eliminar sección ────────────────────────────────────────────
+function secSheetHTML(title, val, ph, okLbl, okFn, extra){
+  return '<div class="sheet" style="padding:10px 22px 26px;">'+
+    '<div style="width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 6px;"></div>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:22px;">'+title+'</span>'+
+    '<button type="button" aria-label="Cerrar" onclick="removeOverlay(\'sec-ov\')" style="width:44px;height:44px;border:none;background:none;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;">×</button></div>'+
+    '<div style="display:flex;align-items:center;gap:12px;background:var(--bg);border-radius:16px;padding:4px 14px;"><span style="width:6px;height:30px;border-radius:3px;background:var(--accent);flex:none;"></span>'+
+    '<input id="sec-name" type="text" maxlength="60" value="'+esc(val||'')+'" placeholder="'+ph+'" aria-label="Nombre de la sección" onkeydown="if(event.key===\'Enter\'){'+okFn+'}" style="flex:1;min-width:0;border:none;outline:none;background:none;font-size:18px;font-weight:600;font-family:Inter,sans-serif;color:var(--ink);padding:12px 0;"/></div>'+
+    '<button type="button" onclick="'+okFn+'" style="margin-top:22px;width:100%;height:52px;border:none;border-radius:16px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+okLbl+'</button>'+
+    (extra||'')+'</div>';
+}
 function openAddSectionModal(pid){
-  var box=document.createElement('div');box.className='conf-box';
-  box.innerHTML='<div class="conf-inner">'+
-    '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:12px;">Nueva sección</div>'+
-    '<label class="flbl">Nombre</label><input id="ns-name" class="finp" placeholder="Ej: Organización, Trámites, Entrega final..."/>'+
-    '<div style="display:flex;gap:8px;margin-top:14px;">'+
-      '<button class="sbtn" onclick="saveNewSection(\''+pid+'\')">Crear</button>'+
-      '<button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button>'+
-    '</div></div>';
-  pRoot().appendChild(box);
+  removeOverlay('sec-ov');
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='sec-ov'; ov.style.zIndex=700;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('sec-ov'); });
+  ov.innerHTML=secSheetHTML('Nueva sección','', 'Nombre de la sección','Crear sección','saveNewSection(\''+pid+'\')');
+  pRoot().appendChild(ov);
+  setTimeout(function(){ var i=document.getElementById('sec-name'); if(i) i.focus(); },250);
 }
 function saveNewSection(pid){
-  var nameEl=document.getElementById('ns-name');
+  var nameEl=document.getElementById('sec-name');
   if(!nameEl||!nameEl.value.trim()){toast('Escribe un nombre');return;}
   var p=(S.projects||[]).find(function(x){return x.id===pid;});
   if(!p)return;
   if(!p.sections)p.sections=[];
   p.sections.push({id:'sec-'+uid(),name:nameEl.value.trim(),tasks:[]});
   saveState();
-  var cb=pRoot().querySelector('.conf-box');if(cb)cb.remove();
+  removeOverlay('sec-ov');
   renderProjectContent();
 }
 function deleteSection(pid,sid){
@@ -15768,22 +15832,26 @@ function openEditProjectModal(pid){
   }).join('');
   var overlay=document.createElement('div');overlay.className='overlay';overlay.id='edit-project-overlay';
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+  var rowS = 'display:flex;align-items:center;gap:12px;min-height:52px;border-bottom:1px solid var(--line-soft);font-size:14.5px;font-weight:500;color:var(--ink);';
+  var inpS = 'flex:1;min-width:0;text-align:right;border:none;outline:none;background:none;font-size:14px;color:var(--ink-soft);font-family:Inter,sans-serif;padding:8px 0;margin:0;';
+  colorBtns=PROJECT_COLORS.map(function(c,i){
+    return '<button id="epc-'+i+'" type="button" aria-label="Color" onclick="selectEditProjectColor(\''+c+'\','+i+')" style="width:26px;height:26px;border-radius:50%;background:'+c+';border:'+(c===p.color?'3px solid var(--ink)':'2px solid transparent')+';cursor:pointer;padding:0;flex:none;"></button>';
+  }).join('');
   overlay.innerHTML='<div class="sheet">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'+
-      '<span class="serif" style="font-weight:800;font-size:20px;">Editar proyecto</span>'+
-      '<button onclick="this.closest(\'.overlay\').remove()" style="background:none;border:none;font-size:26px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
+      '<span class="serif" style="font-weight:700;font-size:24px;">Editar proyecto</span>'+
+      '<button onclick="this.closest(\'.overlay\').remove()" aria-label="Cerrar" style="background:none;border:none;font-size:28px;color:var(--muted);cursor:pointer;line-height:1;width:44px;height:44px;">×</button>'+
     '</div>'+
-    '<label class="flbl">Nombre</label><input id="ep-name" class="finp" value="'+esc(p.name)+'"/>'+
-    '<label class="flbl" style="margin-top:10px;">Descripción</label><input id="ep-desc" class="finp" value="'+esc(p.desc||'')+'"/>'+
-    '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<div style="flex:1;"><label class="flbl">Inicio</label><input id="ep-start" class="finp" type="text" readonly onclick="openCustomDatePicker(\'ep-start\')" style="cursor:pointer;" value="'+(p.start||'')+'"/></div>'+
-      '<div style="flex:1;"><label class="flbl">Fin</label><input id="ep-end" class="finp" type="text" readonly onclick="openCustomDatePicker(\'ep-end\')" style="cursor:pointer;" value="'+(p.end||'')+'"/></div>'+
+    '<input id="ep-name" type="text" aria-label="Nombre del proyecto" value="'+esc(p.name)+'" style="width:100%;box-sizing:border-box;border:none;border-bottom:1.5px solid var(--line);outline:none;background:none;font-size:20px;font-weight:600;font-family:Inter,sans-serif;color:var(--ink);padding:10px 0;"/>'+
+    '<div style="margin-top:14px;border:1.5px solid var(--line);border-radius:18px;background:var(--paper);padding:0 16px;">'+
+      '<div style="'+rowS+'"><span>Descripción</span><input id="ep-desc" type="text" placeholder="¿De qué se trata?" value="'+esc(p.desc||'')+'" style="'+inpS+'"/></div>'+
+      '<div style="'+rowS+'"><span>Inicio</span><input id="ep-start" type="text" readonly onclick="openCustomDatePicker(\'ep-start\')" value="'+(p.start||'')+'" style="'+inpS+'cursor:pointer;"/></div>'+
+      '<div style="'+rowS+'"><span>Fin</span><input id="ep-end" type="text" readonly placeholder="Sin fecha" onclick="openCustomDatePicker(\'ep-end\')" value="'+(p.end||'')+'" style="'+inpS+'cursor:pointer;"/></div>'+
+      '<div style="'+rowS+'border-bottom:none;flex-wrap:wrap;padding:10px 0;"><span style="width:100%;">Color</span><div style="display:flex;gap:9px;flex-wrap:wrap;">'+colorBtns+'</div></div>'+
     '</div>'+
-    '<label class="flbl" style="margin-top:10px;">Color</label>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">'+colorBtns+'</div>'+
-    '<div style="display:flex;gap:8px;">'+
-      '<button class="sbtn" onclick="saveEditProject(\''+pid+'\')">Guardar</button>'+
-      '<button class="cbtn" onclick="this.closest(\'.overlay\').remove()">Cancelar</button>'+
+    '<div style="display:flex;gap:10px;margin-top:20px;">'+
+      '<button class="cbtn" style="height:52px;border-radius:16px;" onclick="this.closest(\'.overlay\').remove()">Cancelar</button>'+
+      '<button class="sbtn" style="height:52px;border-radius:16px;font-size:16px;" onclick="saveEditProject(\''+pid+'\')">Guardar</button>'+
     '</div>'+
   '</div>';
   pRoot().appendChild(overlay);
@@ -16561,7 +16629,7 @@ var innerChk=done?chkSVG():(r>0&&!hasCL?'<span style="font-size:8px;font-weight:
       // para marcarla a mano, sin usar el temporizador — no son excluyentes.
       (hasPlay?'<button onclick="event.stopPropagation();openTaskPlay(\''+t.id+'\')" title="'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'Continuar rutina':'Iniciar rutina')+'" style="background:'+((S.timerSessions||{})[t.id]&&S.timerSessions[t.id].date===todayStr()?'var(--ink)':'var(--accent)')+';border:none;color:#fff;font-size:12px;padding:0;width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;"><svg width="15" height="15" style="margin-left:1px;" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.5-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z"/></svg></button>':'')+
       // Insignia de vínculo: solo si la tarea está vinculada (editar y vincular viven en el menú ⋯ y al tocar el nombre)
-      taskAppChipHTML(t)+
+      taskAppChipHTML(t)+trainChipHTML(t)+
       (_linked?'<button onclick="event.stopPropagation();openLinkModal(\''+t.id+'\')" title="Vinculada — toca para ver o cambiar" aria-label="Vinculada" style="background:none;border:none;color:var(--accent-text);opacity:.85;padding:0;width:36px;height:36px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('link',17,1.8)+'</button>':'')+
       // Botón ⋯ menú
       '<button onclick="openTaskMenu(\''+t.id+'\',event)" aria-label="Más opciones" style="background:none;border:none;color:var(--muted);padding:0;width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;">'+ico('dots',22)+'</button>'+
@@ -16603,7 +16671,7 @@ function taskHTMLSelectable(t,showPeriod){
       '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(checked?'var(--accent)':'var(--muted-soft)')+';background:'+(checked?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(checked?chkSVG():'')+'</div>'+
       '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;">'+
         (t.crucial?'<span class="crucial-star">★</span>':'')+
-        '<span style="font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">'+esc(t.text)+'</span>'+
+        '<span style="font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">'+esc(t.text)+clTaskChip(t)+'</span>'+
         categoryTag+tagHTML+
       '</div>'+
     '</div>'+
@@ -18087,19 +18155,30 @@ function trackEditorBodyHTML(){
   var t = TE.track;
   var isManual = t.source && t.source.type==='manual', isNone = isManual && !!t.source.none;
   var info = lvlInfo(t.xp||0);
-  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'+
-      '<span class="serif" style="font-weight:700;font-size:18px;">'+(TE.isNew?'Nuevo seguimiento':'Editar seguimiento')+'</span>'+
-      '<button onclick="removeOverlay(\'track-editor\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
+  var tcol = levelTrackColor(t, 0);
+  var tile = function(key, ttl, sub, on, path){
+    return '<button type="button" onclick="teSetSourceType(\''+key+'\')" aria-pressed="'+on+'" style="min-width:0;height:112px;border-radius:18px;border:1.5px solid '+(on?'var(--good)':'var(--line)')+';background:'+(on?'var(--good-bg,#eaf3e4)':'var(--paper)')+';text-align:left;padding:12px;display:flex;flex-direction:column;justify-content:space-between;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;">'+
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="'+(on?'var(--good)':'var(--muted)')+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+path+'"/></svg>'+
+      '<span style="text-align:left;"><b style="font-size:13.5px;display:block;color:'+(on?'var(--good)':'var(--ink)')+';">'+ttl+'</b><span style="text-align:left;font-size:11.5px;color:'+(on?'var(--good)':'var(--muted)')+';display:block;margin-top:2px;line-height:1.3;">'+sub+'</span></span></button>';
+  };
+  var srcNote = isNone ? 'Se llena con tus habilidades, los temporizadores que las trabajan y los registros que vincules. No depende de tus tareas.' : (isManual ? 'Cuentan solo las tareas que elijas abajo.' : 'Cuentan todas las tareas de la categoría que elijas abajo.');
+  return '<div style="display:flex;justify-content:flex-end;margin:-10px -12px 0 0;"><button type="button" aria-label="Cerrar" onclick="removeOverlay(\'track-editor\')" style="width:44px;height:44px;border:none;background:none;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;">×</button></div>'+
+    (t.view==='level' ? '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:12px;">'+levelTrackGemHTML(t, 0, 84)+'<div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:6px;">Nivel '+info.lvl+' · '+esc(trackLevelName(t,info.lvl))+'</div></div>' : '')+
+    '<div style="border-radius:20px;background:'+tcol+'22;border:1.5px solid '+tcol+'66;padding:16px;">'+
+      '<div style="display:flex;align-items:center;gap:12px;"><span style="width:44px;height:44px;border-radius:14px;background:'+tcol+';flex:none;"></span>'+
+      '<input id="te-name" type="text" placeholder="'+(TE.isNew?'Nuevo seguimiento':'Nombre del seguimiento')+'" aria-label="Nombre del seguimiento" value="'+esc(t.name||'')+'" oninput="TE.track.name=this.value;" style="flex:1;min-width:0;border:none;outline:none;background:none;font-size:20px;font-weight:700;font-family:Inter,sans-serif;color:var(--ink);padding:6px 0;"/></div>'+
+      teColorAreaHTML()+
     '</div>'+
-    (t.view==='level' ? '<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;">'+levelTrackGemHTML(t, 0, 84)+'<div style="font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:6px;">Nivel '+info.lvl+' · '+esc(trackLevelName(t,info.lvl))+'</div></div>' : '')+
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Nombre</div>'+
-    '<input id="te-name" class="finp" type="text" placeholder="Ej: Deporte" value="'+esc(t.name||'')+'" oninput="TE.track.name=this.value;" style="margin-bottom:16px;"/>'+
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">¿Qué alimenta este seguimiento?</div>'+
-    '<div style="display:flex;gap:6px;margin-bottom:12px;">'+[['category','Una categoría',!isManual],['manual','Tareas a mano',isManual&&!isNone],['none','Solo habilidades',isNone]].map(function(o){ return '<button type="button" onclick="teSetSourceType(\''+o[0]+'\')" style="flex:1;padding:9px 4px;border-radius:10px;border:1.5px solid '+(o[2]?'var(--accent)':'var(--line)')+';background:'+(o[2]?'var(--accent)':'var(--paper)')+';color:'+(o[2]?'#fff':'var(--ink-soft)')+';font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+o[1]+'</button>'; }).join('')+'</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:20px 4px 8px;">QUÉ LO ALIMENTA</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">'+
+      tile('category','Categoría','Suma sus tareas',!isManual,'M3.5 12.5V4.5h8l9 9-8 8z')+
+      tile('manual','A mano','Tú eliges las tareas',isManual&&!isNone,'M5 12.5l4.5 4.5L19 7.5')+
+      tile('none','Habilidades','Solo lo que anotas',isNone,'M3 20l5-5 4 3 7-12M15 6h4v4')+
+    '</div>'+
+    '<div style="height:12px;"></div>'+
     '<div id="te-source-area">'+teSourceAreaHTML()+'</div>'+
     '<div id="te-sum-area">'+teSummaryHTML()+'</div>'+
-    teColorAreaHTML()+
-    '<details class="st-adv"><summary>Experiencia, registro y símbolo</summary><div style="padding-bottom:12px;">'+
+    '<details class="st-adv" style="margin-top:12px;"><summary>Experiencia, registro y símbolo</summary><div style="padding-bottom:12px;">'+
       '<div id="te-xp-area">'+(isNone?'':teXpAreaHTML())+'</div>'+
       '<div id="te-reg-area">'+teRegAreaHTML()+'</div>'+
       teStyleAreaHTML()+
@@ -18125,17 +18204,15 @@ function teColorAreaHTML(){
   var t = TE.track;
   var isManual = t.source && t.source.type==='manual';
   var usingAuto = !t.color;
-  var html = '<div style="margin-top:16px;">'+
-    '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Color</div>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  var sw = function(on){ return 'width:30px;height:30px;border-radius:50%;padding:0;cursor:pointer;border:none;'+(on?'outline:2.5px solid var(--ink);outline-offset:2px;':''); };
+  var html = '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;align-items:center;">';
   if(!isManual){
-    html += '<button type="button" onclick="teSetColor(null)" title="Automático: color de la categoría" style="width:28px;height:28px;border-radius:50%;border:'+(usingAuto?'3px solid var(--ink)':'2px solid var(--line)')+';background:conic-gradient(from 0deg,'+CATEGORY_COLORS.join(',')+');cursor:pointer;padding:0;"></button>';
+    html += '<button type="button" onclick="teSetColor(null)" title="Automático: color de la categoría" aria-label="Color automático" style="'+sw(usingAuto)+'background:conic-gradient(from 0deg,'+CATEGORY_COLORS.join(',')+');"></button>';
   }
   html += CATEGORY_COLORS.map(function(c){
-    var active = t.color===c;
-    return '<button type="button" onclick="teSetColor(\''+c+'\')" style="width:28px;height:28px;border-radius:50%;border:'+(active?'3px solid var(--ink)':'2px solid transparent')+';background:'+c+';cursor:pointer;padding:0;"></button>';
+    return '<button type="button" onclick="teSetColor(\''+c+'\')" aria-label="Color" style="'+sw(t.color===c)+'background:'+c+';"></button>';
   }).join('');
-  html += '</div></div>';
+  html += '</div>';
   return html;
 }
 function teStyleAreaHTML(){
@@ -20564,6 +20641,7 @@ function openTimerTplMenu(id){
     '<div style="display:flex;flex-direction:column;gap:8px;">'+
     '<button onclick="'+rm+'openTimerTplEditor(\''+id+'\')" style="'+b+'background:var(--accent);color:#fff;border:none;">Editar</button>'+
     '<button onclick="'+rm+'openRoutineManual(\''+id+'\')" style="'+sec+'">La hice por mi cuenta</button>'+
+    '<button onclick="'+rm+'openTplCatSheet(\''+id+'\')" style="'+sec+'">Categoría'+(tp.cat&&trainCatName(tp.cat)?' · '+esc(trainCatName(tp.cat)):'')+'</button>'+
     '<button onclick="'+rm+'openTimerDetMenu(\''+id+'\')" style="'+sec+'">Detalles…</button>'+
     '<button onclick="'+rm+'openShareMenu(\'routine\',\''+id+'\')" style="'+sec+'">Compartir</button>'+
     '<button onclick="'+rm+'toggleWidgetTimer(\''+id+'\')" style="'+sec+'color:var(--ink-soft);">'+(tp.widget?'Quitar del widget':'Mostrar en el widget')+'</button>'+
@@ -21004,7 +21082,7 @@ function renderCalMonthAgenda(dateKey){
     html += calSectionLabel('Pausadas esta semana', A.skipped.length)+
       A.skipped.map(function(t){
         return '<div style="display:flex;align-items:center;gap:11px;padding:9px 2px;border-bottom:1px solid var(--line-soft);"><span style="width:23px;text-align:center;color:var(--muted-soft);display:flex;justify-content:center;">'+ico('clock',14,1.8)+'</span>'+
-          '<span style="flex:1;font-size:13.5px;color:var(--muted);text-decoration:line-through;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+(t.hora?'<span style="font-size:11px;font-weight:700;color:var(--muted);">'+esc(t.hora)+'</span>':'')+
+          '<span style="flex:1;font-size:13.5px;color:var(--muted);text-decoration:line-through;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+clTaskChip(t)+'</span>'+(t.hora?'<span style="font-size:11px;font-weight:700;color:var(--muted);">'+esc(t.hora)+'</span>':'')+
           '<button onclick="toggleSkipTaskWeek(\''+t.id+'\')" style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Reactivar</button></div>';
       }).join('');
   }
@@ -21012,7 +21090,7 @@ function renderCalMonthAgenda(dateKey){
     html += calSectionLabel('Se repite cada semana', A.ghost.length)+
       A.ghost.map(function(t){
         return '<div onclick="openEdit(\''+t.id+'\')" style="display:flex;align-items:center;gap:11px;padding:9px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;opacity:.6;"><span style="width:23px;text-align:center;font-size:14px;color:var(--muted);">↻</span>'+
-          '<span style="flex:1;font-size:13.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+'</span>'+(t.hora?'<span style="font-size:11px;font-weight:700;color:var(--muted);">'+esc(t.hora)+'</span>':'')+'</div>';
+          '<span style="flex:1;font-size:13.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text)+clTaskChip(t)+'</span>'+(t.hora?'<span style="font-size:11px;font-weight:700;color:var(--muted);">'+esc(t.hora)+'</span>':'')+'</div>';
       }).join('');
   }
   if(!isPastDay){
@@ -21032,7 +21110,7 @@ function renderCalUpcoming(dateKey){
     var k = localDateStr(addDaysLocal(parseLocalDate(dateKey), i));
     var A = calAgendaData(k), all = A.glance;
     var d = A.date;
-    var names = all.slice(0,2).map(function(t){return esc(t.text);}).join(' · ');
+    var names = all.slice(0,2).map(function(t){return esc(t.text)+esc(clTaskPlain(t));}).join(' · ');
     rows += '<div onclick="selectCalendarDay(\''+k+'\')" style="display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;">'+
       '<div style="width:38px;text-align:center;flex-shrink:0;"><div style="font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;">'+DAYS[dayIdxFromDate(d)].slice(0,3)+'</div><div style="font-size:17px;font-weight:800;color:var(--ink);line-height:1.1;">'+d.getDate()+'</div></div>'+
       '<div style="flex:1;min-width:0;">'+
@@ -21326,7 +21404,7 @@ function openDayDetail(dateKey){
       pausedList.map(function(t){
         return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line-soft);opacity:.65;">'+
           '<div style="width:19px;height:19px;border-radius:5px;border:1.5px dashed var(--muted-soft);flex-shrink:0;"></div>'+
-          '<span style="flex:1;font-size:13px;color:var(--muted);text-decoration:line-through;">'+esc(t.text)+'</span>'+
+          '<span style="flex:1;font-size:13px;color:var(--muted);text-decoration:line-through;">'+esc(t.text)+clTaskChip(t)+'</span>'+
           '<button onclick="toggleSkipTaskWeek(\''+t.id+'\');reopenDayDetail(\''+dateKey+'\')" style="background:none;border:1.5px solid var(--line);border-radius:8px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-family:Inter,sans-serif;">Reactivar</button></div>';
       }).join('');
   }
@@ -22213,22 +22291,32 @@ function renderSaveWeekAsTemplateSheet(){
       '⚠️ Al aplicar esta plantilla más adelante: si la tarea de período superior a la que estaba vinculada todavía existe (mismo nombre y período), se reconecta sola. Si no existe, se intentará crear de nuevo — pero solo si hay espacio disponible en ese período según tu plan; si no hay espacio, ese vínculo puntual no se recreará.'+
     '</div>'
   ) : '';
+  // Mini semana: todas las tareas del día; las que calzan con los filtros se pintan, las demás se omiten
+  var allDay = S.tasks.filter(function(t){ return t.period==='dia'; });
+  var hit = {}; matched.forEach(function(t){ hit[t.id]=1; });
+  var cols = '';
+  for(var di=0; di<7; di++){
+    var items = allDay.filter(function(t){ return (t.day||0)===di; }).slice(0,5);
+    cols += '<div style="display:flex;flex-direction:column;gap:4px;min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-align:center;">'+DAYS[di].charAt(0)+'</div>'+
+      (items.length ? items.map(function(t){ var on=!!hit[t.id]; return '<i style="display:block;height:20px;border-radius:7px;'+(on?'background:var(--accent-bg);border:1.5px solid var(--accent);':'background:var(--bg);border:1.5px dashed var(--line);')+'"></i>'; }).join('') : '<i style="display:block;height:20px;"></i>')+'</div>';
+  }
+  function chipBtn(key, label){
+    var on = !!SWT[key];
+    return '<button type="button" onclick="swtToggle(\''+key+'\')" style="height:40px;padding:0 14px;border-radius:20px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:'+(on?'700':'600')+';cursor:pointer;font-family:Inter,sans-serif;">'+label+'</button>';
+  }
+  var lb = function(t){ return '<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:18px 4px 8px;">'+t+'</div>'; };
+  var nm = matched.length;
   document.getElementById('swt-sheet').innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'+
-      '<span class="serif" style="font-weight:700;font-size:19px;">Guardar semana como plantilla</span>'+
-      '<button onclick="closeSaveWeekAsTemplateModal()" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button>'+
-    '</div>'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">Captura tus tareas diarias tal como las tienes ahora, para poder reaplicarlas después.</div>'+
-    '<div style="margin-bottom:14px;">'+
-      '<label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;">Nombre</label>'+
-      '<input id="swt-name-input" class="finp" type="text" value="'+esc(SWT.name)+'" oninput="SWT.name=this.value;" style="width:100%;margin-top:4px;padding:8px 0;font-size:15px;border:none;border-bottom:1.5px solid var(--line);background:none;color:var(--ink);font-family:Inter,sans-serif;">'+
-    '</div>'+
-    toggleRow('onlyCrucial','Solo tareas cruciales ⭐','Deja afuera las tareas que no marcaste como cruciales.')+
-    toggleRow('onlyRecurring','Solo tareas recurrentes','No incluye tareas de un día específico (con fecha puntual), solo las que se repiten cada semana en su día.')+
-    toggleRow('includeLinks','Incluir vinculaciones','Guarda también con qué tarea de período superior estaba vinculada cada una.')+
+    '<div style="display:flex;justify-content:flex-end;margin:-10px -12px 0 0;"><button type="button" aria-label="Cerrar" onclick="closeSaveWeekAsTemplateModal()" style="width:44px;height:44px;border:none;background:none;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;">×</button></div>'+
+    '<input id="swt-name-input" type="text" placeholder="Nombre de la plantilla" value="'+esc(SWT.name)+'" oninput="SWT.name=this.value;" aria-label="Nombre" style="width:100%;box-sizing:border-box;border:none;border-bottom:1.5px solid var(--line);outline:none;background:none;font-size:22px;font-weight:700;font-family:\'Source Serif 4\',Georgia,serif;color:var(--ink);padding:6px 0 10px;">'+
+    lb('ASÍ QUEDARÁ TU PLANTILLA')+
+    '<div style="border:1.5px solid var(--line);border-radius:18px;background:var(--paper);padding:12px 10px;"><div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;">'+cols+'</div>'+
+      '<div style="display:flex;gap:14px;margin-top:10px;font-size:11.5px;color:var(--muted);"><span style="display:flex;align-items:center;gap:5px;"><i style="width:12px;height:12px;border-radius:4px;background:var(--accent-bg);border:1.5px solid var(--accent);display:inline-block;"></i>Se guarda</span><span style="display:flex;align-items:center;gap:5px;"><i style="width:12px;height:12px;border-radius:4px;background:var(--bg);border:1.5px dashed var(--line);display:inline-block;"></i>Se omite</span></div></div>'+
+    lb('FILTROS')+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+chipBtn('onlyCrucial','⭐ Cruciales')+chipBtn('onlyRecurring','↻ Recurrentes')+chipBtn('includeLinks','🔗 Con vínculos')+'</div>'+
+    '<div style="font-size:12.5px;color:var(--muted);margin:10px 4px 0;line-height:1.45;">Cruciales: solo las marcadas con ⭐. Recurrentes: deja fuera las de un día específico. Con vínculos: guarda con qué objetivo superior estaba vinculada cada tarea.</div>'+
     linkWarning+
-    '<div style="font-size:12px;color:var(--muted);text-align:center;margin:14px 0 4px;">Se guardarán <b style="color:var(--ink);">'+matched.length+'</b> tarea'+(matched.length===1?'':'s')+'.</div>'+
-    '<button class="cbtn" style="width:100%;margin-top:10px;" '+(matched.length?'':'disabled')+' onclick="saveWeekAsTemplateConfirm()">Guardar plantilla</button>';
+    '<button type="button" '+(nm?'':'disabled')+' onclick="saveWeekAsTemplateConfirm()" style="margin-top:20px;width:100%;height:52px;border:none;border-radius:16px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;'+(nm?'':'opacity:.45;')+'">'+(nm?('Guardar '+nm+' tarea'+(nm===1?'':'s')):'No hay tareas con esos filtros')+'</button>';
 }
 // Convierte un vínculo real (por id) en una "receta" portátil, por nombre +
 // período — los ids no sobreviven de una plantilla a otra, pero un nombre
@@ -23762,6 +23850,7 @@ var INFO_TIPS = {
   prefill:'Al completar una tarea recurrente con registro, la ventana aparece con el monto o los valores de la última vez. Apágalo si prefieres partir en blanco.',
   regrem:'Un aviso para que anotes tus gastos e ingresos: todos los días, una vez por semana o a fin de mes. Funciona mientras la app esté abierta o en segundo plano.',
 
+  trainlink:'La tarea se marca sola cuando haces algo en Entrenar: cualquier cosa, una rutina o actividad concreta, o una categoría de rutinas (Calentamiento, Pliometría…). Cuenta lo hecho con el temporizador, con GPS, importado de Salud o «por mi cuenta». Puedes pedir varias cosas a la vez. Si borras el registro, la tarea se desmarca sola. Distinto de «Rutina», que agrega ejercicios a la propia tarea.',
   goal:'Simple: se marca y listo. Cantidad: una meta numérica (ej. 8 vasos). Checklist: sub-pasos, con opción de que alcance con algunos. El temporizador se suma aparte y se puede combinar con un checklist.',
   plannotify:'Cuando avanzas una tarea de Hoy que está vinculada a un objetivo del Plan, aparece un aviso breve arriba con el avance (y más largo si lo completas). Se cierra solo; con "Ver" vas a Objetivos.',
   cltimer:'Toca el reloj de un ítem para darle su propia rutina o una cuenta regresiva (por ejemplo 25 min). En Hoy verás un botón de play junto al ítem; al terminar, el ítem se marca solo. Puedes ponerla en uno o en varios ítems; con el play general de la tarea eliges cuáles reproducir, una o varias seguidas.',
@@ -23979,11 +24068,12 @@ function taskModalDayHTML(showFreshCL){
       '</div>'+
     '</div>'+
     // ── Ajustes avanzados: lo que se usa menos (temporizador, abrir app, registro vinculado).
-    '<button type="button" onclick="mToggleAdv()" aria-expanded="'+!!(M._advOpen===undefined ? (M._advOpen = !!(M.hasTimer || appsOf(M.task).length || M.registryId)) : M._advOpen)+'" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:18px 0 10px;">'+
-      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Ajustes avanzados<span style="font-weight:500;color:var(--muted);font-size:11.5px;"> · temporizador, abrir app, registro</span></span>'+
+    '<button type="button" onclick="mToggleAdv()" aria-expanded="'+!!(M._advOpen===undefined ? (M._advOpen = !!(M.hasTimer || (M.task&&M.task.trainLink) || appsOf(M.task).length || M.registryId)) : M._advOpen)+'" style="width:100%;display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;margin:18px 0 10px;">'+
+      '<span style="font-size:13px;font-weight:700;color:var(--ink);flex:1;text-align:left;">Ajustes avanzados<span style="font-weight:500;color:var(--muted);font-size:11.5px;"> · entrenar, temporizador, abrir app, registro</span></span>'+
       '<span id="m-adv-chev" style="display:inline-flex;transition:transform .2s;transform:'+(M._advOpen?'rotate(180deg)':'none')+';color:var(--accent-text);">'+ico('chev',16,2)+'</span>'+
     '</button>'+
     '<div id="m-adv-area" style="display:'+(M._advOpen?'block':'none')+';">'+
+    mTrainSectionHTML()+
     '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Rutina'+infoBtn('timeradd')+'</div>'+
       '<button type="button" class="tog" id="m-timer-tog" onclick="mToggleTimerSection()" style="background:'+(M.hasTimer?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(M.hasTimer?22:2)+'px;"></span></button></div>'+
     '<div id="m-timer-area" style="display:'+(M.hasTimer?'block':'none')+';margin-top:12px;">'+timerAreaHTML()+'</div>'+
@@ -23992,6 +24082,234 @@ function taskModalDayHTML(showFreshCL){
       mRegistrySectionHTML()+mColSectionHTML()+mSkillsSectionHTML()+
     '</div>'+
     '</div>';
+}
+// ── Tareas que se completan solas al entrenar ─────────────────────────────────
+// t.trainLink = {conds:[{k, id?, n}]}. Cada condición pide n registros de Entrenar del día:
+//   any = cualquier cosa · rut = cualquier rutina · act = cualquier actividad (GPS, importada o a mano)
+//   tpl = una rutina concreta · atype = un tipo de actividad · cat = una categoría de rutinas.
+// Cuenta todo lo que quede en el historial: con temporizador, GPS, importado de Salud o «por mi cuenta».
+// Un registro sirve para una sola condición (así «Movilidad + otra cosa» exige dos sesiones distintas).
+function trainCats(){ return (S.trainCats||[]).filter(function(c){ return !c.del; }); }
+function trainCatName(id){ var c = trainCats().find(function(x){ return x.id===id; }); return c ? c.name : ''; }
+function trainIsRoutineTpl(tp){ return !!tp && tp.kind!=='breath' && tp.kind!=='estudio'; }
+function trainEntries(dateKey){
+  var out = [];
+  (S.timerHistory||[]).forEach(function(h){
+    if(h.del || h.date!==dateKey) return;
+    if(h.actId){ var a = (S.activities||[]).find(function(x){ return x.id===h.actId; }); out.push({kind:'act', atype:a?a.type:'otro'}); return; }
+    if(h.tplId){ var tp = timerTplAll().find(function(x){ return x.id===h.tplId; }); if(tp && !trainIsRoutineTpl(tp)) return; out.push({kind:'rut', tplId:h.tplId, cat:tp?(tp.cat||null):null}); }
+  });
+  return out;
+}
+function trainCondMatch(c, e){
+  switch(c.k){
+    case 'any': return true;
+    case 'rut': return e.kind==='rut';
+    case 'act': return e.kind==='act';
+    case 'tpl': return e.kind==='rut' && e.tplId===c.id;
+    case 'atype': return e.kind==='act' && e.atype===c.id;
+    case 'cat': return e.kind==='rut' && e.cat===c.id;
+  }
+  return false;
+}
+function trainLinkEval(t, dateKey){
+  var L = t && t.trainLink; if(!L || !L.conds || !L.conds.length) return null;
+  var E = trainEntries(dateKey), slots = [];
+  L.conds.forEach(function(c, ci){ for(var k=0; k<Math.max(1, Math.min(9, c.n||1)); k++) slots.push(ci); });
+  var ofEntry = E.map(function(){ return -1; });
+  function place(si, seen){
+    for(var ei=0; ei<E.length; ei++){
+      if(seen[ei] || !trainCondMatch(L.conds[slots[si]], E[ei])) continue;
+      seen[ei] = 1;
+      if(ofEntry[ei]<0 || place(ofEntry[ei], seen)){ ofEntry[ei] = si; return true; }
+    }
+    return false;
+  }
+  var have = 0; for(var si=0; si<slots.length; si++){ if(place(si, {})) have++; }
+  var per = L.conds.map(function(){ return 0; }); ofEntry.forEach(function(si){ if(si>=0) per[slots[si]]++; });
+  return {have:have, need:slots.length, per:per};
+}
+function trainLinkDate(t){
+  var today = todayStr();
+  if(t.date) return t.date<=today ? t.date : null;
+  try{ return tasksForDateKey(today).some(function(x){ return x.id===t.id; }) ? today : null; }catch(e){ return null; }
+}
+function trainCondLabel(c){
+  var n = Math.max(1, c.n||1), cosa = n===1 ? '1 cosa' : n+' cosas', unit = function(w1, wn){ return n===1 ? '1 '+w1 : n+' '+wn; };
+  switch(c.k){
+    case 'any': return cosa+' de Entrenar';
+    case 'rut': return unit('rutina','rutinas');
+    case 'act': return unit('actividad','actividades');
+    case 'tpl': var tp = timerTplAll().find(function(x){ return x.id===c.id; }); return (n>1?n+' × ':'')+'«'+(tp?tp.name:'rutina borrada')+'»';
+    case 'atype': var ty = ACT_TYPES.find(function(x){ return x.id===c.id; }); return unit((ty?ty.name:'actividad').toLowerCase(), (ty?ty.name:'actividad').toLowerCase()+' (sesiones)');
+    case 'cat': return cosa+' de «'+(trainCatName(c.id)||'categoría borrada')+'»';
+  }
+  return '';
+}
+function trainLinkSummary(L){
+  if(!L || !L.conds || !L.conds.length) return '';
+  return L.conds.map(trainCondLabel).join(' y ');
+}
+var _tlT = null, _tlBusy = false;
+function trainLinkSyncSoon(ms){ clearTimeout(_tlT); _tlT = setTimeout(trainLinkSync, ms||500); }
+function trainLinkSync(){
+  if(_tlBusy) return; _tlBusy = true;
+  try{
+    (S.tasks||[]).filter(function(t){ return !!t.trainLink; }).map(function(t){ return t.id; }).forEach(function(id){
+      var t = S.tasks.find(function(x){ return x.id===id; }); if(!t || isSkipped(t)) return;
+      if((t.checklist&&t.checklist.length) || (t.qty||1)>1) return;
+      var d = trainLinkDate(t); if(!d) return;
+      var ev = trainLinkEval(t, d); if(!ev) return;
+      var ok = ev.have>=ev.need, done = isDone(t);
+      if(ok && !done){
+        finishUpdate(Object.assign({}, t, {done:true, prog:1, trainAuto:d}), true, 1);
+        toast('✓ «'+t.text+'» completada al entrenar');
+      } else if(!ok && done && t.trainAuto===d){
+        finishUpdate(Object.assign({}, t, {done:false, prog:0, trainAuto:null}), false, -1);
+      }
+    });
+  }catch(e){}
+  _tlBusy = false;
+}
+(function(){
+  var a = timerHistAward; timerHistAward = function(){ var r = a.apply(this, arguments); trainLinkSyncSoon(); return r; };
+  var b = timerHistRevoke; timerHistRevoke = function(){ var r = b.apply(this, arguments); trainLinkSyncSoon(); return r; };
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) trainLinkSyncSoon(1500); });
+  setTimeout(trainLinkSync, 3500);
+})();
+
+// Hoja «Completar al entrenar» (editor de la tarea)
+var TL = null;
+function tlOptions(){
+  var o = [{k:'any', t:'Cualquier cosa', s:'Rutina, actividad, importada o a mano'}, {k:'rut', t:'Cualquier rutina'}, {k:'act', t:'Cualquier actividad', s:'GPS, importada o a mano'}];
+  return o;
+}
+function mTrainSectionHTML(){
+  var L = M.task && M.task.trainLink, on = !!(L && L.conds && L.conds.length);
+  var blocked = (M.hasCL || M.hasQty);
+  return '<div class="frow" style="margin-top:16px;"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">Completar al entrenar'+infoBtn('trainlink')+'</div>'+
+    '<button type="button" class="tog" id="m-train-tog" onclick="mToggleTrain()" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button></div>'+
+    '<div id="m-train-area">'+mTrainAreaHTML()+'</div>';
+}
+function mTrainAreaHTML(){
+  var L = M.task && M.task.trainLink, on = !!(L && L.conds && L.conds.length);
+  if(!on) return '';
+  if(M.hasCL || M.hasQty) return '<div style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.5;">Esta opción funciona con tareas «Simple». Cambia el tipo de meta o quítala.</div>';
+  return '<button type="button" onclick="openTrainLinkSheet()" style="width:100%;margin-top:10px;display:flex;align-items:center;gap:10px;text-align:left;background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:14px;padding:12px 14px;cursor:pointer;font-family:Inter,sans-serif;">'+
+    '<span style="color:var(--accent-text);display:inline-flex;">'+ico('bolt',18,1.9)+'</span>'+
+    '<span style="flex:1;min-width:0;"><span style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-text);">Se marca cuando hagas</span>'+
+    '<span style="display:block;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.35;margin-top:2px;">'+esc(trainLinkSummary(L))+'</span></span>'+
+    '<span style="color:var(--accent-text);display:inline-flex;transform:rotate(-90deg);">'+ico('chev',16,2)+'</span></button>';
+}
+function mToggleTrain(){
+  var L = M.task.trainLink;
+  if(L && L.conds && L.conds.length){ delete M.task.trainLink; mTrainRefresh(); return; }
+  if(M.hasCL || M.hasQty){ toast('Funciona con tareas «Simple»: cambia el tipo de meta'); return; }
+  M.task.trainLink = {conds:[{k:'any', n:1}]};
+  mTrainRefresh(); openTrainLinkSheet();
+}
+function mTrainRefresh(){
+  var L = M.task.trainLink, on = !!(L && L.conds && L.conds.length);
+  var tog = document.getElementById('m-train-tog'); if(tog){ tog.style.background = on?'var(--accent)':'var(--muted-soft)'; var k = tog.querySelector('.tok'); if(k) k.style.left = (on?22:2)+'px'; }
+  var a = document.getElementById('m-train-area'); if(a) a.innerHTML = mTrainAreaHTML();
+}
+function openTrainLinkSheet(){
+  var cur = M.task.trainLink;
+  TL = {conds: JSON.parse(JSON.stringify((cur && cur.conds && cur.conds.length) ? cur.conds : [{k:'any', n:1}])), pick:null};
+  removeOverlay('train-link');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='train-link'; ov.style.zIndex = 1300;
+  ov.addEventListener('click', function(e){ if(e.target===ov) tlClose(); });
+  document.body.appendChild(ov); tlDraw();
+}
+function tlClose(){ TL = null; removeOverlay('train-link'); }
+function tlChip(on, label, call, sub){
+  return '<button type="button" onclick="'+call+'" style="text-align:left;padding:10px 14px;border-radius:14px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';cursor:pointer;font-family:Inter,sans-serif;">'+
+    '<span style="display:block;font-size:13.5px;font-weight:700;color:'+(on?'var(--accent-text)':'var(--ink)')+';">'+esc(label)+'</span>'+(sub?'<span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(sub)+'</span>':'')+'</button>';
+}
+function tlPickerHTML(i){
+  var c = TL.conds[i], h = '';
+  var tpls = timerTplAll().filter(trainIsRoutineTpl), cats = trainCats();
+  h += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">';
+  h += tlChip(c.k==='any', 'Cualquier cosa', 'tlSet('+i+',\'any\')', 'Rutina, actividad, importada o hecha por tu cuenta');
+  h += tlChip(c.k==='rut', 'Cualquier rutina', 'tlSet('+i+',\'rut\')');
+  h += tlChip(c.k==='act', 'Cualquier actividad', 'tlSet('+i+',\'act\')', 'Correr, caminar, ciclismo u otra · GPS, importada o a mano');
+  h += '</div>';
+  h += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Una rutina en particular</div>';
+  h += tpls.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+tpls.map(function(tp){ var on = c.k==='tpl' && c.id===tp.id; return '<button type="button" onclick="tlSet('+i+',\'tpl\',\''+tp.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(tp.name)+'</button>'; }).join('')+'</div>'
+    : '<div style="font-size:12.5px;color:var(--muted);">Aún no tienes rutinas. Créalas en Enfoque › Entrenar.</div>';
+  h += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Un tipo de actividad</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+
+    ACT_TYPES.map(function(ty){ var on = c.k==='atype' && c.id===ty.id; return '<button type="button" onclick="tlSet('+i+',\'atype\',\''+ty.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(ty.id==='otro'?'Otra actividad':ty.name)+'</button>'; }).join('')+'</div>';
+  h += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Una categoría de rutinas</div>';
+  h += cats.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+cats.map(function(ct){ var on = c.k==='cat' && c.id===ct.id, nr = tpls.filter(function(tp){ return tp.cat===ct.id; }).length; return '<button type="button" onclick="tlSet('+i+',\'cat\',\''+ct.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(ct.name)+' <span style="font-weight:600;color:var(--muted);">· '+nr+'</span></button>'; }).join('')+'</div>'
+    : '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;">Todavía no hay categorías. Asígnalas desde el ⋯ de cada rutina (Enfoque › Entrenar › «Categoría»), por ejemplo Calentamiento o Pliometría.</div>';
+  return h;
+}
+function tlDraw(){
+  var ov = document.getElementById('train-link'); if(!ov || !TL) return;
+  var rows = TL.conds.map(function(c, i){
+    var open = TL.pick===i;
+    return '<div style="background:var(--bg);border-radius:16px;padding:12px;margin-bottom:10px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<span style="display:flex;align-items:center;background:var(--paper);border:1.5px solid var(--line);border-radius:12px;flex-shrink:0;">'+
+          '<button type="button" onclick="tlN('+i+',-1)" aria-label="Menos" style="width:32px;height:38px;border:none;background:none;color:var(--accent-text);font-size:19px;font-weight:700;cursor:pointer;">−</button>'+
+          '<span style="min-width:22px;text-align:center;font-weight:800;font-size:16px;color:var(--ink);">'+(c.n||1)+'</span>'+
+          '<button type="button" onclick="tlN('+i+',1)" aria-label="Más" style="width:32px;height:38px;border:none;background:none;color:var(--accent-text);font-size:19px;font-weight:700;cursor:pointer;">+</button></span>'+
+        '<button type="button" onclick="tlPick('+i+')" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;background:var(--paper);border:1.5px solid '+(open?'var(--accent)':'var(--line)')+';border-radius:12px;padding:10px 12px;cursor:pointer;font-family:Inter,sans-serif;">'+
+          '<span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.3;">'+esc(trainCondLabel(Object.assign({}, c, {n:1})).replace(/^1 /,'').replace(/^cosa de Entrenar$/,'Cualquier cosa de Entrenar'))+'</span>'+
+          '<span style="color:var(--muted);display:inline-flex;transform:'+(open?'rotate(180deg)':'none')+';">'+ico('chev',15,2)+'</span></button>'+
+        (TL.conds.length>1 ? '<button type="button" onclick="tlDel('+i+')" aria-label="Quitar condición" style="width:34px;height:38px;border:none;background:none;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">'+ico('x',16,2)+'</button>' : '')+
+      '</div>'+(open ? tlPickerHTML(i) : '')+'</div>';
+  }).join('');
+  var L = {conds: TL.conds};
+  brPutSheet(ov, '<div class="sheet" style="padding-top:0;padding-bottom:0;max-height:88vh;overflow-y:auto;">'+
+    '<div style="position:sticky;top:0;z-index:5;background:var(--paper);display:flex;justify-content:space-between;align-items:flex-start;padding:18px 0 10px;"><div><span class="serif" style="font-weight:700;font-size:21px;">Completar al entrenar</span>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:4px;max-width:290px;">La tarea se marca sola al cumplir esto en Entrenar. Cuenta lo hecho con temporizador, GPS, importado o «por mi cuenta».</div></div>'+
+      '<button type="button" class="st-x" onclick="tlClose()" aria-label="Cerrar">×</button></div>'+
+    '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:8px 0 8px;">Hay que hacer</div>'+rows+
+    (TL.conds.length<4 ? '<button type="button" onclick="tlAdd()" style="width:100%;padding:12px;border:1.5px dashed var(--line);border-radius:14px;background:none;color:var(--accent-text);font-size:13.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Y además…</button>' : '')+
+    '<div style="margin-top:14px;padding:12px 14px;background:var(--accent-bg);border-radius:14px;font-size:13px;line-height:1.5;color:var(--ink);"><b style="color:var(--accent-text);">Resumen · </b>'+esc(trainLinkSummary(L))+(TL.conds.length>1?'<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Cada sesión cuenta para una sola condición.</div>':'')+'</div>'+
+    '<div style="position:sticky;bottom:0;background:var(--paper);display:flex;gap:10px;padding:14px 0 18px;margin-top:6px;border-top:1px solid var(--line-soft);">'+
+      '<button type="button" class="sbtn" style="flex:1;" onclick="tlSave()">Listo</button>'+
+      '<button type="button" class="cbtn" style="flex:0 0 auto;" onclick="tlRemove()">Quitar vínculo</button></div></div>');
+}
+function tlPick(i){ TL.pick = TL.pick===i ? null : i; tlDraw(); }
+function tlSet(i, k, id){ TL.conds[i].k = k; if(id) TL.conds[i].id = id; else delete TL.conds[i].id; TL.pick = null; tlDraw(); }
+function tlN(i, d){ TL.conds[i].n = Math.max(1, Math.min(9, (TL.conds[i].n||1)+d)); tlDraw(); }
+function tlAdd(){ TL.conds.push({k:'any', n:1}); TL.pick = TL.conds.length-1; tlDraw(); }
+function tlDel(i){ TL.conds.splice(i,1); TL.pick = null; tlDraw(); }
+function tlSave(){
+  var conds = TL.conds.filter(function(c){ return c.k==='any'||c.k==='rut'||c.k==='act' || !!c.id; });
+  M.task.trainLink = conds.length ? {conds:conds} : undefined; if(!conds.length) delete M.task.trainLink;
+  tlClose(); mTrainRefresh();
+}
+function tlRemove(){ delete M.task.trainLink; tlClose(); mTrainRefresh(); }
+// Chip de avance en la fila de la tarea: «⚡ 1/2»
+function trainChipHTML(t){
+  if(!t.trainLink || isDone(t)) return '';
+  var d = trainLinkDate(t) || todayStr(), ev = trainLinkEval(t, d); if(!ev) return '';
+  return '<button onclick="event.stopPropagation();setTab(\'timer\')" title="Se completa al entrenar: '+esc(trainLinkSummary(t.trainLink))+'" aria-label="Se completa al entrenar" style="background:var(--accent-bg);border:none;color:var(--accent-text);border-radius:999px;height:26px;padding:0 9px;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;">'+ico('bolt',12,2.2)+ev.have+'/'+ev.need+'</button>';
+}
+// Categorías de rutinas (para «una categoría de Entrenar»)
+function openTplCatSheet(tplId){
+  var tp = timerTplAll().find(function(x){ return x.id===tplId; }); if(!tp) return;
+  removeOverlay('tpl-cat');
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='tpl-cat'; ov.addEventListener('click', function(e){ if(e.target===ov) removeOverlay('tpl-cat'); });
+  document.body.appendChild(ov);
+  var chip = function(on, label, call){ return '<button type="button" onclick="'+call+'" style="padding:9px 14px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(label)+'</button>'; };
+  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:21px;">Categoría</span><div class="st-sub">«'+esc(tp.name)+'» · sirve para vincular tareas a «cualquier cosa de Calentamiento», por ejemplo.</div></div><button class="st-x" onclick="removeOverlay(\'tpl-cat\')" aria-label="Cerrar">×</button></div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">'+chip(!tp.cat, 'Sin categoría', 'tplSetCat(\''+tplId+'\',null)')+trainCats().map(function(c){ return chip(tp.cat===c.id, c.name, 'tplSetCat(\''+tplId+'\',\''+c.id+'\')'); }).join('')+'</div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;"><input id="tpl-cat-new" class="finp" maxlength="20" placeholder="Nueva categoría (Calentamiento, Pliometría…)" style="flex:1;"/><button type="button" class="sbtn" style="flex:0 0 auto;padding:0 18px;" onclick="tplNewCat(\''+tplId+'\')">Crear</button></div></div>');
+}
+function tplSetCat(tplId, catId){
+  S.timerTemplates = (S.timerTemplates||[]).map(function(t){ return t.id===tplId ? Object.assign({}, t, {cat:catId||null, updatedAt:Date.now()}) : t; });
+  saveState(); removeOverlay('tpl-cat'); toast(catId ? 'Categoría: '+trainCatName(catId) : 'Sin categoría'); render(); trainLinkSyncSoon();
+}
+function tplNewCat(tplId){
+  var e = document.getElementById('tpl-cat-new'), name = String((e&&e.value)||'').trim().slice(0,20); if(!name){ toast('Escribe un nombre'); return; }
+  var ex = trainCats().find(function(c){ return c.name.toLowerCase()===name.toLowerCase(); });
+  var id = ex ? ex.id : uid();
+  if(!ex){ if(!S.trainCats) S.trainCats = []; S.trainCats.push({id:id, name:name, updatedAt:Date.now()}); }
+  tplSetCat(tplId, id);
 }
 function mToggleDayMore(){
   M._dayMoreOpen = !M._dayMoreOpen;
@@ -26269,16 +26587,29 @@ function beDraw(){
       '<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);"><span style="width:44px;">Volumen</span><input type="range" min="0" max="100" value="'+Math.round(sc.v*100)+'" oninput="BE.b.snd[\''+k+'\'].v=this.value/100" style="flex:1;accent-color:var(--accent);"/></div>'+
       '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);"><span style="width:44px;">Tono</span>'+[['Grave',.75],['Medio',1],['Agudo',1.33]].map(function(q){ var on=Math.abs(sc.p-q[1])<.01; return '<button onclick="beSnd(\''+k+'\',\'p\','+q[1]+')" style="flex:1;padding:5px 0;border-radius:9px;font-size:12px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+q[0]+'</button>'; }).join('')+'</div></div>';
   }).join('');
-  brPutSheet(ov, '<div class="sheet" style="max-height:92vh;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="serif" style="font-weight:700;font-size:18px;">'+(BE.id?'Editar':'Nueva')+' respiración</span><button onclick="removeOverlay(\'breath-ed\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
-    '<input class="finp" placeholder="Nombre (ej. Calma de la tarde)" maxlength="30" value="'+esc(BE.name)+'" oninput="BE.name=this.value" style="margin-bottom:4px;"/>'+
-    lbl('Técnica')+'<div style="display:flex;flex-wrap:wrap;gap:8px;">'+Object.keys(BR_PRESETS).map(function(k){ var on=b.preset===k; return '<button onclick="bePreset(\''+k+'\')" style="padding:8px 13px;border-radius:18px;font-size:13px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--ink-soft)')+';font-weight:600;">'+BR_PRESETS[k].label+'</button>'; }).join('')+'</div>'+
+  var fmtS = function(v){ return String(v).replace('.',','); };
+  var cycTxt = fmtS(ph.cycle)+' s';
+  var phBar = sigh ? '' : keys.map(function(k,i){ return b.pat[i]>0 ? '<i style="flex:'+b.pat[i]+';height:6px;border-radius:3px;background:'+BR_COL[k]+';display:block;"></i>' : ''; }).join('');
+  var orbC = BR_COL.in;
+  var preview = '<div style="border-radius:22px;background:#16212a;padding:14px 16px 16px;color:#fff;">'+
+    '<input class="finp" placeholder="Nombre de la respiración" maxlength="30" value="'+esc(BE.name)+'" oninput="BE.name=this.value" aria-label="Nombre" style="width:100%;box-sizing:border-box;border:none;outline:none;background:none;font-size:17px;font-weight:700;color:#fff;padding:2px 0 8px;margin-bottom:0;"/>'+
+    '<div style="display:flex;align-items:center;gap:16px;"><div style="width:96px;height:96px;border-radius:50%;border:6px solid #2a3a46;display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;"><div style="width:54px;height:54px;border-radius:50%;background:'+orbC+';"></div></div>'+
+    '<div style="flex:1;min-width:0;"><div style="font-size:26px;font-weight:700;">'+cycTxt+'</div><div style="font-size:12px;opacity:.75;margin-top:2px;">por ciclo · '+fmtS(Math.round(600/ph.cycle)/10)+' resp/min</div>'+(phBar?'<div style="display:flex;gap:3px;margin-top:10px;">'+phBar+'</div>':'')+'</div></div>'+
+    '<div style="display:flex;gap:6px;margin-top:12px;">'+[['orb','Orbe'],['ring','Ciclo'],['graph','Onda']].map(function(q){ var on=b.view===q[0]; return '<button type="button" onclick="beView(\''+q[0]+'\')" style="font-size:11.5px;padding:5px 12px;border-radius:12px;border:none;background:#2a3a46;color:#fff;cursor:pointer;font-family:Inter,sans-serif;opacity:'+(on?'1':'.55')+';font-weight:'+(on?'700':'500')+';">'+q[1]+'</button>'; }).join('')+'</div></div>';
+  var tiles = sigh ? steps : '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">'+[0,1,2,3].map(function(i){
+    return '<div style="border-radius:16px;border:1.5px solid var(--line);background:var(--paper);padding:10px 12px;"><div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;"><i style="width:11px;height:11px;border-radius:6px;background:'+BR_COL[keys[i]]+';display:block;"></i>'+names[i]+'</div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;"><button type="button" aria-label="Menos" onclick="beAdj('+i+',-1)" style="width:32px;height:32px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);font-size:17px;color:var(--ink);cursor:pointer;">−</button><b style="font-size:17px;">'+fmtS(b.pat[i])+' s</b><button type="button" aria-label="Más" onclick="beAdj('+i+',1)" style="width:32px;height:32px;border-radius:10px;border:1.5px solid var(--line);background:var(--paper);font-size:17px;color:var(--ink);cursor:pointer;">+</button></div></div>';
+  }).join('')+'</div>';
+  var durChips = '<div style="display:flex;gap:6px;">'+[3,5,10,15].map(function(m){ var on=b.min===m; return '<button type="button" onclick="BE.b.min='+m+';beRe()" style="height:36px;flex:1;border-radius:18px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';cursor:pointer;font-family:Inter,sans-serif;">'+m+' min</button>'; }).join('')+'</div>';
+  brPutSheet(ov, '<div class="sheet" style="max-height:92vh;"><div style="display:flex;justify-content:flex-end;margin:-10px -12px 0 0;"><button type="button" aria-label="Cerrar" onclick="removeOverlay(\'breath-ed\')" style="width:44px;height:44px;border:none;background:none;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;">×</button></div>'+
+    preview+
+    lbl('Técnica')+'<div style="display:flex;flex-wrap:wrap;gap:6px;">'+Object.keys(BR_PRESETS).map(function(k){ var on=b.preset===k; return '<button onclick="bePreset(\''+k+'\')" style="padding:8px 13px;border-radius:18px;font-size:13px;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';font-weight:'+(on?'700':'600')+';">'+BR_PRESETS[k].label+'</button>'; }).join('')+'</div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;">'+BR_PRESETS[b.preset].sub+'</div>'+
-    lbl('Ritmo de cada fase')+steps+
-    '<div style="font-size:12px;color:var(--muted);margin:2px 0 4px;">Ciclo de '+String(ph.cycle).replace('.',',')+' s · ≈'+(Math.round(600/ph.cycle)/10).toString().replace('.',',')+' resp/min</div>'+
-    brStep('Duración', b.min, 'min', 'beMin(-1)', 'beMin(1)', '≈'+cyc+' ciclos · '+fmtDur(brTotalSec(b)))+
+    lbl('Fases')+tiles+
+    lbl('Duración')+durChips+
+    brStep('Duración exacta', b.min, 'min', 'beMin(-1)', 'beMin(1)', '≈'+cyc+' ciclos · '+fmtDur(brTotalSec(b)))+
     (b.preset==='r478'&&b.min>3?'<div style="font-size:11px;color:#b8651b;background:#fdf1e3;border-radius:9px;padding:8px 10px;margin-top:4px;">4-7-8 puede marear al comienzo: empieza con ≈4 ciclos (2 min) y sigue sentado.</div>':'')+
-    lbl('Pantalla')+'<div style="display:flex;gap:8px;">'+[['orb','Orbe'],['ring','Ciclo'],['graph','Onda']].map(function(q){ var on=b.view===q[0]; return '<button onclick="beView(\''+q[0]+'\')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;cursor:pointer;font-family:Inter,sans-serif;background:#16222a;border:2px solid '+(on?'var(--accent)':'transparent')+';color:#fff;font-size:12px;font-weight:600;">'+beViewThumb(q[0])+q[1]+'</button>'; }).join('')+'</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-top:6px;">Podrás cambiarla durante la sesión.</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px;">La pantalla (Orbe, Ciclo u Onda) también se puede cambiar durante la sesión.</div>'+
     lbl('Sonido por fase')+snd+
     lbl('Sonido de fondo')+ambChipsHTML(b.amb,'beAmb')+
     (b.amb?'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--muted);"><span style="width:52px;">Volumen</span><input type="range" min="5" max="100" value="'+Math.round((b.ambVol==null?.4:b.ambVol)*100)+'" oninput="BE.b.ambVol=this.value/100;ambSetPrevVol(BE.b.ambVol)" style="flex:1;accent-color:var(--accent);"/></div>':'')+
@@ -27296,20 +27627,47 @@ function openExerciseEditor(id){
     '<button onclick="saveExerciseEditor()" style="flex:1;background:var(--accent);border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:Inter,sans-serif;">Guardar</button></div></div>';
   document.body.appendChild(ov);
 }
+function exeOpen(k){ if(!EXE) return; EXE._open = (EXE._open===k) ? null : k; mRerenderTimerArea(); }
 function exEditorAreaHTML(){
   var set = M.timer.sets[0], isReps = set.kind==='reps';
-  var lbl = function(t){ return '<div style="font-size:11px;color:var(--muted);margin:14px 0 6px;">'+t+'</div>'; };
-  return '<input type="text" placeholder="Nombre del ejercicio" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" class="finp" style="margin-bottom:4px;"/>'+
-    lbl('Grupo')+'<select class="finp" onchange="EXE.gid=this.value" style="margin:0;font-size:13px;"><option value="">Sin grupo</option>'+exGroupList().map(function(g){ return '<option value="'+g.id+'"'+(EXE.gid===g.id?' selected':'')+'>'+esc(g.name)+'</option>'; }).join('')+'</select>'+
-    exCatsEditorHTML()+exZonesEditorHTML()+
-    timerSetKindHTML(set)+
-    lbl(isReps?'Repeticiones (meta)':'Duración')+
-    (isReps ? repsInputHTML(set) : durInputHTML(set.sec||30,'set',set.id,'sec',false)+timerQuickDurHTML(set))+
-    timerSetRegHTML(set)+animLinkHTML(set)+
-    timerSetStepperHTML(set,'reps','Series de este ejercicio','',1)+
-    (set.reps>1?timerSetStepperHTML(set,'restReps','Descanso entre series','s',5):'')+
-    timerSetStepperHTML(set,'restAfter','Descanso al terminar este ejercicio','s',5)+
-    timerSetStyleHTML(set);
+  var col = set.color || CATEGORY_COLORS[0];
+  var fm = function(v){ v=Math.max(0,v|0); return Math.floor(v/60)+':'+('0'+(v%60)).slice(-2); };
+  var seg = function(k,l,on){ return '<button type="button" onclick="mSetSetKind(\''+set.id+'\',\''+k+'\')" style="flex:1;height:38px;border:none;border-radius:11px;background:'+(on?'var(--paper)':'none')+';'+(on?'box-shadow:0 1px 3px rgba(43,33,25,.15);':'')+'font-size:13px;font-weight:'+(on?700:600)+';color:'+(on?'var(--accent)':'var(--muted)')+';cursor:pointer;font-family:Inter,sans-serif;">'+l+'</button>'; };
+  var swatches = CATEGORY_COLORS.slice(0,6).map(function(c){ return '<button type="button" aria-label="Color" onclick="mSetSetStyle(\''+set.id+'\',\'color\',\''+c+'\')" style="width:30px;height:30px;border-radius:50%;border:none;padding:0;background:'+c+';cursor:pointer;'+(col===c?'outline:2.5px solid var(--ink);outline-offset:2px;':'')+'"></button>'; }).join('');
+  var head = '<div style="border-radius:22px;background:'+col+'22;border:1.5px solid '+col+'66;padding:14px 16px;">'+
+    '<div style="display:flex;align-items:center;gap:12px;"><span style="width:44px;height:44px;border-radius:14px;background:'+col+';flex:none;display:flex;align-items:center;justify-content:center;">'+(set.icon?exIconSVG(set.icon,22,'#fff',2):'')+'</span>'+
+    '<input type="text" placeholder="Nombre del ejercicio" value="'+esc(set.name||'')+'" oninput="mUpdateTimerSet(\''+set.id+'\',\'name\',this.value)" aria-label="Nombre del ejercicio" style="flex:1;min-width:0;border:none;outline:none;background:none;font-size:21px;font-weight:700;font-family:Inter,sans-serif;color:var(--ink);padding:4px 0;"/></div>'+
+    '<div style="display:flex;gap:9px;margin-top:12px;align-items:center;flex-wrap:wrap;">'+swatches+'</div></div>';
+  var kind = '<div style="display:flex;background:var(--bg);border-radius:14px;padding:3px;gap:2px;margin-top:14px;">'+seg('time','Tiempo',!isReps)+seg('reps','Repeticiones',isReps)+'</div>';
+  var rb = 'width:46px;height:46px;border-radius:50%;border:1.5px solid var(--line);background:var(--paper);font-size:22px;color:var(--ink);cursor:pointer;padding:0;font-family:Inter,sans-serif;';
+  var cnt = set.count||10;
+  var value = isReps
+    ? '<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:16px 0 4px;"><button type="button" aria-label="Menos" onclick="mUpdateTimerSet(\''+set.id+'\',\'count\','+(cnt-1)+')" style="'+rb+'">−</button>'+
+      '<div style="text-align:center;min-width:110px;"><input type="number" inputmode="numeric" min="1" max="999" value="'+cnt+'" onchange="mUpdateTimerSet(\''+set.id+'\',\'count\',this.value)" aria-label="Repeticiones" style="width:110px;text-align:center;border:none;background:none;outline:none;font-size:40px;font-weight:700;font-family:Inter,sans-serif;color:var(--ink);padding:0;"/><div style="font-size:12px;color:var(--muted);margin-top:-2px;">repeticiones</div></div>'+
+      '<button type="button" aria-label="Más" onclick="mUpdateTimerSet(\''+set.id+'\',\'count\','+(cnt+1)+')" style="'+rb+'">+</button></div>'
+    : '<div style="display:flex;justify-content:center;margin:16px 0 4px;">'+durInputHTML(set.sec||30,'set',set.id,'sec',false)+'</div>'+timerQuickDurHTML(set);
+  var mini = function(label, val, dn, up){ return '<div style="border-radius:16px;background:var(--bg);padding:10px 6px;text-align:center;"><div style="font-size:11px;color:var(--muted);font-weight:600;">'+label+'</div><div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;"><button type="button" aria-label="Menos" onclick="'+dn+'" style="width:28px;height:28px;border-radius:9px;border:1.5px solid var(--line);background:var(--paper);font-size:15px;color:var(--ink);cursor:pointer;padding:0;">−</button><b style="font-size:15px;min-width:34px;">'+val+'</b><button type="button" aria-label="Más" onclick="'+up+'" style="width:28px;height:28px;border-radius:9px;border:1.5px solid var(--line);background:var(--paper);font-size:15px;color:var(--ink);cursor:pointer;padding:0;">+</button></div></div>'; };
+  var ch = function(f,d){ return 'mChangeTimerSetField(\''+set.id+'\',\''+f+'\','+d+')'; };
+  var minis = [mini('Series', set.reps||1, ch('reps',-1), ch('reps',1))];
+  if((set.reps||1)>1) minis.push(mini('Entre series', fm(set.restReps==null?mTimerSetAutoValue(set,'restReps'):set.restReps), ch('restReps',-5), ch('restReps',5)));
+  minis.push(mini('Al terminar', fm(set.restAfter==null?mTimerSetAutoValue(set,'restAfter'):set.restAfter), ch('restAfter',-5), ch('restAfter',5)));
+  var minisHTML = '<div style="display:grid;grid-template-columns:repeat('+minis.length+',minmax(0,1fr));gap:8px;margin-top:14px;">'+minis.join('')+'</div>';
+  var grp = exGroupList().find(function(g){return g.id===EXE.gid;});
+  var an = (!featureLocked('anim') && set.animId) ? anById(set.animId) : null;
+  var catN = (EXE.cats||[]).length;
+  var catTxt = catN ? ((EXE.cats[0]&&EXE.cats[0].name)||EXE.cats[0]||'')+(catN>1?' +'+(catN-1):'') : 'Ninguna';
+  var zTxt = zoneNames(EXE.zSpec||[]) || zoneNames(EXE.zGen||[]) || 'Sin elegir';
+  var tile = function(k,l,v){ var on = EXE._open===k; return '<button type="button" onclick="exeOpen(\''+k+'\')" style="min-width:0;height:76px;border-radius:16px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';text-align:left;padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;"><span style="font-size:11.5px;color:var(--muted);font-weight:600;">'+l+'</span><span style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;text-align:left;">'+esc(String(v))+'</span></button>'; };
+  var tiles = '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;">'+tile('grp','Grupo',grp?grp.name:'Sin grupo')+tile('cat','Categorías',catTxt)+tile('zone','Parte del cuerpo',zTxt)+(featureLocked('anim')?'':tile('anim','Animación',an?an.name:'Ninguna'))+'</div>';
+  var panel = '';
+  if(EXE._open==='grp') panel = '<select class="finp" onchange="EXE.gid=this.value;mRerenderTimerArea()" style="margin:0;font-size:13px;"><option value="">Sin grupo</option>'+exGroupList().map(function(g){ return '<option value="'+g.id+'"'+(EXE.gid===g.id?' selected':'')+'>'+esc(g.name)+'</option>'; }).join('')+'</select>';
+  else if(EXE._open==='cat') panel = exCatsEditorHTML();
+  else if(EXE._open==='zone') panel = exZonesEditorHTML();
+  else if(EXE._open==='anim') panel = animLinkHTML(set);
+  if(panel) panel = '<div style="background:var(--bg);border-radius:14px;padding:4px 14px 12px;margin-top:8px;">'+panel+'</div>';
+  var kd = timerSetKindHTML(set), cut = kd.indexOf('<div class="frow"');
+  var more = '<details class="st-adv" style="margin-top:12px;"><summary>Más ajustes del ejercicio</summary><div style="padding-bottom:12px;">'+(cut>=0?kd.slice(cut):'')+timerSetRegHTML(set)+timerSetStyleHTML(set)+'</div></details>';
+  return head+kind+value+minisHTML+tiles+panel+more;
 }
 
 // ── Enlaces ejercicio → set → rutina ─────────────────────────────────────────────
@@ -27611,13 +27969,78 @@ function timerQuickDurHTML(set){
 // temporizador sigue viendo la lista plana de siempre; solo el editor los
 // junta en una fila plegable (con la opción de "separar" en ejercicios).
 var M_OPEN_GRP = {};
+
+// ── Rutina: barras de colores por bloque (editor de rutinas) ───────────────
+function rtSetSec(st){ try{ return timerEstimateTotalSec({sets:[st],rounds:1,restBetween:0,restBetweenRounds:0}); }catch(e){ return st.sec||30; } }
+function rtRestAfter(st, timer, isLast){ if(isLast) return 0; return st.restAfter!=null && st.restAfter!=='' ? (+st.restAfter||0) : (timer.restBetween||0); }
+function rtBarHTML(segs, h){
+  // segs: [{w:segundos, c:color}] · {w, c:null} = descanso (hueco)
+  var tot = 0; segs.forEach(function(x){ tot += x.w; });
+  var minGap = tot*0.015;
+  return '<div style="display:flex;gap:3px;height:'+(h||8)+'px;width:100%;">'+segs.map(function(x){
+    if(!x.c) return '<i style="flex:'+Math.max(x.w, minGap)+';display:block;"></i>';
+    return '<i style="flex:'+Math.max(x.w,1)+';background:'+x.c+';border-radius:'+Math.ceil((h||8)/2)+'px;display:block;min-width:4px;"></i>';
+  }).join('')+'</div>';
+}
+function rtSetsSegs(sets, timer, withTail){
+  var out = [];
+  sets.forEach(function(st,i){
+    out.push({w:rtSetSec(st), c:st.color||CATEGORY_COLORS[i%CATEGORY_COLORS.length]});
+    var r = rtRestAfter(st, timer, i===sets.length-1 && !withTail);
+    if(r>0) out.push({w:r, c:null});
+  });
+  return out;
+}
+function rtUnits(timer){
+  var sets = timer.sets, i = 0, units = [];
+  while(i<sets.length){
+    var s0 = sets[i];
+    if(!s0.grp){ units.push({sets:[s0], name:s0.name||('Ejercicio '+(i+1)), color:s0.color||CATEGORY_COLORS[i%CATEGORY_COLORS.length]}); i++; continue; }
+    var j=i; while(j<sets.length && sets[j].grp===s0.grp) j++;
+    units.push({sets:sets.slice(i,j), grp:s0.grp, name:s0.grpName||'Bloque', color:s0.grpColor||s0.color||CATEGORY_COLORS[0]});
+    i=j;
+  }
+  return units;
+}
+function rtSummaryHTML(timer){
+  var units = rtUnits(timer); if(!units.length) return '';
+  var one = 0, whole = 0; try{ one = timerEstimateTotalSec({sets:timer.sets,rounds:1,restBetween:timer.restBetween,restBetweenRounds:0}); whole = timerEstimateTotalSec(timer); }catch(e){}
+  var segs = [], labs = [];
+  units.forEach(function(u,k){
+    var d = 0; try{ d = timerEstimateTotalSec({sets:u.sets,rounds:1,restBetween:timer.restBetween,restBetweenRounds:0}); }catch(e){}
+    segs.push({w:d, c:u.color}); labs.push('<span style="flex:'+Math.max(d,1)+';min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(u.name)+'</span>');
+    if(k<units.length-1){ var r = u.sets.length ? rtRestAfter(u.sets[u.sets.length-1], timer, false) : 0; if(r>0){ segs.push({w:r,c:null}); labs.push('<span style="flex:'+r+';"></span>'); } }
+  });
+  return '<div style="margin:0 0 12px;border-radius:18px;background:var(--bg);padding:12px 14px;">'+
+    '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;"><span style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;">UNA RONDA</span><span style="font-size:13px;font-weight:700;color:var(--ink);">'+fmtDur(one)+(timer.rounds>1?' <span style="color:var(--muted);font-weight:600;">· ×'+timer.rounds+' = '+fmtDur(whole)+'</span>':'')+'</span></div>'+
+    rtBarHTML(segs,12)+
+    '<div style="display:flex;gap:3px;margin-top:6px;font-size:10.5px;color:var(--muted);font-weight:600;">'+labs.join('')+'</div></div>';
+}
+function rtGroupCardHTML(gid, from, to){
+  var sets = M.timer.sets, mem = sets.slice(from,to), s0 = mem[0], open = !!M_OPEN_GRP[gid];
+  var col = s0.grpColor || s0.color || CATEGORY_COLORS[0], nm = s0.grpName || 'Bloque';
+  var tot = 0; try{ tot = timerEstimateTotalSec({sets:mem,rounds:1,restBetween:M.timer.restBetween,restBetweenRounds:0}); }catch(e){}
+  var h = '<div data-drag-item data-id="grp:'+gid+'" style="margin-bottom:8px;">'+
+    '<div style="border:1.5px solid '+(open?col:'var(--line)')+';border-radius:16px;background:var(--paper);padding:11px 14px '+(open?'4px':'11px')+';">'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">'+gripHTML('margin-left:-6px;')+
+      '<div onclick="mToggleGrp(\''+gid+'\')" style="flex:1;min-width:0;cursor:pointer;display:flex;align-items:baseline;gap:8px;"><span style="font-size:14.5px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(nm)+'</span><span style="font-size:12px;color:var(--muted);white-space:nowrap;">'+mem.length+' ejercicio'+(mem.length===1?'':'s')+'</span></div>'+
+      '<span onclick="mToggleGrp(\''+gid+'\')" style="font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;">'+fmtDur(tot)+'</span>'+
+      '<button type="button" onclick="mToggleGrp(\''+gid+'\')" aria-label="'+(open?'Ocultar':'Ver')+' ejercicios" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;">'+(open?'▴':'▾')+'</button>'+
+      '<button type="button" onclick="mRemoveGrp(\''+gid+'\')" aria-label="Quitar bloque" style="background:none;border:none;color:var(--muted-soft);font-size:18px;cursor:pointer;line-height:1;">×</button>'+
+    '</div>'+rtBarHTML(rtSetsSegs(mem, M.timer, false),8);
+  if(open){
+    h += '<div style="margin-top:6px;">'+mem.map(function(m,k){ return timerSetRowHTML(m, from+k, true); }).join('')+
+      '<button type="button" onclick="mUngroup(\''+gid+'\')" style="background:none;border:none;color:var(--accent-text);font-size:12px;font-weight:700;padding:8px 0 6px;cursor:pointer;font-family:Inter,sans-serif;">Separar en ejercicios sueltos</button></div>';
+  }
+  return h+'</div></div>';
+}
 function timerRowsHTML(timer){
   var out = '', i = 0, sets = timer.sets;
   while(i<sets.length){
     var s0 = sets[i];
     if(!s0.grp){ out += timerSetRowHTML(s0, i); i++; continue; }
     var j = i; while(j<sets.length && sets[j].grp===s0.grp) j++;
-    out += timerGroupRowHTML(s0.grp, i, j); i = j;
+    out += ((M && M._tplEdit && !M._exEdit && edLayoutCur()==='a') ? rtGroupCardHTML(s0.grp, i, j) : timerGroupRowHTML(s0.grp, i, j)); i = j;
   }
   return out;
 }
@@ -27821,7 +28244,7 @@ function timerAreaEdHTML(){
     return tabs+rows+add+rounds+total;
   }
   var det = hasId ? '<button type="button" onclick="openTimerDetMenu(TTE.id)" style="width:100%;display:flex;align-items:center;background:none;border:none;border-bottom:1px solid var(--line-soft);padding:8px 2px 12px;margin-bottom:10px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;text-align:left;">Detalles de la rutina</span><span style="font-size:11.5px;font-weight:500;color:var(--muted);margin-right:6px;">objetivo, intensidad…</span><span style="color:var(--muted-soft);font-size:18px;">›</span></button>' : '';
-  return det+rows+add+'<div style="height:6px;"></div>'+rounds+rests+total;
+  return det+((M._exEdit||!timer.sets.length)?'':rtSummaryHTML(timer))+rows+add+'<div style="height:6px;"></div>'+rounds+rests+total;
 }
 function timerAreaHTML(){
   if(M && M._tplEdit) return timerAreaEdHTML();
@@ -28931,6 +29354,7 @@ function mSave(){
   // tenía algún ítem; ahora se conserva siempre tal cual estaba.
   var saved=Object.assign({},M.task,{text:name,checklist:cl,qty:qty,prog:prog,done:done_,crucial:isDay?!!M.crucial:false,categoryId:isDay?(M.categoryId||null):null,hora:isDay?(M.hora||null):null,duracion:isDay?(M.duracion||60):60,date:isDay?specificDate:null,day:isDay?effectiveDay:M.task.day,notif:notifSaved,clLinkUp:(M.task.clLinkUp||null),hasCL:!!M.hasCL,clFresh:!!M.clFresh,clRule:(M.hasCL&&M.clRule&&M.clRule.mode==='kofn')?{mode:'kofn',k:Math.max(1,Math.min(M.clRule.k||1,cl.length||1))}:null,hasTimer:isDay&&!!M.hasTimer,timer:(isDay&&M.hasTimer)?M.timer:null,registryId:(M.registryId&&regById(M.registryId))?M.registryId:null,registryIds:(M.registryId?(M.registryIds||[]).filter(function(i){return i!==M.registryId&&!!regById(i);}):[]),regDir:(M.registryId&&mSelRegs().some(function(r){return r.kind==='finance';}))?((M.regDue&&M.regDue.mode&&M.regDue.mode!=='now')?(M.regDir||'out'):(M.regDir||null)):null,regPerItem:!!(M.hasCL&&M.registryId&&M.regPerItem),regDue:(M.registryId&&M.regDue&&M.regDue.mode&&M.regDue.mode!=='now')?M.regDue:null,oneShotWeek:(isDay&&!specificDate&&!!M.oneShot),repeatEveryDays:null,repeatMonths:null,repeatUntil:null});
   if(isDay&&specificDate&&M.repeatEvery>0) Object.assign(saved,mRepeatSave());
+  if(saved.trainLink && ((saved.checklist&&saved.checklist.length) || (saved.qty||1)>1)){ delete saved.trainLink; toast('Completar al entrenar solo funciona con tareas «Simple»: se quitó el vínculo'); }
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
@@ -28962,6 +29386,7 @@ function mSave(){
     wholeCompl = (!wasDoneW && nowDoneW) ? 1 : (wasDoneW && !nowDoneW ? -1 : 0);
   }
   if(M.isNew){S.tasks.push(saved);}else{S.tasks=S.tasks.map(function(t){return t.id===saved.id?saved:t;});}
+  if(saved.trainLink) trainLinkSyncSoon(900);
   clDeltas.forEach(function(d){ propagateCLLink(d.item, d.delta, d.compl); });
   if(wholeDelta || wholeCompl) propagateCLLink({linkUp:saved.clLinkUp}, wholeDelta, wholeCompl);
   removeOverlay('task-modal');saveState();checkMedals();render();
@@ -32145,7 +32570,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.13.177';
+var APP_VERSION = '2026.11.18.181';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
