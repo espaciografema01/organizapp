@@ -11189,26 +11189,37 @@ var ACT_ICO = {
   bici:'<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15.2" cy="4.8" r="1.6" fill="currentColor" stroke="none"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>',
   otro:'<path d="M3 12h4l3-8 4 16 3-8h4"/>'
 };
+function actAgo(ts){ var d = Math.round((Date.now()-ts)/86400000); return d<=0 ? 'hoy' : d===1 ? 'ayer' : 'hace '+d+' días'; }
 function actStartDraw(){
   var ov = document.getElementById('act-start'); if(!ov) return; var sel = window._actSel;
+  ov.style.cssText = 'background:var(--bg);align-items:stretch;justify-content:stretch;z-index:600;';
   var n = actLive().length, nsk = (sel.skills||[]).filter(function(id){return !!skFindAny(id);}).length, t = actType(sel.type), c = actCol(sel.type);
-  var typ = ACT_TYPES.map(function(y){ var on = sel.type===y.id; return '<button onclick="window._actSel.type=\''+y.id+'\';actStartDraw()" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;font-family:Inter,sans-serif;padding:0;opacity:'+(on?1:.5)+';">'+actBadge(y.id,52)+'<span style="font-size:11.5px;font-weight:'+(on?800:600)+';color:var(--ink);">'+y.name+'</span></button>'; }).join('');
-  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:21px;">'+t.name+'</span><div class="st-sub">Distancia, ritmo y recorrido en tiempo real.</div></div><button class="st-x" onclick="removeOverlay(\'act-start\')" aria-label="Cerrar">×</button></div>'+
-    '<div style="display:flex;gap:10px;margin:6px 0 4px;">'+typ+'</div>'+
-    '<button onclick="actBegin()" style="width:100%;margin-top:20px;padding:17px;border:none;border-radius:16px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px '+c[1]+'44;"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar</button>'+
-    '<div class="st-sub" style="text-align:center;margin-top:10px;">Usamos tu ubicación solo mientras dura la actividad. El recorrido queda en tu dispositivo.<br>'+actBgHint()+'</div>'+
-    actMapRowHTML()+
-    '<details class="st-adv"><summary>Ajustes avanzados</summary><div style="padding-bottom:12px;">'+
-      '<button class="st-row" onclick="openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, \'Habilidades de esta actividad\')"><span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Habilidades que trabaja</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+(nsk?nsk+' elegida'+(nsk===1?'':'s'):'Opcional')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
+  var last = actLive().filter(function(a){return a.type===sel.type;}).sort(function(a,b){return (b.startedAt||0)-(a.startedAt||0);})[0];
+  var typ = ACT_TYPES.map(function(y){ var on = sel.type===y.id; return '<button onclick="window._actSel.type=\''+y.id+'\';actStartDraw()" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px;padding:12px 2px 10px;border-radius:18px;border:none;cursor:pointer;font-family:Inter,sans-serif;background:'+(on?'#fff':'rgba(255,255,255,.2)')+';color:'+(on?c[1]:'#fff')+';"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+(ACT_ICO[y.id]||ACT_ICO.otro)+'</svg><span style="font-size:11.5px;font-weight:800;">'+y.name+'</span></button>'; }).join('');
+  var card = function(fn, ico, title, sub){ return '<button onclick="'+fn+'" style="text-align:left;border:1.5px solid var(--line);background:var(--paper);border-radius:18px;padding:13px 14px;cursor:pointer;font-family:Inter,sans-serif;display:flex;flex-direction:column;gap:12px;min-width:0;"><span style="color:'+c[1]+';display:flex;">'+tmIcon(ico,20)+'</span><span><span style="display:block;font-size:14px;font-weight:800;color:var(--ink);">'+title+'</span><span class="'+(title==='Dificultad'?'act-diff-sum ':'')+'" style="display:block;font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+sub+'</span></span></button>'; };
+  var cards = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+    card("openSkPicker(window._actSel.skills, function(a){window._actSel.skills=a;actStartDraw();}, 'Habilidades de esta actividad')", '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>', 'Habilidades', nsk ? nsk+' elegida'+(nsk===1?'':'s') : 'Opcional')+
+    card("openActDiff()", '<path d="M3 19l6-10 4 6 3-4 5 8z"/>', 'Dificultad', esc(actDiffTxt(sel.diff)||'Ninguna'))+
+    card("S.actVoice=!S.actVoice;saveState();actStartDraw()", '<path d="M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 010 7"/>', 'Voz por km', S.actVoice?'Activada':'Apagada')+
+    '<div style="border:1.5px dashed var(--line);border-radius:18px;padding:13px 14px;font-size:12px;line-height:1.4;color:var(--muted);">Usamos tu ubicación solo mientras dura la actividad. El recorrido queda en tu dispositivo.</div></div>';
+  var adv = '<details class="st-adv" style="margin-top:12px;"><summary>Más opciones</summary><div style="padding-bottom:12px;">'+
+      '<div class="st-sub" style="margin:4px 0 8px;">'+actBgHint()+'</div>'+actMapRowHTML()+
       '<button class="st-row" onclick="openActManual()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Registrar a mano (pesas, escalada, otra…)</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="removeOverlay(\'act-start\');openActHistory()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Todas mis actividades'+(n?' <span style="color:var(--muted);font-weight:600;">· '+n+'</span>':'')+'</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
-      '<button class="st-row" onclick="openActDiff()"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:14px;color:var(--ink);">Dificultad añadida</span><span class="act-diff-sum" style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(actDiffTxt(sel.diff)||'Ninguna · lastre, inclinación, terreno')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       '<button class="st-row" onclick="actDiag()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Diagnóstico del GPS</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
       (Platform.health && Platform.health.available() ? '<button class="st-row" onclick="openHcImport()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Importar de Salud (Health Connect)</span><span style="color:var(--muted);font-size:18px;">›</span></button>' : '')+
       '<button class="st-row" onclick="actImportPick()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Importar un archivo GPX</span><span style="color:var(--muted);font-size:18px;">›</span></button>'+
-      '<button class="st-row" onclick="S.actVoice=!S.actVoice;saveState();actStartDraw()"><span style="flex:1;font-weight:700;font-size:14px;color:var(--ink);">Avisar por voz cada kilómetro</span><span style="font-size:12.5px;font-weight:700;color:'+(S.actVoice?'var(--accent-text)':'var(--muted)')+';">'+(S.actVoice?'Activado':'Apagado')+'</span></button>'+
       '<div style="display:flex;align-items:center;gap:10px;padding:6px 2px 0;font-size:12.5px;color:var(--ink-soft);"><span style="flex:1;line-height:1.4;">Mi peso, para estimar las calorías</span><input class="finp" type="number" inputmode="decimal" placeholder="kg" value="'+esc(S.bodyKg||'')+'" oninput="S.bodyKg=+this.value>0?+this.value:\'\';saveState()" style="width:80px;margin:0;text-align:right;"/></div>'+
-    '</div></details></div>');
+    '</div></details>';
+  ov.innerHTML = '<div style="width:100%;max-width:440px;margin:0 auto;height:100%;display:flex;flex-direction:column;box-sizing:border-box;font-family:Inter,sans-serif;">'+
+    '<div style="background:linear-gradient(160deg,'+c[0]+','+c[1]+');color:#fff;padding:calc(14px + env(safe-area-inset-top)) 20px 20px;flex-shrink:0;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;"><button onclick="removeOverlay(\'act-start\')" aria-label="Cerrar" style="width:42px;height:42px;border-radius:21px;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button></div>'+
+      '<div style="font-size:11.5px;font-weight:800;letter-spacing:.14em;opacity:.85;margin-top:14px;">NUEVA ACTIVIDAD</div>'+
+      '<div class="serif" style="font-size:42px;font-weight:700;line-height:1.05;margin-top:4px;">'+t.name+'</div>'+
+      '<div style="font-size:13px;opacity:.9;margin-top:6px;">'+(last ? 'Última: '+actFmtKm(last.dist/1000)+' km · '+actFmtTime(last.sec||0)+' · '+actAgo(last.startedAt||Date.now()) : 'Distancia, ritmo y recorrido en tiempo real.')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:22px;">'+typ+'</div></div>'+
+    '<div style="flex:1;min-height:0;overflow:auto;padding:16px 18px 8px;">'+cards+adv+'</div>'+
+    '<div style="padding:8px 18px calc(18px + env(safe-area-inset-bottom));flex-shrink:0;"><button onclick="actBegin()" style="width:100%;height:58px;border:none;border-radius:29px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 8px 20px '+c[1]+'44;">'+tmIcon('<path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',18)+'Buscar señal GPS</button></div></div>';
 }
 // Selector genérico de habilidades (varias).
 function openSkPicker(sel, onChange, title){
@@ -11577,21 +11588,21 @@ function actPause(){
 }
 function actRunDraw(){
   var ov = document.getElementById('act-run'); if(!ov||!ACT) return; var t = actType(ACT.type), c = actCol(ACT.type), paused = ACT.state==='paused';
-  ov.style.cssText = 'background:var(--bg);align-items:stretch;justify-content:stretch;z-index:900;';
-  var met = function(id, lab, init, ico){ return '<div style="flex:1;min-width:0;text-align:center;padding:16px 4px 14px;"><div style="display:flex;justify-content:center;color:'+c[1]+';margin-bottom:7px;">'+tmIcon(ico,18)+'</div><div id="'+id+'" style="font-size:26px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1;">'+init+'</div><div id="'+id+'-l" style="font-size:11px;font-weight:600;color:var(--muted);margin-top:5px;">'+lab+'</div></div>'; };
-  var div = '<div style="width:1px;background:var(--line-soft);margin:16px 0;"></div>';
+  ov.style.cssText = 'background:#0f1613;align-items:stretch;justify-content:stretch;z-index:900;';
+  var met = function(id, lab, init, ico){ return '<div style="flex:1;min-width:0;text-align:center;padding:16px 4px 14px;"><div style="display:flex;justify-content:center;color:'+c[0]+';margin-bottom:7px;">'+tmIcon(ico,18)+'</div><div id="'+id+'" style="font-size:26px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1;">'+init+'</div><div id="'+id+'-l" style="font-size:11px;font-weight:600;color:rgba(255,255,255,.6);margin-top:5px;">'+lab+'</div></div>'; };
+  var div = '<div style="width:1px;background:rgba(255,255,255,.12);margin:16px 0;"></div>';
   var rb = 'border:none;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;';
-  ov.innerHTML = '<div style="width:100%;max-width:440px;margin:0 auto;height:100%;display:flex;flex-direction:column;box-sizing:border-box;font-family:Inter,sans-serif;color:var(--ink);">'+
-    '<div style="background:linear-gradient(160deg,'+c[0]+','+c[1]+');color:#fff;padding:calc(16px + env(safe-area-inset-top)) 22px 62px;border-radius:0 0 34px 34px;flex-shrink:0;">'+
+  ov.innerHTML = '<div style="width:100%;max-width:440px;margin:0 auto;height:100%;display:flex;flex-direction:column;box-sizing:border-box;font-family:Inter,sans-serif;color:#fff;">'+
+    '<div style="background:radial-gradient(circle at 85% 0,'+c[1]+'66,transparent 62%),#0f1613;color:#fff;padding:calc(16px + env(safe-area-inset-top)) 22px 54px;flex-shrink:0;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;"><span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:800;">'+tmIcon(ACT_ICO[t.id]||ACT_ICO.otro,20)+esc(t.name)+'</span><span id="act-sig" style="display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:16px;background:rgba(255,255,255,.2);font-size:11.5px;font-weight:700;"></span></div>'+
       '<div style="text-align:center;margin-top:16px;"><div style="display:flex;justify-content:center;align-items:baseline;gap:8px;"><span id="act-dist" style="font-size:86px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1;">0,00</span><span style="font-size:20px;font-weight:700;opacity:.85;">km</span></div><div style="font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;opacity:.85;font-weight:600;margin-top:6px;">Distancia</div></div></div>'+
-    '<div style="margin:-42px 16px 0;background:var(--paper);border-radius:22px;box-shadow:0 10px 28px rgba(0,0,0,.10);display:flex;flex-shrink:0;">'+met('act-time','Tiempo','0:00','<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')+div+met('act-pace','ritmo /km','--:--','<path d="M4 18a9 9 0 1116 0"/><path d="M12 18l4-6"/>')+div+met('act-x','kcal','0','<path d="M12 3s5 4 5 9a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3 0-6 1-8z"/>')+'</div>'+
-    (ACT.state==='ready' ? '<button onclick="openActDiff()" style="margin:12px 16px 0;padding:11px 14px;border-radius:14px;background:var(--paper);border:1.5px solid var(--line);display:flex;align-items:center;gap:10px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;flex-shrink:0;"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13.5px;color:var(--ink);">Dificultad añadida</span><span class="act-diff-sum" style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(actDiffTxt(ACT.diff)||'Ninguna · lastre, inclinación, terreno')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>' : '')+
-    '<div id="act-lap" style="display:none;margin:12px 16px 0;padding:9px 14px;border-radius:14px;background:var(--paper);border:1px solid var(--line-soft);font-size:12.5px;font-weight:700;color:var(--ink);text-align:center;flex-shrink:0;"></div>'+
+    '<div style="margin:-36px 16px 0;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:22px;display:flex;flex-shrink:0;">'+met('act-time','Tiempo','0:00','<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')+div+met('act-pace','ritmo /km','--:--','<path d="M4 18a9 9 0 1116 0"/><path d="M12 18l4-6"/>')+div+met('act-x','kcal','0','<path d="M12 3s5 4 5 9a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3 0-6 1-8z"/>')+'</div>'+
+    (ACT.state==='ready' ? '<button onclick="openActDiff()" style="margin:12px 16px 0;padding:11px 14px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:10px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;flex-shrink:0;"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13.5px;color:#fff;">Dificultad añadida</span><span class="act-diff-sum" style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(actDiffTxt(ACT.diff)||'Ninguna · lastre, inclinación, terreno')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>' : '')+
+    '<div id="act-lap" style="display:none;margin:12px 16px 0;padding:9px 14px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:12.5px;font-weight:700;color:#fff;text-align:center;flex-shrink:0;"></div>'+
     '<div style="flex:1;min-height:0;margin:12px 16px;background:#ebe8e1;border:1px solid var(--line-soft);border-radius:22px;position:relative;overflow:hidden;"><canvas id="act-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>'+actMapBtnHTML('act-mapbtn',1)+'<button id="act-fit" onclick="actToggleFollow()" style="position:absolute;top:10px;right:10px;border:none;cursor:pointer;font-family:Inter,sans-serif;background:rgba(255,255,255,.94);color:#222;border-radius:14px;padding:7px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.18);">Ver todo</button><div id="act-empty" style="position:absolute;left:12px;right:12px;bottom:26px;display:none;text-align:center;padding:9px 12px;font-size:12.5px;color:#333;line-height:1.4;pointer-events:none;background:rgba(255,255,255,.92);border-radius:12px;"></div></div>'+
-    (ACT.state==='ready' ? '<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;"><button onclick="actCancelReady()" style="'+rb+'height:62px;padding:0 22px;border-radius:31px;background:var(--paper);color:var(--ink-soft);border:1.5px solid var(--line);font-size:14px;font-weight:700;">Cancelar</button><button onclick="actGo()" style="'+rb+'flex:1;height:62px;border-radius:31px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px '+c[1]+'55;"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar entrenamiento</button></div>' : '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;">'+
-      '<button onclick="actPause()" aria-label="'+(paused?'Reanudar':'Pausar')+'" style="'+rb+'width:68px;height:68px;border-radius:50%;'+(paused?'background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;box-shadow:0 8px 20px '+c[1]+'55;':'background:var(--paper);color:'+c[1]+';border:1.5px solid var(--line);')+'">'+(paused?'<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>')+'</button>'+
-      '<button onclick="actFinishAsk()" style="'+rb+'height:68px;padding:0 38px;border-radius:34px;background:#e0523c;color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px #e0523c44;"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>Terminar</button></div>')+'</div>';
+    (ACT.state==='ready' ? '<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;"><button onclick="actCancelReady()" style="'+rb+'height:62px;padding:0 22px;border-radius:31px;background:rgba(255,255,255,.12);color:#fff;border:none;font-size:14px;font-weight:700;">Cancelar</button><button onclick="actGo()" style="'+rb+'flex:1;height:62px;border-radius:31px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px '+c[1]+'55;"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar entrenamiento</button></div>' : '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;">'+
+      '<button onclick="actPause()" aria-label="'+(paused?'Reanudar':'Pausar')+'" style="'+rb+'width:68px;height:68px;border-radius:50%;'+(paused?'background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;box-shadow:0 8px 20px '+c[1]+'55;':'background:rgba(255,255,255,.14);color:#fff;border:none;')+'">'+(paused?'<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>')+'</button>'+
+      '<button id="act-hold" onpointerdown="actHoldStart(event)" onpointerup="actHoldEnd()" onpointerleave="actHoldEnd()" onpointercancel="actHoldEnd()" oncontextmenu="return false" style="'+rb+'flex:1;max-width:260px;position:relative;overflow:hidden;height:68px;border-radius:34px;background:rgba(224,82,60,.2);color:#ff9a86;font-size:15px;font-weight:800;touch-action:none;user-select:none;-webkit-user-select:none;"><span id="act-holdfill" style="position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(224,82,60,.55);"></span><span style="position:relative;">Mantén para terminar</span></button></div>')+'</div>';
   actRunUpdate();
 }
 function actRunUpdate(){
@@ -11635,10 +11646,31 @@ function actResume(){
   else { ACT.last = b.pts[b.pts.length-1]; ACT.lastAlt = ACT.last[3]; }
   actLaunch();
 }
+var _actHold = null;
+function actHoldStart(e){
+  if(!ACT) return; var fill = document.getElementById('act-holdfill'); if(!fill) return; actHoldEnd(true);
+  fill.style.transition = 'width 1s linear'; fill.style.width = '100%';
+  _actHold = setTimeout(function(){ _actHold = null; try{ if(navigator.vibrate) navigator.vibrate(30); }catch(x){} actFinishAsk(); var f2 = document.getElementById('act-holdfill'); if(f2){ f2.style.transition='none'; f2.style.width='0'; } }, 1000);
+}
+function actHoldEnd(quiet){
+  var fill = document.getElementById('act-holdfill'); if(fill){ fill.style.transition = 'none'; fill.style.width = '0'; }
+  if(_actHold){ clearTimeout(_actHold); _actHold = null; if(!quiet) toast('Mantén pulsado para terminar'); }
+}
 function actFinishAsk(){
-  if(!ACT) return;
-  var box = document.createElement('div'); box.className='conf-box'; box.style.zIndex = 9500;
-  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:17px;text-align:center;margin-bottom:12px;">¿Terminar la actividad?</div><div style="display:flex;flex-direction:column;gap:8px;"><button class="sbtn" onclick="this.closest(\'.conf-box\').remove();actFinish()">Terminar y guardar</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Seguir</button><button class="cbtn" style="color:var(--bad);" onclick="this.closest(\'.conf-box\').remove();actDiscard()">Descartar</button></div></div>';
+  if(!ACT) return; if(ACT.state==='run' || ACT.state==='wait') actPause();
+  removeOverlay('act-end'); var km = ACT.dist/1000, el = actElapsed(), t = actType(ACT.type), c = actCol(ACT.type);
+  var ov = document.createElement('div'); ov.className='overlay'; ov.id='act-end'; ov.style.zIndex = 950;
+  ov.addEventListener('click',function(e){ if(e.target===ov) actEndResume(); });
+  ov.innerHTML = '<div class="sheet"><div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;"><canvas id="act-endmap" width="160" height="160" style="width:80px;height:80px;border-radius:16px;background:#ebe8e1;flex:none;"></canvas><div style="flex:1;min-width:0;"><div class="serif" style="font-size:22px;font-weight:700;">En pausa</div><div style="font-size:13px;color:var(--muted);margin-top:3px;">'+actFmtKm(km)+' km · '+actFmtTime(el)+' · '+(t.unit==='kmh' ? '' : actFmtPace(ACT.movSec||el, km)+' /km')+'</div></div></div>'+
+    '<button class="sbtn" style="width:100%;padding:15px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');" onclick="actEndResume()">▶ Reanudar</button>'+
+    '<div style="display:flex;gap:10px;margin-top:10px;"><button class="cbtn" style="flex:1;padding:14px;" onclick="removeOverlay(\'act-end\');actFinish()">✓ Guardar</button><button class="cbtn" style="flex:1;padding:14px;color:var(--bad);" onclick="actEndDiscard()">✕ Descartar</button></div></div>';
+  document.body.appendChild(ov);
+  var cv = document.getElementById('act-endmap'); if(cv){ try{ actDrawRoute(cv.getContext('2d'), ACT.pts, {x:8,y:8,w:144,h:144}, c[1], 4, true); }catch(e){} }
+}
+function actEndResume(){ removeOverlay('act-end'); if(ACT && ACT.state==='paused') actPause(); }
+function actEndDiscard(){
+  var box = document.createElement('div'); box.className='conf-box'; box.style.zIndex = 9600;
+  box.innerHTML = '<div class="conf-inner"><div class="serif" style="font-weight:800;font-size:17px;text-align:center;margin-bottom:6px;">¿Descartar la actividad?</div><div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:12px;">Se perderá el recorrido.</div><div style="display:flex;flex-direction:column;gap:8px;"><button class="sbtn" style="background:var(--bad);" onclick="this.closest(\'.conf-box\').remove();removeOverlay(\'act-end\');actDiscard()">Descartar</button><button class="cbtn" onclick="this.closest(\'.conf-box\').remove()">Cancelar</button></div></div>';
   document.body.appendChild(box);
 }
 function actCleanup(){
@@ -12483,7 +12515,7 @@ function skLogDel(id){ skLogRemove(id); saveState(); skLogDraw(); skReopen(_skl.
 function setEnfSeg(v){ S._enfSeg = (v==='pro'?'pro':'rut'); try{ localStorage.setItem('og6-enfseg', S._enfSeg); }catch(e){} render(); }
 function goHabilidades(){ if(featureLocked('habilidades')){ toast('Próximamente'); return; } S._enfSeg = 'pro'; S._proView = 'hex'; try{ localStorage.setItem('og6-proview','hex'); }catch(e){} if(S.timerPlacement==='seguimiento'){ S.tab = 'proyectos'; S._projView = 'timer'; } else S.tab = 'timer'; render(); }
 function enfSegCur(){ var v = S._enfSeg; if(!v){ try{ v = localStorage.getItem('og6-enfseg'); }catch(e){} } if(v==='hab'){ S._proView='hex'; v='pro'; } else if(v==='cue'){ S._proView='cue'; v='pro'; } S._enfSeg = (v==='pro'?'pro':'rut'); return S._enfSeg; }
-function enfSegHTML(){ var cur = enfSegCur(); return '<div style="margin-bottom:14px;">'+mSegHTML('enf-seg', [['rut','Enfoque'],['pro','Progreso']], cur, 'setEnfSeg')+'</div>'; }
+function enfSegHTML(){ return enfHeadHTML(); }
 // ══ Progreso: resumen (semana / mes / año), hexágonos y cuerpo ══
 function proView(){ var v = S._proView; if(!v){ try{ v = localStorage.getItem('og6-proview'); }catch(e){} } if(v==='hex' && featureLocked('habilidades')) return 'res'; if(v==='cue' && featureLocked('cuerpo')) return 'res'; return (v==='hex'||v==='cue') ? v : 'res'; }
 function setProView(v){ if((v==='hex' && featureLocked('habilidades')) || (v==='cue' && featureLocked('cuerpo'))){ toast('Próximamente'); return; } S._proView = v; try{ localStorage.setItem('og6-proview', v); }catch(e){} render(); }
@@ -19843,6 +19875,32 @@ function timerNextWork(idx){
   for(var i=idx+1;i<TR.steps.length;i++) if(TR.steps[i].type==='work') return TR.steps[i];
   return null;
 }
+function trStudy(){ try{ return tmHistKind({tplId:TR.tplId, group:TR.group, kind:TR.kind})==='estudio'; }catch(e){ return false; } }
+function trStudyHTML(step, idx){
+  var rest = step.type!=='work', col = rest ? '#2f9b92' : colorForWhiteText(step.color||'#5b5bd6');
+  var nWork = TR.steps.filter(function(x){return x.type==='work';}).length, curWork = TR.steps.slice(0,idx+1).filter(function(x){return x.type==='work';}).length;
+  var nxtN = Math.min(nWork, curWork+(rest?1:0));
+  var r = 124, C = 2*Math.PI*r;
+  var ring = '<svg width="290" height="290" viewBox="0 0 290 290" aria-hidden="true"><circle cx="145" cy="145" r="'+r+'" fill="none" stroke="'+(rest?'#cfe9e5':'#e4e3f4')+'" stroke-width="14"/><circle id="tr-ring" cx="145" cy="145" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'" transform="rotate(-90 145 145)"/></svg>';
+  var segs = '<div style="display:flex;gap:5px;width:min(78vw,300px);margin:18px auto 0;">'+Array.apply(null,Array(nWork)).map(function(_,i){ var done = i<curWork-(rest?0:1)+(rest?0:0) && (rest ? i<curWork : i<curWork-1); return '<span style="flex:1;height:5px;border-radius:3px;background:'+((rest?i<curWork:i<curWork)?col:'#dcdbe9')+';opacity:'+((!rest&&i===curWork-1)?1:(i<curWork?.55:1))+';"></span>'; }).join('')+'</div>';
+  var tips = rest ? '<div style="width:100%;max-width:340px;margin:22px auto 0;background:#fff;border-radius:20px;padding:4px 16px;box-shadow:0 2px 12px rgba(0,0,0,.05);">'+[['Toma un vaso de agua','<path d="M7 4h10l-1 16H8z"/>'],['Camina o estírate un minuto','<circle cx="12" cy="5" r="2"/><path d="M12 8v6M9 21l3-7 3 7M8 11l4-1 4 1"/>'],['Mira algo lejos, lejos de la pantalla','<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/>']].map(function(x,i){ return '<div style="display:flex;align-items:center;gap:12px;padding:13px 0;'+(i?'border-top:1px solid #e3efed;':'')+'"><span style="width:34px;height:34px;border-radius:11px;background:#e0f2ef;color:#2f9b92;display:flex;align-items:center;justify-content:center;flex:none;">'+tmIcon(x[1],18)+'</span><span style="font-size:14px;font-weight:600;color:#1f2a29;">'+x[0]+'</span></div>'; }).join('')+'</div>' : segs;
+  var btn = 'border:none;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;';
+  var pauseIco = TR.paused ? '<path d="M8 5v14l11-7z"/>' : '<rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/>';
+  var ctr = rest ?
+    '<button onclick="timerAddTime(60)" style="'+btn+'flex:1;height:58px;border-radius:29px;background:#fff;color:#1f2a29;font-size:15px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.06);">+ 1 min</button><button onclick="timerSkip(1)" style="'+btn+'flex:1.5;height:58px;border-radius:29px;background:'+col+';color:#fff;font-size:15px;font-weight:800;gap:8px;">Saltar descanso</button>' :
+    '<button onclick="confirmExitTimerRun()" aria-label="Terminar" style="'+btn+'width:54px;height:54px;border-radius:50%;background:#fff;color:#1f2a29;box-shadow:0 2px 10px rgba(0,0,0,.08);"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg></button><button onclick="timerTogglePause()" aria-label="Pausar" style="'+btn+'width:78px;height:78px;border-radius:50%;background:'+col+';color:#fff;box-shadow:0 8px 20px '+col+'55;"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor">'+pauseIco+'</svg></button><button onclick="timerSkip(1)" aria-label="Siguiente" style="'+btn+'width:54px;height:54px;border-radius:50%;background:#fff;color:#1f2a29;box-shadow:0 2px 10px rgba(0,0,0,.08);"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5l9 7-9 7zM17 5h2v14h-2z"/></svg></button>';
+  return '<div style="padding:calc(14px + env(safe-area-inset-top,0px)) 18px 0;display:flex;align-items:center;justify-content:space-between;"><button onclick="confirmExitTimerRun()" aria-label="Salir" style="'+btn+'width:38px;height:38px;border-radius:50%;background:#fff;color:#1f2a29;font-size:19px;box-shadow:0 2px 8px rgba(0,0,0,.08);">×</button><div style="font-size:14px;font-weight:700;color:#1f2a29;">'+(rest?'Descanso':'Bloque '+curWork+' de '+nWork)+'</div><span style="width:38px;"></span></div>'+
+    '<div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px;color:#1f2a29;"><div style="position:relative;width:290px;height:290px;">'+ring+'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;"><div id="tr-time" style="font-size:60px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1;"></div><div style="font-size:14px;color:#6a7471;margin-top:8px;">'+(rest?'para el bloque '+nxtN:'en foco')+'</div></div></div>'+tips+'</div>'+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:10px 24px calc(24px + env(safe-area-inset-bottom,0px));">'+ctr+'</div>'+(TR.preview?'<div style="text-align:center;color:#8a918f;font-size:11px;padding-bottom:10px;">Vista previa — no se guarda ni se marca como completada</div>':'');
+}
+function timerWeekStripHTML(){
+  var now = new Date(), dow = (now.getDay()+6)%7, mon = new Date(now.getFullYear(), now.getMonth(), now.getDate()-dow), done = {};
+  (S.timerHistory||[]).forEach(function(h){ if(h.date) done[h.date] = 1; });
+  done[todayStr()] = 1;
+  var cells = ['L','M','M','J','V','S','D'].map(function(l,i){ var d = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate()+i), k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'), on = !!done[k];
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><span style="font-size:11px;font-weight:700;opacity:.8;">'+l+'</span><span style="width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:'+(on?'#fff':'rgba(255,255,255,.16)')+';color:#222;">'+(on?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>':'')+'</span></div>'; }).join('');
+  return '<div style="width:100%;max-width:340px;background:rgba(0,0,0,.18);border-radius:20px;padding:14px 16px;margin-bottom:16px;"><div style="text-align:left;font-size:13px;font-weight:800;margin-bottom:10px;">Esta semana</div><div style="display:flex;justify-content:space-between;">'+cells+'</div></div>';
+}
 function timerRenderFrame(force){
   var body = document.getElementById('timer-run-body');
   if(!body || !TR) return;
@@ -19872,11 +19930,12 @@ function timerRenderFrame(force){
   if(TR.finished){
     if(TR._finShown && !force) return;
     TR._finShown = true;
-    body.style.background = 'linear-gradient(160deg, #1a1a1a, #000)';
+    var _fw = TR.steps.find(function(x){return x.type==='work';}); body.style.background = colorForWhiteText((_fw&&_fw.color)||'#2d8c70');
     var res = TR.results||[];
     body.innerHTML = '<div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;color:#fff;padding:calc(24px + env(safe-area-inset-top,0px)) 24px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;"><div style="margin:auto 0;width:100%;display:flex;flex-direction:column;align-items:center;">'+
-      '<div class="serif" style="font-size:26px;font-weight:700;margin-bottom:6px;">¡Listo!</div>'+
-      '<div style="font-size:14px;color:rgba(255,255,255,.7);margin-bottom:'+(res.length?16:28)+'px;">'+esc(TR.taskName)+' · '+timerFmt(timerElapsed()>TR.totalSec?TR.totalSec:TR.totalSec)+'</div>'+
+      '<div style="font-size:12px;font-weight:800;letter-spacing:.16em;opacity:.85;">SESIÓN COMPLETA</div>'+
+      '<div style="font-size:84px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em;margin:6px 0 4px;">'+timerFmt(TR.totalSec)+'</div>'+
+      '<div style="font-size:14px;color:rgba(255,255,255,.8);margin-bottom:18px;">'+esc(TR.taskName)+'</div>'+timerWeekStripHTML()+
       (res.length?'<div style="width:100%;max-width:320px;margin-bottom:12px;">'+res.map(function(r){
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(255,255,255,.1);border-radius:10px;margin-bottom:6px;font-size:13.5px;"><span>'+esc(r.name)+'</span><span style="font-weight:800;">'+r.n+(r.unit==='s'?' s':'')+(r.real?' <span style="font-size:10px;background:#f5c25a;color:#111;border-radius:6px;padding:2px 6px;margin-left:4px;">RÉCORD</span>':(r.prev?' <span style="font-size:10.5px;opacity:.6;font-weight:500;">mejor '+r.prev+'</span>':''))+(r.saved?'<span style="display:block;font-size:10.5px;opacity:.65;font-weight:500;text-align:right;">anotado en '+esc(r.saved)+'</span>':'')+'</span></div>';
       }).join('')+'</div>':'')+
@@ -19916,7 +19975,9 @@ function timerRenderFrame(force){
     var timeEl = (step.kind==='reps') ? '<div id="tr-time" style="font-size:13px;color:rgba(255,255,255,.6);margin-top:12px;font-variant-numeric:tabular-nums;"></div>' : '';
     if(step.kind==='reps') main = main.replace('<div id="tr-time"','<div id="tr-x"');
     var ctrl = 'background:rgba(255,255,255,.15);border:none;color:#fff;cursor:pointer;font-family:Inter,sans-serif;';
-    body.innerHTML =
+    var _sty = trStudy() && step.kind!=='reps' && !isOpen && step.type!=='prep';
+    if(_sty){ body.style.background = isRest ? '#eaf6f4' : '#f5f4fb'; body.innerHTML = trStudyHTML(step, idx); }
+    else body.innerHTML =
       '<div style="padding:14px 18px 6px;padding-top:calc(14px + env(safe-area-inset-top,0px));">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;">'+
           '<button onclick="confirmExitTimerRun()" style="'+ctrl+'width:36px;height:36px;border-radius:50%;font-size:18px;line-height:1;">×</button>'+
@@ -19962,6 +20023,7 @@ function timerRenderFrame(force){
     else tEl.textContent = timerFmt(step.startAt+step.sec-elapsed);
   }
   var xEl = document.getElementById('tr-x'); if(xEl && !isOpen) xEl.textContent = '';
+  var rgE = document.getElementById('tr-ring'); if(rgE){ var _C = 2*Math.PI*124; rgE.style.strokeDashoffset = (_C*(1-Math.min(1,inStep/Math.max(1,step.sec)))).toFixed(1); }
   var pr = document.getElementById('tr-prog'); if(pr) pr.style.width = Math.round(Math.min(1,inStep/step.sec)*100)+'%';
   var wb = document.getElementById('tr-wbar'); if(wb) wb.style.width = Math.round(Math.min(1,(idx + (isOpen?Math.min(1,(step.n||0)/(step.count||1)):Math.min(1,inStep/step.sec)))/TR.steps.length)*100)+'%';
   var tt = document.getElementById('tr-total'); if(tt) tt.textContent = timerFmt(elapsed);
@@ -20093,7 +20155,7 @@ function timerLogHistory(){
   if(!S.timerHistory) S.timerHistory=[];
   if(TR.libRef) h.libRef = TR.libRef;
   S.timerHistory.push(h); timerHistAward(h); try{ chalSync(); }catch(e){}
-  if(h.skills && h.skills.length) setTimeout(function(){ showGains(h.id); }, 900);
+  if(tmLvOn('k:'+tmHistKind(h))) setTimeout(function(){ openSessLv(h.id); }, 900); else if(h.skills && h.skills.length) setTimeout(function(){ showGains(h.id); }, 900);
   if(S.timerHistory.length>600) S.timerHistory = S.timerHistory.slice(-600);
   saveState();
 }
@@ -20575,6 +20637,87 @@ function enfSubHTML(){
   var cur = enfTabCur();
   return '<div style="display:flex;gap:6px;margin:-4px 0 14px;">'+ENF_TABS.map(function(t){ var on = t[0]===cur; return '<button data-enfsub="'+t[0]+'" onclick="setEnfTab(\''+t[0]+'\')" style="'+enfColVars(t[0])+'flex:1;padding:8px 4px;border-radius:12px;font-size:12.5px;font-weight:'+(on?800:600)+';cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';display:flex;align-items:center;justify-content:center;gap:6px;">'+(tmLvOn('k:'+t[2])?brBadge(tmLvInfo('k:'+t[2]).lvl,20,t[2]):'')+(t[0]==='entrenar'?'Entrenar':tmSecName(t[2]))+'</button>'; }).join('')+'<button onclick="openEnfColors()" aria-label="Colores y animación" style="flex:0 0 auto;padding:0 11px;gap:5px;border-radius:12px;border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 004-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg><span style="font-size:12px;font-weight:600;">Estilo</span></button></div>';
 }
+// ── Enfoque: mosaico de modos, niveles por modo y hoja de fin de sesión ──
+var ENF_TILE_ICO = {entrenar:'M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11', respiracion:'M3 9h11a3 3 0 10-3-3M3 15h15a3 3 0 11-3 3', estudio:'M4 5h7a3 3 0 013 3v11a2 2 0 00-2-2H4zM20 5h-7a3 3 0 00-3 3v11a2 2 0 012-2h8z', pro:'M4 19V5M4 19h16M8 15l3-4 3 2 5-6'};
+var ENF_KIND = {entrenar:'ejercicio', respiracion:'breath', estudio:'estudio'};
+function enfSvg(k, sz, col){ return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+ENF_TILE_ICO[k]+'"/></svg>'; }
+function enfGo(k){
+  if(k==='pro'){ setEnfSeg('pro'); return; }
+  S._enfSeg = 'rut'; S._enfTab = k;
+  try{ localStorage.setItem('og6-enfseg','rut'); localStorage.setItem('og6-enftab',k); }catch(e){}
+  render();
+}
+function enfPalBtn(h){ return '<button onclick="openEnfColors()" aria-label="Colores y animación" style="flex:0 0 auto;width:36px;height:'+h+'px;border-radius:14px;border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 004-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg></button>'; }
+function enfHeadHTML(){
+  var pro = enfSegCur()==='pro', cur = enfTabCur();
+  var nm = function(k){ return k==='entrenar' ? 'Entrenar' : tmSecName(ENF_KIND[k]); };
+  var items = ['entrenar','respiracion','estudio','pro'];
+  if(!pro && cur==='estudio'){
+    return '<div style="display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--line);margin:-4px 0 14px;">'+items.map(function(k){
+      var on = (k==='estudio'), vars = k==='pro' ? '' : enfColVars(k), lab = k==='pro' ? 'Progreso' : nm(k);
+      return '<button data-enfsub="'+(k==='pro'?'':k)+'" onclick="enfGo(\''+k+'\')" style="'+vars+'flex:1;min-width:0;background:none;border:none;border-bottom:3px solid '+(on?'var(--accent)':'transparent')+';margin-bottom:-1px;padding:10px 0 11px;font-size:12.5px;font-weight:'+(on?800:600)+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+lab+'</button>'; }).join('')+enfPalBtn(34)+'</div>';
+  }
+  return '<div style="display:flex;gap:8px;margin:0 0 14px;align-items:stretch;">'+items.map(function(k){
+    var on = pro ? k==='pro' : k===cur, vars = k==='pro' ? '' : enfColVars(k), lab = k==='pro' ? 'Progreso' : nm(k);
+    return '<button data-enfsub="'+(k==='pro'?'':k)+'" onclick="enfGo(\''+k+'\')" style="'+vars+'flex:1;min-width:0;position:relative;height:58px;border-radius:18px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'var(--paper)')+';color:'+(on?'#fff':'var(--ink-soft)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;padding:0 2px;">'+enfSvg(k,21,on?'#fff':'var(--accent)')+'<span style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+lab+'</span>'+(k!=='pro' ? lvCorner('k:'+ENF_KIND[k],16) : '')+'</button>'; }).join('')+enfPalBtn(58)+'</div>';
+}
+function enfLvHeroHTML(tab){
+  if(featureLocked('rutnivel')) return '';
+  var kind = ENF_KIND[tab]; if(!kind) return ''; var sc = 'k:'+kind;
+  if(!tmLvOn(sc)) return '<button onclick="openLvModes()" style="display:block;width:100%;margin:-4px 0 12px;padding:9px;border-radius:14px;border:1.5px dashed var(--line);background:none;color:var(--accent-text);font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Activar niveles</button>';
+  var i = tmLvInfo(sc), r = 33, C = 2*Math.PI*r;
+  var rg = '<div style="position:relative;width:76px;height:76px;flex:none;"><svg width="76" height="76" viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="'+r+'" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="8"/><circle cx="38" cy="38" r="'+r+'" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-dasharray="'+(C*i.ratio).toFixed(1)+' '+C.toFixed(1)+'" transform="rotate(-90 38 38)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;"><b style="font-size:26px;">'+i.lvl+'</b><span style="font-size:10px;opacity:.85;margin-top:2px;">nivel</span></div></div>';
+  return '<div onclick="openTmLv(\''+sc+'\')" style="display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:12px 14px;border-radius:22px;background:var(--accent);color:#fff;cursor:pointer;">'+rg+'<div style="flex:1;min-width:0;"><div style="font-size:11.5px;font-weight:700;letter-spacing:.05em;opacity:.85;text-transform:uppercase;">Nivel '+i.lvl+' · '+esc(i.name)+'</div><div style="font-size:16.5px;font-weight:800;margin-top:2px;">'+(i.lvl>=12 ? 'Nivel máximo' : fmtNum(Math.max(0,Math.round((i.needed-i.inLvl)*10)/10))+' XP para '+esc(i.next))+'</div><div style="font-size:12px;opacity:.85;margin-top:5px;">'+i.n+' sesion'+(i.n===1?'':'es')+' · '+fmtDur(i.sec)+'</div></div><span style="font-size:22px;opacity:.9;">›</span></div>';
+}
+function openLvModes(){
+  removeOverlay('lv-modes'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='lv-modes'; ov.style.zIndex = 600;
+  ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('lv-modes'); }); document.body.appendChild(ov); lvModesDraw();
+}
+function lvModesDraw(){
+  var ov = document.getElementById('lv-modes'); if(!ov) return;
+  var cards = ENF_TABS.map(function(t){
+    var sc = 'k:'+t[2], on = tmLvOn(sc), col = enfColGet(t[0]) || '#a85a2a', i = tmLvInfo(sc), name = t[0]==='entrenar' ? 'Entrenar' : tmSecName(t[2]);
+    return '<div style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:22px;border:2px solid '+(on?col:'var(--line)')+';background:'+(on?'color-mix(in srgb,'+col+' 12%,var(--paper))':'var(--paper)')+';">'+
+      (on ? brBadge(i.lvl,52,t[2]) : '<span style="width:52px;height:52px;border-radius:16px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:none;">'+enfSvg(t[0],26,'var(--muted)')+'</span>')+
+      '<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:800;color:var(--ink);">'+esc(name)+'</div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">'+(on ? 'Nivel '+i.lvl+' · '+fmtNum(i.xp)+' XP' : 'Niveles desactivados')+'</div></div>'+
+      '<button class="tog" onclick="lvModeTog(\''+t[2]+'\')" aria-label="Activar niveles de '+esc(name)+'" style="background:'+(on?col:'var(--muted-soft)')+';"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button></div>';
+  }).join('');
+  brPutSheet(ov, '<div class="sheet"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:20px;">Niveles por modo</span><div class="st-sub">Cada modo tiene su propio nivel. Actívalos cuando quieras.</div></div><button class="st-x" onclick="removeOverlay(\'lv-modes\')" aria-label="Cerrar">×</button></div>'+
+    '<div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">'+cards+'</div>'+
+    '<div class="st-sub" style="margin:14px 2px 0;">Al desactivar un nivel no pierdes tu progreso: queda guardado.</div>'+
+    '<button class="sbtn" style="width:100%;margin-top:14px;padding:14px;" onclick="removeOverlay(\'lv-modes\')">Listo</button></div>');
+}
+function lvModeTog(kind){
+  if(featureLocked('rutnivel')){ toast('Próximamente'); return; }
+  if(!S.timerLv) S.timerLv = {}; S.timerLv['k:'+kind] = !S.timerLv['k:'+kind]; saveState(); render(); lvModesDraw();
+}
+function openSessLv(hid, view){
+  var h = (S.timerHistory||[]).find(function(x){return x.id===hid;}); if(!h) return;
+  var kind = tmHistKind(h), sc = 'k:'+kind, tab = kind==='breath' ? 'respiracion' : (kind==='estudio' ? 'estudio' : 'entrenar'), col = enfColGet(tab) || '#a85a2a';
+  var hasEx = kind!=='estudio', hasSk = !!(h.skills && h.skills.length);
+  view = view || (hasEx ? 'a' : 'b'); if(view==='b' && !hasSk && hasEx) view = 'a';
+  var ov = document.getElementById('sess-lv');
+  if(!ov){ ov = document.createElement('div'); ov.className='overlay'; ov.id='sess-lv'; ov.style.zIndex = 760; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('sess-lv'); }); document.body.appendChild(ov); }
+  var mul = kind==='breath' ? 1 : skCfg('lvMul'), gain = Math.round((h.lvPts!=null ? h.lvPts : 0)*mul*10)/10, i = tmLvInfo(sc);
+  var ring = function(ratio, lvl){ var r = 19, C = 2*Math.PI*r; return '<div style="position:relative;width:46px;height:46px;flex:none;"><svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true"><circle cx="23" cy="23" r="'+r+'" fill="none" stroke="var(--line-soft)" stroke-width="5"/><circle cx="23" cy="23" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+(C*ratio).toFixed(1)+' '+C.toFixed(1)+'" transform="rotate(-90 23 23)"/></svg><b style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--ink);">'+lvl+'</b></div>'; };
+  var row = function(lead, title, sub, xp){ return '<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line-soft);">'+lead+'<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(title)+'</div>'+(sub?'<div style="font-size:12px;color:var(--muted);">'+esc(sub)+'</div>':'')+'</div><b style="color:'+col+';font-size:14px;white-space:nowrap;">+'+fmtNum(xp)+' XP</b></div>'; };
+  var rows = '';
+  if(view==='a'){
+    if(kind==='breath'){
+      var sc2 = h.tplId ? 't:'+h.tplId : sc, i2 = tmLvInfo(sc2); rows = row(ring(i2.ratio,i2.lvl), h.name||tmLvName(sc2), i2.name, gain);
+    } else {
+      var exs = (h.exercises||[]).slice(0,12), per = Math.round(gain/Math.max(1,exs.length)*10)/10;
+      rows = exs.map(function(n){ var i2 = tmLvInfo('e:'+exKey(n)); return row(ring(i2.ratio,i2.lvl), n, i2.name, per); }).join('') || row(ring(i.ratio,i.lvl), h.name||'Sesión', i.name, gain);
+    }
+  } else {
+    rows = (h.skills||[]).map(function(id){ var f = skFindAny(id); if(!f) return ''; var pts = (h.skPts && h.skPts[id]!=null) ? h.skPts[id] : 0;
+      return row('<span style="width:46px;height:46px;border-radius:14px;background:color-mix(in srgb,'+(f.a.color||col)+' 18%,var(--paper));display:flex;align-items:center;justify-content:center;flex:none;"><span style="width:14px;height:14px;border-radius:7px;background:'+(f.a.color||col)+';"></span></span>', f.a.name, '', Math.round(pts*10)/10); }).join('');
+    if(!rows) rows = '<div class="st-sub" style="padding:14px 2px;border-top:1px solid var(--line-soft);">Esta sesión no suma a ninguna habilidad. <button class="st-link" onclick="removeOverlay(\'sess-lv\');gainsAdjust(\''+hid+'\')">Elegir habilidades</button></div>';
+  }
+  var seg = (hasEx && hasSk) ? '<div style="display:flex;background:var(--bg);border-radius:14px;padding:3px;margin:12px 0 4px;">'+[['a', kind==='breath'?'Por técnica':'Por ejercicio'],['b','Por habilidad']].map(function(x){ var on = view===x[0]; return '<button onclick="openSessLv(\''+hid+'\',\''+x[0]+'\')" style="flex:1;height:34px;border-radius:11px;border:none;background:'+(on?'var(--paper)':'transparent')+';box-shadow:'+(on?'0 1px 3px rgba(0,0,0,.15)':'none')+';font-size:13px;font-weight:'+(on?700:600)+';color:'+(on?'var(--ink)':'var(--muted)')+';cursor:pointer;font-family:Inter,sans-serif;">'+x[1]+'</button>'; }).join('')+'</div>' : '';
+  var tot = '<div style="display:flex;align-items:center;gap:12px;margin-top:12px;padding:12px 14px;border-radius:18px;background:color-mix(in srgb,'+col+' 14%,var(--paper));">'+brBadge(i.lvl,40,kind)+'<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:var(--ink);">Nivel '+i.lvl+' · '+esc(tab==='entrenar'?'Entrenar':tmSecName(kind))+'</div><div style="font-size:12px;color:var(--muted);">'+(i.lvl>=12?'Nivel máximo':fmtNum(Math.max(0,Math.round((i.needed-i.inLvl)*10)/10))+' XP para '+esc(i.next))+'</div></div><b style="font-size:20px;color:'+col+';">+'+fmtNum(gain)+'</b></div>';
+  brPutSheet(ov, '<div class="sheet"><div style="text-align:center;margin-bottom:2px;"><span class="serif" style="font-weight:700;font-size:23px;">¡Sesión terminada!</span><div class="st-sub">'+esc(h.name||'')+(h.sec?' · '+fmtDur(h.sec):'')+'</div></div>'+tot+seg+'<div style="margin-top:6px;">'+rows+'</div><button class="sbtn" style="width:100%;margin-top:14px;padding:14px;background:'+col+';" onclick="removeOverlay(\'sess-lv\')">Listo</button></div>');
+}
 function enfGoalGet(kind){
   if(!S.enfGoal){ try{ S.enfGoal = JSON.parse(localStorage.getItem('og6-enfgoal')||'{}')||{}; }catch(e){ S.enfGoal = {}; } }
   return +(S.enfGoal[kind])||0;
@@ -20661,6 +20804,7 @@ function enfMoreMenu(){
     (tab==='entrenar' ? it('toggleTimerLib()', S._timerLibOpen?'Ocultar biblioteca':'Biblioteca de bloques y ejercicios') : '')+
     (tab==='entrenar' && !featureLocked('planmes') ? it('openMonthPlan()','Plan del mes') : '')+
     (tab==='entrenar' ? it('openQuickCountdown()','Cuenta atrás') : '')+
+    it('openLvModes()','Niveles por modo')+
     it('openTimerGroupSheet()','Ordenar y agrupar')+
     it('openTplImport()','Importar rutina o bloque')+
     (tab==='entrenar' ? it('openTrainSharePick()','Compartir resumen de Enfoque') : '')+
@@ -20674,7 +20818,7 @@ function renderTimerHome(){
   var list = timerTplAll();
   var _tab = enfTabCur(), _kind = enfKindCur();
   enfPrefLoad();
-  var pre = '<div class="enf-bg enf-t-'+_tab+(S.enfAnim===false?' enf-noanim':'')+'" style="'+enfColVars(_tab)+'padding:16px 16px 90px;">'+enfSegHTML()+enfSubHTML()+(_tab==='entrenar' ? timerPausedHTML()+enfHeroHTML() : timerPausedHTML())+((_tab==='entrenar' && enfLayoutCur()==='b') ? enfStatsBlock(_kind) : '');
+  var pre = '<div class="enf-bg enf-t-'+_tab+(S.enfAnim===false?' enf-noanim':'')+'" style="'+enfColVars(_tab)+'padding:16px 16px 90px;">'+enfHeadHTML()+enfLvHeroHTML(_tab)+(_tab==='entrenar' ? timerPausedHTML()+enfHeroHTML() : timerPausedHTML())+((_tab==='entrenar' && enfLayoutCur()==='b') ? enfStatsBlock(_kind) : '');
   var post = ((_tab==='entrenar' && enfLayoutCur()==='b') ? '' : enfStatsBlock(_kind))+trainHistCardHTML(_kind);
   var html = '', tilesHTML = '';
   // Orden + secciones por tipo
@@ -26195,12 +26339,50 @@ function openZoneLog(pre, editId){
   var ed = editId && (S.zoneLog||[]).find(function(x){return x.id===editId;});
   if(ed){ ZL = {z:(ed.zones||[]).slice(), min:ed.min||20, int:ed.int||2, date:ed.date||todayStr(), dims:(ed.dims||[]).slice(), act:ed.act||'', km:ed.km||'', edit:ed.id}; } removeOverlay('zone-log');
   var ov = document.createElement('div'); ov.className='overlay'; ov.id='zone-log'; ov.style.zIndex = 650; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('zone-log'); });
+  ZL.stage = (!ed && !(pre&&pre.length) && zlRecent().length) ? 'recent' : 'form';
   document.body.appendChild(ov); zlDraw();
+}
+// Anotar entrenamiento: recientes para repetir y cuerpo para elegir zonas
+function zlRecent(){
+  var seen = {}, out = [];
+  (S.zoneLog||[]).filter(function(x){return !x.del;}).sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')) || (b.updatedAt||0)-(a.updatedAt||0); }).forEach(function(x){
+    var k = (x.zones||[]).slice().sort().join(',')+'|'+(x.act||'')+'|'+(x.min||''); if(seen[k] || out.length>=3) return; seen[k] = 1; out.push(x); });
+  return out;
+}
+function zlTitle(x){
+  var zn = (x.zones||[]).map(function(id){ var z = zoneById(id); return z ? z.name : ''; }).filter(Boolean);
+  var base = x.act ? actType(x.act).name : 'Entrenamiento';
+  return zn.length ? (x.act ? base+' · ' : '')+zn.slice(0,3).join(', ')+(zn.length>3?' +'+(zn.length-3):'') : base;
+}
+function zlRepeat(id){
+  var x = (S.zoneLog||[]).find(function(y){return y.id===id;}); if(!x) return;
+  S.zoneLog.push({id:uid(), zones:(x.zones||[]).slice(), min:x.min, int:x.int, date:todayStr(), dims:(x.dims||[]).slice(), act:x.act||'', km:x.km||'', updatedAt:Date.now()});
+  saveState(); removeOverlay('zone-log'); render(); toast('✓ Entrenamiento anotado');
+}
+function zlRecentHTML(){
+  var rec = zlRecent();
+  var rows = rec.map(function(x){ return '<div style="display:flex;align-items:center;gap:12px;border:1.5px solid var(--line);border-radius:18px;background:var(--paper);padding:12px 14px;margin-bottom:10px;"><span style="width:40px;height:40px;border-radius:13px;background:var(--accent-bg);color:var(--accent-text);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 11-2.5-5.8M20 4v4h-4"/></svg></span><div style="flex:1;min-width:0;"><div style="font-size:14.5px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(zlTitle(x))+'</div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">'+(x.min||20)+' min · '+esc(INT_LEVELS[(x.int||2)-1]||'')+' · '+timerHistDayLabel(x.date||todayStr()).toLowerCase()+'</div></div><button onclick="zlRepeat(\''+x.id+'\')" style="height:34px;padding:0 14px;border-radius:17px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Repetir</button></div>'; }).join('');
+  return '<div class="sheet" style="max-height:92vh;overflow:auto;"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:20px;">Anotar un entrenamiento</span><div class="st-sub">Repite uno reciente con un toque, o crea uno nuevo.</div></div><button class="st-x" onclick="removeOverlay(\'zone-log\')" aria-label="Cerrar">×</button></div>'+
+    '<div class="st-lbl" style="margin-top:12px;">Recientes</div>'+rows+
+    '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 14px;"><span style="flex:1;height:1px;background:var(--line);"></span><span style="font-size:12px;color:var(--muted);font-weight:700;">O</span><span style="flex:1;height:1px;background:var(--line);"></span></div>'+
+    '<button onclick="ZL.stage=\'form\';zlDraw()" style="width:100%;height:54px;border-radius:27px;border:1.5px solid var(--accent);background:none;color:var(--accent-text);font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Nuevo entrenamiento</button></div>';
+}
+function zlBodyHTML(){
+  var st = zoneStats(), N = zoneN(), st2 = {};
+  ZONES.forEach(function(z){ var on = ZL.z.indexOf(z.id)>=0; st2[z.id] = Object.assign({}, st[z.id], {known:on, value:on?N:0}); });
+  return '<div style="max-width:300px;margin:0 auto;">'+bodyMapHTML(st2, 'prom').replace(/openZone\(/g,'zlTog(')+'</div>';
+}
+function zlZonesHTML(){
+  var chips = ZL.z.map(function(id){ var z = zoneById(id); return z ? '<button onclick="zlTog(\''+id+'\')" style="padding:6px 12px;border-radius:15px;border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent-text);font-size:12.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(z.name)+' ✕</button>' : ''; }).join('');
+  return '<div class="st-sub" style="text-align:center;margin:0 0 2px;">Toca las zonas que trabajaste</div>'+zlBodyHTML()+
+    (chips ? '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:4px;">'+chips+'</div>' : '')+
+    '<details class="st-adv" style="margin-top:8px;"><summary>Elegir de la lista</summary><div style="padding:6px 0 4px;">'+ztPickHTML('zl', ZL.z, 'zlTog', 'zlDraw')+'</div></details>';
 }
 function zlDayDiff(){ return Math.round((parseLocalDate(todayStr()) - parseLocalDate(ZL.date))/86400000); }
 function zlSetDays(n){ var d = new Date(); d.setDate(d.getDate()-n); ZL.date = localDateStr(d); zlDraw(); }
 function zlDraw(){
   var ov = document.getElementById('zone-log'); if(!ov) return;
+  if(ZL.stage==='recent'){ brPutSheet(ov, zlRecentHTML()); return; }
   var chip = function(on, t, fn){ return '<button onclick="'+fn+'" style="padding:7px 12px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--ink-soft)')+';">'+t+'</button>'; };
   var zch = function(){ return ZONES.filter(zoneVisible).map(function(z){ var on = ZL.z.indexOf(z.id)>=0; return '<button onclick="zlTog(\''+z.id+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:var(--ink);">'+exIconSVG('z-'+z.id,16)+z.name+'</button>'; }).join(''); };
   var dd = zlDayDiff(), presets = [10,20,30,45,60,90];
@@ -26210,7 +26392,7 @@ function zlDraw(){
     (recent.length?'<div style="font-size:11px;color:var(--muted);margin:8px 0 4px;">Desde tus actividades registradas o importadas</div><div style="display:flex;flex-direction:column;gap:5px;">'+recent.map(function(a){ return '<button onclick="zlFromAct(\''+a.id+'\')" style="display:flex;align-items:center;gap:8px;text-align:left;background:var(--bg);border:none;border-radius:10px;padding:8px 10px;cursor:pointer;font-family:Inter,sans-serif;font-size:12.5px;color:var(--ink);">'+actBadge(a.type,22)+'<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(a.name||actType(a.type).name)+' · '+(a.date?esc(String(a.date).slice(0,10)):'')+(a.km?' · '+actFmtKm(+a.km)+' km':'')+'</span></button>'; }).join('')+'</div>':'');
   brPutSheet(ov, '<div class="sheet" style="max-height:92vh;overflow:auto;"><div class="st-head"><div><span class="serif" style="font-weight:700;font-size:20px;">Anotar un entrenamiento</span><div class="st-sub">Marca qué zonas trabajaste y cuánto.</div></div><button class="st-x" onclick="removeOverlay(\'zone-log\')" aria-label="Cerrar">×</button></div>'+
     actBlock+
-    '<div class="st-lbl" style="margin-top:10px;">Zonas</div><div style="margin-bottom:4px;">'+ztPickHTML('zl', ZL.z, 'zlTog', 'zlDraw')+'</div>'+
+    '<div class="st-lbl" style="margin-top:10px;">Zonas</div><div style="margin-bottom:4px;">'+zlZonesHTML()+'</div>'+
     (zoneDimsOn()?'<div class="st-lbl">Dimensión trabajada</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+ZDIMS.map(function(d){ var on = ZL.dims.indexOf(d[0])>=0; return chip(on, d[1], 'zlDim(\''+d[0]+'\')'); }).join('')+'</div>':'')+
     '<div class="st-lbl">Duración</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">'+presets.map(function(m){ return chip(ZL.min===m, m+' min', 'ZL.min='+m+';zlDraw()'); }).join('')+'<span style="display:inline-flex;align-items:center;gap:5px;"><input class="finp" type="number" inputmode="numeric" min="1" max="600" value="'+(presets.indexOf(ZL.min)<0?ZL.min:'')+'" placeholder="otro" oninput="ZL.min=Math.max(1,Math.min(600,+this.value||0))" onchange="zlDraw()" style="width:70px;margin:0;text-align:center;"/><span style="font-size:12px;color:var(--muted);">min</span></span></div>'+
     '<div class="st-lbl">Intensidad</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+INT_LEVELS.map(function(n,i){ return chip(ZL.int===i+1, n, 'ZL.int='+(i+1)+';zlDraw()'); }).join('')+'</div>'+
@@ -27363,7 +27545,7 @@ function brLog(sec){
   var h = {id:uid(), ts:Date.now(), startedAt:BR.started, date:todayStr(), kind:'free', name:BR.name, itemText:'', taskId:null, group:'Respiración', sec:Math.round(sec), cycles:Math.max(0,Math.floor(sec/((BR.P&&BR.P.cycle)||1)+0.0001)), rounds:1, exercises:[brPatTxt(BR.b)], results:[], updatedAt:Date.now()};
   if(BR.tplId){ h.tplId = BR.tplId; var _sk = tplSkillIds(BR.tplId); if(_sk.length) h.skills = _sk; }
   try{ var _bs = brSkillsFor(BR.name); if(_bs.length) h.skills = (h.skills||[]).concat(_bs.filter(function(i){ return (h.skills||[]).indexOf(i)<0; })); }catch(e){}
-  if(!S.timerHistory) S.timerHistory=[]; S.timerHistory.push(h); timerHistAward(h); try{ chalSync(); }catch(e){} if(h.skills && h.skills.length) setTimeout(function(){ showGains(h.id); }, 900); if(S.timerHistory.length>600) S.timerHistory = S.timerHistory.slice(-600); saveState();
+  if(!S.timerHistory) S.timerHistory=[]; S.timerHistory.push(h); timerHistAward(h); try{ chalSync(); }catch(e){} if(tmLvOn('k:'+tmHistKind(h))) setTimeout(function(){ openSessLv(h.id); }, 900); else if(h.skills && h.skills.length) setTimeout(function(){ showGains(h.id); }, 900); if(S.timerHistory.length>600) S.timerHistory = S.timerHistory.slice(-600); saveState();
 }
 function brCleanup(){
   if(!BR) return; try{ if(BR.amb) BR.amb.stop(.8); }catch(e){} clearInterval(BR.sched); cancelAnimationFrame(BR.raf);
@@ -27372,16 +27554,25 @@ function brCleanup(){
   var c = BR.ctx; setTimeout(function(){ try{c.close();}catch(e){} }, 3500);
   BR = null;
 }
+function brMood(v){
+  var h = (S.timerHistory||[]).slice(-1)[0]; if(h && BR) { h.mood = v; saveState(); }
+  ['mas','igual','aun'].forEach(function(k){ var e = document.getElementById('br-mood-'+k); if(e){ var on = k===v; e.style.background = on ? '#fff' : 'rgba(255,255,255,.12)'; e.style.color = on ? '#0f2a24' : '#fff'; } });
+}
+function brAgain(){
+  var b = BR && BR.b, name = BR && BR.name, tpl = BR && BR.tplId; var ov = document.getElementById('breath-run'); if(ov) ov.remove(); brCleanup();
+  if(b) openBreathRun(b, name, tpl);
+}
 function brFinish(ok){
   if(!BR||BR.done) return; BR.done = true; cancelAnimationFrame(BR.raf); try{ if(BR.amb) BR.amb.stop(3); }catch(e){}
   var cycles = BR.cycles, total = BR.total, name = BR.name; brLog(total);
-  var ov = document.getElementById('breath-run'); if(ov) ov.style.background = '#1b2a22';
-  if(ov) ov.innerHTML = '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px;">'+
-    '<div style="width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#9fe0b6,#4c9b6c);box-shadow:0 0 60px #6fd09a77;display:flex;align-items:center;justify-content:center;margin-bottom:26px;"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>'+
-    '<div class="serif" style="font-size:26px;font-weight:700;margin-bottom:8px;">Sesión completa</div>'+
-    '<div style="font-size:14px;opacity:.8;line-height:1.6;">'+esc(name)+'<br>'+cycles+' ciclos · '+fmtDur(total)+'</div>'+
-    '<div style="font-size:13px;opacity:.6;margin-top:18px;">Quédate un momento con la respiración natural.</div>'+
-    '<button onclick="brClose(true)" style="margin-top:28px;padding:13px 40px;border-radius:24px;border:none;background:#ffffff30;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Cerrar</button></div>';
+  var ov = document.getElementById('breath-run'); if(ov) ov.style.background = '#0f2420';
+  var mb = function(k,t){ return '<button id="br-mood-'+k+'" onclick="brMood(\''+k+'\')" style="flex:1;padding:11px 4px;border-radius:12px;border:none;background:rgba(255,255,255,.12);color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+t+'</button>'; };
+  if(ov) ov.innerHTML = '<div style="flex:1;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 22px;box-sizing:border-box;">'+
+    '<div style="position:relative;width:150px;height:150px;margin-bottom:22px;"><div style="position:absolute;inset:0;border-radius:50%;background:rgba(95,200,190,.16);"></div><div style="position:absolute;inset:20px;border-radius:50%;background:rgba(95,200,190,.28);"></div><div style="position:absolute;inset:45px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#8fe6dc,#3fb3a8);box-shadow:0 0 40px #5fd0c455;"></div></div>'+
+    '<div class="serif" style="font-size:30px;font-weight:700;margin-bottom:8px;">Bien hecho</div>'+
+    '<div style="font-size:14px;opacity:.8;line-height:1.5;">'+fmtDur(total)+' · '+cycles+' ciclos · '+esc(name)+'</div>'+
+    '<div style="width:100%;margin-top:26px;background:rgba(255,255,255,.08);border-radius:18px;padding:14px;text-align:left;"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">¿Cómo te sientes ahora?</div><div style="display:flex;gap:8px;">'+mb('mas','Más calmo')+mb('igual','Igual')+mb('aun','Aún tenso')+'</div></div></div>'+
+    '<div style="width:100%;max-width:440px;display:flex;gap:10px;padding:0 22px calc(22px + env(safe-area-inset-bottom,0px));box-sizing:border-box;"><button onclick="brAgain()" style="flex:1;height:54px;border-radius:27px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">▶ Otra vez</button><button onclick="brClose(true)" style="flex:1.2;height:54px;border-radius:27px;border:none;background:#fff;color:#0f2a24;font-size:15px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;">Listo</button></div>';
   try{ playSound('achievement'); }catch(e){}
 }
 function brClose(fromDone){
@@ -33464,7 +33655,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.22.195';
+var APP_VERSION = '2026.11.23.196';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
