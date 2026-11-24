@@ -1168,7 +1168,7 @@ function onGoogleCredential(resp){
     authHide();
     _registerFCMToken();
   }).catch(function(e){
-    toast(e.code==='auth/unauthorized-domain' ? 'Este dominio no está autorizado en Firebase' : 'No se pudo iniciar sesión: '+(e.message||e.code));
+    toast(e.code==='auth/unauthorized-domain' ? 'No se puede iniciar sesión desde esta dirección' : 'No se pudo iniciar sesión: '+(e.message||e.code));
   });
 }
 function handleGoogleSignIn(){
@@ -1238,7 +1238,7 @@ function handleGoogleRedirectResult(){
     localStorage.removeItem('og6-google-redirect-pending');
     localStorage.removeItem('og6-google-redirect-ts');
     if(e.code==='auth/unauthorized-domain'){
-      toast('Este dominio no está autorizado en Firebase');
+      toast('No se puede iniciar sesión desde esta dirección');
     } else if(e.code && e.code!=='auth/no-auth-event'){
       toast('Error Google Sign-In: '+e.message);
     }
@@ -2025,20 +2025,8 @@ var TEXTS = {
   // ── Mensajes al subir de nivel — uno por nivel (ciclo del día) ─────────────
   // Niveles 1-4 Descenso→Crepúsculo · 5-8 «Nuevo» · 9-12 «Gran». Del 13 en adelante
   // se repite la fase del «Gran» ciclo (ver levelUpMsg). El nombre del nivel se muestra aparte.
-  levelUp: [
-    "Todo empieza bajando de las ideas a lo concreto: una tarea hecha vale más que cien planes.",
-    "Llegó la primera luz: lo que hacías a ratos ya empieza a tener forma de hábito.",
-    "Sin sombras largas: lo que haces y lo que quieres coinciden. Buen momento para mirar lo recorrido.",
-    "Cierras tu primer ciclo. Lo que termina no se pierde: queda hecho y te prepara para lo que sigue.",
-    "Vuelves al comienzo con otra mirada: ya sabes lo que cuesta empezar, y que se puede.",
-    "El segundo día se parece al primero, pero tú no: tu constancia ya llega antes que tú.",
-    "Tu foco es parejo: lo importante ocupa el lugar que le corresponde.",
-    "Cierras el segundo ciclo con más fondo que el primero. Descansa: mañana vuelve la luz.",
-    "Bajas otra vez, ahora con todo lo aprendido. Lo difícil ya es costumbre.",
-    "La luz llega más temprano: empezar ya no cuesta como antes.",
-    "Tu hora más alta: constancia, foco y sentido van al mismo paso.",
-    "Cierras un recorrido largo. Mira atrás sin apuro: todo eso lo hiciste tú."
-  ],
+  levelUp: [], // sin mensajes de nivel (solo cita de Zaratustra)
+
 
   // Título del modal de subida de nivel — admite {nivel}
   levelUpTitle: "¡Nivel {nivel} alcanzado!",
@@ -2049,7 +2037,7 @@ var TEXTS = {
 
   // ── Toast de XP ganado ───────────────────────────────────────────────────
   xpGainedTitle: "+{pts} XP",
-  xpGainedSubtitle: "Tu progreso avanza",
+  xpGainedSubtitle: "",
 
   // ── Notificación de racha alcanzada (primera vez en el día) ──────────────
   streakTitle: "¡Día {dias} de racha!",
@@ -2062,7 +2050,7 @@ var TEXTS = {
 
   // ── Aviso de límite de tareas ────────────────────────────────────────────
   tasksLimitTitle: "Generación de tareas pausada",
-  tasksLimitBody: "Llegaste al máximo de tareas para este período. La creación de nuevas tareas estará bloqueada por un tiempo. Aprovecha para enfocarte en lo que ya tienes.",
+  tasksLimitBody: "Llegaste al máximo de tareas para este período. No podrás crear tareas nuevas por un tiempo.",
   tasksLimitButton: "Entendido",
 
   // ── Botón reinicio + avisos ──────────────────────────────────────────────
@@ -2267,7 +2255,7 @@ var S = {
     daysLimit:14,cooldownMonths:3,
     lowThresh:0.4,maxTasks:2,onlyCrucial:false,
     color:'#e8c5a8',icon:'leaf',
-    tips:['Empieza con una sola tarea pequeña.','Hidratación y descanso primero.','No es necesario exigirse tanto hoy.'],
+    tips:[],
     // Tareas elementales sugeridas (5 por defecto, editables)
     elementalTasks:['Ducharse','Hacer la cama','Tomar agua','Comer algo','Salir al sol'],
     // Información de emergencia (rellenar con los datos reales)
@@ -2373,8 +2361,8 @@ var S = {
     daysPlanned:7,
     lowThresh:0.3,    // Umbral más bajo
     maxTasks:3,        // Más permisivo que baja energía
-    suggestions:['Pasear sin rumbo','Leer algo entretenido','Comer algo dulce','Ver el cielo','No hacer nada'],
-    supportMessage:'Las vacaciones también puede ser productivas a su modo. Date permiso de descansar.',
+    suggestions:[],
+    supportMessage:'',
   },
   // Logros desbloqueados: [{id, dateUnlocked, days}]
   achievements:[],
@@ -3820,40 +3808,18 @@ var ZAR_FRASES = [
   {n:16, q:"Retorno, con este sol, con esta tierra, con esta águila, con esta serpiente, - pero no a una nueva vida o una vida mejor o una vida similar: - retorno eternamente a esta misma y única vida, en lo más grande y también en lo más pequeño, para enseñar de nuevo el eterno retorno de todas las cosas. - para decir de nuevo la palabra del gran mediodía de la tierra y del hombre", f:"p. 210"},
   {n:17, q:"Ese soy yo, en efecto, desde el fondo y desde el principio, atrayendo, levantado, elevando, tirando; alguien que tira, cría y corrige, que no en vano se dijo una vez a sí mismo: \"¡Llega a ser quien eres!\"", f:"p. 219"},
 ];
-var ZAR_COM = {
-  1:'Zaratustra empieza su camino bajando de la montaña, hacia la gente. Tu primer nivel es esa misma decisión: dejar de pensarlo y comenzar, aunque sea con algo pequeño.',
-  2:'Amanece. Lo que ayer era intención hoy tiene un primer hábito. Cuidado con apurarte: el día recién se está abriendo.',
-  3:'En mitad del camino lo difícil ya no es partir sino sostener. Elegir de nuevo, cada día, lo que quieres hacer contigo.',
-  4:'Termina un primer ciclo. Mira lo que construiste sin compararlo con nadie: eres tu propio punto de partida.',
-  5:'Zaratustra pide escuchar al cuerpo en vez de despreciarlo. Tus rutinas, tu sueño y tu descanso son parte de lo que construyes aquí, no un trámite aparte.',
-  6:'Primera transformación: el camello carga con lo que le piden y avanza hacia el desierto. Mira qué tareas llevas por obligación y cuáles de verdad son tuyas.',
-  7:'Segunda transformación: el león quiere su libertad. Poner límites, decir que no y elegir qué entra en tu semana también es avanzar.',
-  8:'Segundo ciclo cumplido. Cabeza y corazón van juntos: la constancia ya no es esfuerzo heroico, es una forma de vivir que has elegido.',
-  9:'Tercera transformación: el niño es un nuevo comienzo. Empezar un ciclo más sin cargar el anterior, con ganas de jugar y de decir que sí a lo que viene.',
-  10:'Las viejas palabras ya no alcanzan. Un nuevo ciclo pide hábitos y metas con lenguaje propio, no copiados de lo que alguna vez te funcionó.',
-  11:'Mediodía de este ciclo: elevar lo profundo hasta la luz. Lo que aprendiste en los días difíciles es lo que hoy te sostiene.',
-  12:'Entre el amanecer, el mediodía y el atardecer: un día completo, y tres ciclos completos. La felicidad aquí no es llegar, sino repartirla a lo largo del camino.'
-};
-var ZAR_COM_X = {13:'Un descenso más profundo que los anteriores. A veces para avanzar hay que volver a lo esencial, aunque cueste. Eso también es subir de nivel.',14:'Nadie dijo que la altura sea cómoda: se avanza más rápido entre cumbres, pero con pasos largos y a veces en soledad. Cuida tus tiempos y no saltes todos los peldaños.',15:'La voluntad no es solo querer entender, sino querer vivir y crear. Que el río de tu rutina te lleve; tu trabajo es dirigir la barca, no detener el agua.',16:'El eterno retorno como prueba: ¿vivirías de nuevo este día, tal cual? Si la respuesta es sí, estás en tu camino. Si no, todavía puedes cambiarlo mañana.',17:'«Llega a ser quien eres». Cierra un gran ciclo y empieza la parte más personal: ya no se trata de cumplir, sino de ser.'};
-var ZAR_COM_FASE = [
-  'Un descenso: volver a lo simple y empezar de nuevo con lo aprendido.',
-  'Una aurora: algo nuevo empieza a verse. Cuida lo que apenas nace.',
-  'Mediodía: todo está a plena luz. Es el momento de actuar con claridad.',
-  'Crepúsculo: cierra un ciclo con gratitud y prepárate para el siguiente.'
-];
 function zarFor(lvl){
   if(S.zarOff) return null;
   var fs = ZAR_FRASES.filter(function(x){ return x.n===lvl && x.q; });
-  return {qs: fs, c: ZAR_COM[lvl] || ZAR_COM_X[lvl] || ZAR_COM_FASE[lvPhase(lvl)]};
+  return fs.length ? {qs: fs} : null; // sin cita, el nivel muestra su mensaje habitual
 }
 function zarHTML(lvl){
   var z = zarFor(lvl); if(!z) return '';
   return '<div style="text-align:left;margin:-6px 0 22px;padding-top:0;max-height:38vh;overflow-y:auto;">'+
-    z.qs.map(function(x){ return '<div class="serif" style="font-style:italic;font-size:14.5px;line-height:1.55;color:var(--ink);margin-bottom:2px;">«'+esc(x.q)+'»</div><div style="font-size:11px;color:var(--muted);margin:3px 0 10px;line-height:1.4;">— '+esc(x.f||'')+'</div>'; }).join('')+
-    (z.qs.length ? '<div style="font-size:10.5px;color:var(--muted);line-height:1.4;margin:-4px 0 10px;">'+esc(ZAR_EDIC)+'</div>' : '')+
-    '<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.55;">'+esc(z.c)+'</div></div>';
+    z.qs.map(function(x){ return '<div class="serif" style="font-style:italic;font-size:14.5px;line-height:1.55;color:var(--ink);margin-bottom:2px;">«'+esc(x.q)+'»</div><div style="font-size:11.5px;color:var(--ink-soft);margin:4px 0 12px;line-height:1.4;">— <b style="font-weight:700;">Friedrich Nietzsche</b><span style="color:var(--muted);">'+(x.f ? ' · '+esc(x.f) : '')+'</span></div>'; }).join('')+
+    '<div style="font-size:9.5px;color:var(--muted-soft);line-height:1.4;margin-top:2px;opacity:.85;">'+esc(ZAR_EDIC)+'</div></div>';
 }
-function levelUpMsg(lvl){ var L = TEXTS.levelUp; return L[lvl<=L.length ? lvl-1 : L.length-4+((lvl-1)%4)]; }
+function levelUpMsg(lvl){ return ''; } // sin mensajes tras el nombre del nivel: solo la cita, cuando la hay
 function showLevelUp(lvl){
   var col=getLevelColor(lvl);
   var levelName=getLevelName(lvl);
@@ -3866,7 +3832,7 @@ function showLevelUp(lvl){
     '<div class="lvl-up-sym">'+
       '<svg width="116" height="116" viewBox="0 0 24 24" style="filter:drop-shadow(0 6px 14px '+col+'44);">'+symSVG(lvl,col,1.2)+'</svg>'+
     '</div>'+
-    (zarFor(lvl) ? '' : '<div class="lvl-up-msg">'+esc(customMsg)+'</div>')+zarHTML(lvl)+
+    zarHTML(lvl)+
     '<button class="lvl-up-btn" onclick="closeLevelUp()">'+TEXTS.levelUpButton+'</button>'+
   '</div>';
   document.body.appendChild(box);
@@ -4166,7 +4132,7 @@ function goProgress(){
 // Las cuentas que ya existían no cambian. «Desbloquear todo» (Yo › Preferencias) es reversible.
 var TAB_GATE = {plan:{lvl:1, name:'Plan', ico:'calendar'}, timer:{lvl:2, name:'Enfoque', ico:'bolt'}, proyectos:{lvl:3, name:'Registros', ico:'box'}};
 var TAB_GUIDE = {
-  plan:'Aquí organizas la semana y el mes: objetivos por período, horario y tu progreso. Es el lugar para pasar de «lo de hoy» a «hacia dónde voy».',
+  plan:'Aquí organizas la semana y el mes: objetivos por período, horario y tu progreso.',
   timer:'Rutinas con temporizador, actividades con GPS, respiración y estudio. Todo lo que hagas aquí suma XP y puede completar tareas solo.',
   proyectos:'Proyectos, listas y registros con secciones propias para lo que no cabe en un día. Ideal para estudios, trabajos o colecciones.'
 };
@@ -4721,7 +4687,7 @@ function renderRecoveryScreen(tab, err){
   return '<div style="padding:32px 20px;text-align:center;">'+
     '<div style="margin-bottom:12px;display:flex;justify-content:center;color:var(--bad);">'+ico('warn',40,1.6)+'</div>'+
     '<div class="serif" style="font-weight:700;font-size:18px;color:var(--ink);margin-bottom:10px;">Esta pantalla tuvo un problema</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px;">No se pudo mostrar "'+esc(tab)+'" por un error interno. El resto de la app debería seguir funcionando — prueba con otra pestaña.</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px;">No se pudo mostrar "'+esc(tab)+'" por un problema. Prueba con otra pestaña.</div>'+
     '<div style="font-size:10px;color:var(--muted-soft);font-family:monospace;background:var(--bg);border-radius:8px;padding:8px;margin:14px 0;word-break:break-word;">'+esc(msg)+'</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px;max-width:280px;margin:20px auto 0;">'+
       '<button class="sbtn" onclick="location.reload()">Recargar la app</button>'+
@@ -5000,7 +4966,8 @@ function renderHoy(){
   var _wkOn = S.showWeeklyMessage!==false;
   var _wMsg = (_wkOn && S.weeklyMessages) ? S.weeklyMessages[getWeekKey()] : null;
   if(_wMsg && !_wMsg.text) _wMsg = null;
-  var _tip = (am && am.tips && am.tips[0]) ? am.tips[0] : null;
+  var _OLDTIPS = ['Empieza con una sola tarea pequeña.','Hidratación y descanso primero.','No es necesario exigirse tanto hoy.'];
+  var _tip = (am && am.tips && am.tips[0] && _OLDTIPS.indexOf(am.tips[0])<0) ? am.tips[0] : null; // los consejos de fábrica ya no se muestran
   var _canAdd = _wkOn && !_wMsg;
   if(_canAdd && !am){
     var _wk = getWeekKey(); S.wkPromptWeeks = S.wkPromptWeeks || [];
@@ -6088,8 +6055,8 @@ function renderYoPreferenciasScreen(){
     '</div>';
   }
 
-  html += '<div class="card" style="margin-bottom:10px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Reflexión en cada nivel'+infoBtn('zarlv')+'</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Al subir de nivel, un breve comentario inspirado en «Así habló Zaratustra».</div></div>'+
+  html += '<div class="card" style="margin-bottom:10px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Cita en cada nivel'+infoBtn('zarlv')+'</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5;">Al subir de nivel, una cita de «Así habló Zaratustra».</div></div>'+
     '<button class="tog" onclick="S.zarOff=!S.zarOff;saveState();render()" style="background:'+(!S.zarOff?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(!S.zarOff?22:2)+'px;"></span></button></div></div>';
   if(!S.simpleMode && (S.tabGate===true || S.tabsAll)){
     html += '<div class="card" style="margin-bottom:10px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><div style="flex:1;"><div style="font-weight:700;font-size:14px;color:var(--ink);">Desbloquear todas las pestañas'+infoBtn('tabgate')+'</div>'+
@@ -6895,7 +6862,7 @@ function _loadFunctionsSDK(){
     if(firebase.functions){ ok(); return; }
     var sc = document.createElement('script');
     sc.src = 'https://www.gstatic.com/firebasejs/10.7.0/firebase-functions-compat.js';
-    sc.onload = function(){ ok(); }; sc.onerror = function(){ fail(new Error('No se pudo cargar el servicio de verificación')); };
+    sc.onload = function(){ ok(); }; sc.onerror = function(){ fail(new Error('No se pudo verificar la compra. Inténtalo de nuevo.')); };
     document.head.appendChild(sc);
   });
 }
@@ -9413,7 +9380,7 @@ function weeklyReviewRender(){
     }).join('');
     if(r.overdueItems) html += '<div style="font-size:12.5px;color:var(--ink-soft);margin:4px 0 8px;line-height:1.5;">También hay <b style="color:var(--bad);">'+r.overdueItems+' subtarea'+(r.overdueItems===1?'':'s')+'</b> con fecha vencida dentro de tus checklists.</div>';
   } else {
-    html += '<div class="card" style="text-align:center;font-size:13px;color:var(--ink-soft);margin-bottom:12px;">No te quedó nada atrasado. ¡Buen cierre de semana!</div>';
+    html += '<div class="card" style="text-align:center;font-size:13px;color:var(--ink-soft);margin-bottom:12px;">No quedó nada atrasado.</div>';
   }
   html += '<button class="sbtn" style="margin-top:8px;" onclick="closeWeeklyReview();openWeeklyMessageEditor()">Escribir mi intención para la próxima semana</button>'+
     '<button class="cbtn" style="margin-top:8px;width:100%;" onclick="closeWeeklyReview()">Listo</button>';
@@ -10333,7 +10300,7 @@ function skShareFile(){
 }
 // Importar: el contenido viene de fuera, así que se valida y se recorta todo (nada se ejecuta ni se inserta como HTML).
 function skImportParse(txt){
-  var d; try{ d = JSON.parse(txt); }catch(e){ return {err:'El texto no es un archivo de habilidades válido.'}; }
+  var d; try{ d = JSON.parse(txt); }catch(e){ return {err:'Eso no es un archivo de habilidades de Gramifica.'}; }
   if(!d || d.gramifica!=='skills' || d.v!==1 || !Array.isArray(d.tree)) return {err:'No parece un archivo de habilidades de Gramifica.'};
   var cnt = 0, bad = false, str = function(x,n){ return String(x==null?'':x).replace(/[<>]/g,'').slice(0,n||40); }, num = function(x,def){ x = +x; return isFinite(x) ? x : def; };
   var hex = function(c){ return /^#[0-9a-f]{6}$/i.test(c||'') ? c : ''; };
@@ -11600,7 +11567,7 @@ function actRunDraw(){
     (ACT.state==='ready' ? '<button onclick="openActDiff()" style="margin:12px 16px 0;padding:11px 14px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:10px;cursor:pointer;font-family:Inter,sans-serif;text-align:left;flex-shrink:0;"><span style="flex:1;min-width:0;"><span style="display:block;font-weight:700;font-size:13.5px;color:#fff;">Dificultad añadida</span><span class="act-diff-sum" style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(actDiffTxt(ACT.diff)||'Ninguna · lastre, inclinación, terreno')+'</span></span><span style="color:var(--muted);font-size:18px;">›</span></button>' : '')+
     '<div id="act-lap" style="display:none;margin:12px 16px 0;padding:9px 14px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-size:12.5px;font-weight:700;color:#fff;text-align:center;flex-shrink:0;"></div>'+
     '<div style="flex:1;min-height:0;margin:12px 16px;background:#ebe8e1;border:1px solid var(--line-soft);border-radius:22px;position:relative;overflow:hidden;"><canvas id="act-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>'+actMapBtnHTML('act-mapbtn',1)+'<button id="act-fit" onclick="actToggleFollow()" style="position:absolute;top:10px;right:10px;border:none;cursor:pointer;font-family:Inter,sans-serif;background:rgba(255,255,255,.94);color:#222;border-radius:14px;padding:7px 12px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.18);">Ver todo</button><div id="act-empty" style="position:absolute;left:12px;right:12px;bottom:26px;display:none;text-align:center;padding:9px 12px;font-size:12.5px;color:#333;line-height:1.4;pointer-events:none;background:rgba(255,255,255,.92);border-radius:12px;"></div></div>'+
-    (ACT.state==='ready' ? '<div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;"><button onclick="actCancelReady()" style="'+rb+'height:62px;padding:0 22px;border-radius:31px;background:rgba(255,255,255,.12);color:#fff;border:none;font-size:14px;font-weight:700;">Cancelar</button><button onclick="actGo()" style="'+rb+'flex:1;height:62px;border-radius:31px;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:16px;font-weight:800;gap:10px;box-shadow:0 8px 20px '+c[1]+'55;"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Comenzar entrenamiento</button></div>' : '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;">'+
+    (ACT.state==='ready' ? '<div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 16px calc(20px + env(safe-area-inset-bottom));flex-shrink:0;"><button onclick="actGo()" aria-label="Iniciar" style="'+rb+'width:148px;height:148px;border-radius:50%;background:'+c[1]+'33;padding:0;"><span style="width:116px;height:116px;border-radius:50%;background:'+c[1]+'55;display:flex;align-items:center;justify-content:center;"><span style="width:92px;height:92px;border-radius:50%;background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;font-size:17px;font-weight:800;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px '+c[1]+'66;">INICIAR</span></span></button><div style="font-size:12.5px;color:rgba(255,255,255,.6);">Toca para empezar</div><button onclick="actCancelReady()" style="background:none;border:none;color:rgba(255,255,255,.75);font-size:13.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;padding:4px 14px;">Cancelar</button></div>' : '<div style="display:flex;align-items:center;justify-content:center;gap:16px;padding:2px 16px calc(22px + env(safe-area-inset-bottom));flex-shrink:0;">'+
       '<button onclick="actPause()" aria-label="'+(paused?'Reanudar':'Pausar')+'" style="'+rb+'width:68px;height:68px;border-radius:50%;'+(paused?'background:linear-gradient(145deg,'+c[0]+','+c[1]+');color:#fff;box-shadow:0 8px 20px '+c[1]+'55;':'background:rgba(255,255,255,.14);color:#fff;border:none;')+'">'+(paused?'<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>':'<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>')+'</button>'+
       '<button id="act-hold" onpointerdown="actHoldStart(event)" onpointerup="actHoldEnd()" onpointerleave="actHoldEnd()" onpointercancel="actHoldEnd()" oncontextmenu="return false" style="'+rb+'flex:1;max-width:260px;position:relative;overflow:hidden;height:68px;border-radius:34px;background:rgba(224,82,60,.2);color:#ff9a86;font-size:15px;font-weight:800;touch-action:none;user-select:none;-webkit-user-select:none;"><span id="act-holdfill" style="position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(224,82,60,.55);"></span><span style="position:relative;">Mantén para terminar</span></button></div>')+'</div>';
   actRunUpdate();
@@ -11872,16 +11839,17 @@ function actSumDraw(){
   var chip = function(on, t, fn){ return '<button onclick="'+fn+'" style="padding:7px 12px;border-radius:14px;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--ink-soft)')+';">'+t+'</button>'; };
   var cell = function(v,l){ return '<div style="background:var(--bg);border-radius:14px;padding:12px 6px;text-align:center;"><div style="font-weight:800;font-size:20px;color:var(--ink);letter-spacing:-.01em;">'+v+'</div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-top:3px;font-weight:600;">'+l+'</div></div>'; };
   var tl = function(l,v){ return '<div style="background:var(--bg);border-radius:14px;padding:11px 14px;"><div style="font-size:11px;color:var(--muted);font-weight:600;">'+l+'</div><div style="font-size:17px;font-weight:800;color:var(--ink);margin-top:2px;">'+v+'</div></div>'; };
-  var tiles = [tl('En movimiento', actFmtTime(a.movSec||a.sec))];
-  if(sp && sp.s.length){ var bs = Math.min.apply(null, sp.s); tiles.push(tl('Mejor km', ty.unit==='kmh' ? (3600/bs).toFixed(1).replace('.',',')+' km/h' : actFmtPace(bs,1)+' /km')); }
+  var tiles = [];
+  var _bs = (sp && sp.s.length) ? Math.min.apply(null, sp.s) : null;
   if(a.vmax) tiles.push(tl('Velocidad máx.', String(a.vmax).replace('.',',')+' km/h'));
-  if(a.gain>0) tiles.push(tl('Desnivel +', a.gain+' m'));
   if(actDiffOn(a.diff)) tiles.push('<div style="grid-column:1/-1;background:var(--accent-bg);border-radius:14px;padding:11px 14px;"><div style="font-size:11px;color:var(--accent-text);font-weight:700;">Dificultad añadida</div><div style="font-size:14.5px;font-weight:800;color:var(--ink);margin-top:2px;">'+esc(actDiffTxt(a.diff))+'</div>'+(actDiffBonus(a.diff)>0?'<div style="font-size:11.5px;color:var(--accent-text);margin-top:3px;">+'+Math.round(actDiffBonus(a.diff)*100)+' % de experiencia en Entrenar</div>':'')+'</div>');
   var al = (a.route||[]).filter(function(p){return p[3]!=null;}).map(function(p){return p[3];}); if(al.length>5) tiles.push(tl('Altitud máx.', Math.max.apply(null,al)+' m'));
   var hasMap = a.route && a.route.length>=2;
   var keep = document.getElementById('act-name'), nm = keep ? keep.value : a.name;
-  brPutSheet(ov, '<div class="sheet"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><span class="st-ico" style="background:var(--accent-bg);color:var(--accent-text);">'+tmIcon(ACT_ICO[ty.id]||ACT_ICO.otro,22)+'</span><div style="flex:1;min-width:0;"><input id="act-name" class="finp" maxlength="30" value="'+esc(nm)+'" onchange="actRename(this.value)" style="margin:0;font-weight:800;font-size:18px;border:none;border-bottom:1.5px dashed var(--line);padding:0 0 2px;background:transparent;" placeholder="Ponle nombre"/><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">'+esc(timerHistDayLabel(a.date))+'</div></div><button class="st-x" onclick="removeOverlay(\'act-sum\')" aria-label="Cerrar">×</button></div>'+
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">'+cell(st.km,'km')+cell(st.time,'tiempo')+cell(st.pace,st.paceL)+cell(a.kcal!=null?a.kcal:st.gain, a.kcal!=null?'kcal':'desn. m')+'</div>'+
+  var _c1 = actCol(a.type)[1], _cell2 = function(v,l){ return '<div><div style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.01em;">'+v+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">'+l+'</div></div>'; };
+  var _best = _bs==null ? '—' : (ty.unit==='kmh' ? (3600/_bs).toFixed(1).replace('.',',') : actFmtPace(_bs,1));
+  brPutSheet(ov, '<div class="sheet"><div style="position:relative;border-radius:22px;overflow:hidden;background:linear-gradient(170deg,#0f1613,#15271e);color:#fff;padding:14px 16px 18px;margin-bottom:14px;"><canvas id="act-hero" style="position:absolute;inset:0;width:100%;height:100%;"></canvas><div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;"><button onclick="removeOverlay(\'act-sum\')" aria-label="Cerrar" style="width:38px;height:38px;border-radius:19px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:20px;cursor:pointer;">×</button><div style="text-align:center;min-width:0;"><input id="act-name" class="finp" maxlength="30" value="'+esc(nm)+'" onchange="actRename(this.value)" style="margin:0;font-weight:800;font-size:15px;border:none;border-bottom:1.5px dashed rgba(255,255,255,.4);padding:0 0 2px;background:transparent;color:#fff;text-align:center;width:100%;" placeholder="Ponle nombre"/><div style="font-size:11.5px;opacity:.7;">'+esc(timerHistDayLabel(a.date))+'</div></div><button onclick="actCardOut(true)" aria-label="Compartir" style="width:38px;height:38px;border-radius:19px;border:none;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></button></div><div style="position:relative;margin-top:62px;display:flex;align-items:baseline;gap:8px;"><span style="font-size:60px;font-weight:800;letter-spacing:-.03em;line-height:1;">'+st.km+'</span><span style="font-size:17px;opacity:.8;font-weight:700;">km</span></div>'+(_bs!=null?'<div style="position:relative;display:inline-block;margin-top:10px;background:#f6c344;color:#3b2a00;border-radius:14px;padding:5px 12px;font-size:12px;font-weight:800;">Mejor km · '+_best+'</div>':'')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 8px;margin-bottom:16px;">'+_cell2(st.time,'tiempo')+_cell2(st.pace,st.paceL==='/km'?'ritmo /km':st.paceL)+_cell2(a.kcal!=null?a.kcal:'—','kcal')+_cell2(actFmtTime(a.movSec||a.sec),'en movimiento')+_cell2(a.gain>0?'+'+a.gain+' m':'—','desnivel')+_cell2(_best,ty.unit==='kmh'?'mejor km/h':'mejor km')+'</div>'+
     (hasMap ? '<div style="border-radius:16px;overflow:hidden;margin-bottom:14px;height:220px;border:1px solid var(--line-soft);position:relative;"><canvas id="act-map" style="width:100%;height:100%;display:block;"></canvas>'+actMapBtnHTML()+'</div>' : '<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;">La ruta está solo en el dispositivo donde se grabó.</div>')+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">'+tiles.join('')+'</div>'+
     actSplitsHTML(a)+actElevHTML(a)+
@@ -11893,6 +11861,7 @@ function actSumDraw(){
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px;">Poner tus datos sobre una foto:</div><input type="file" accept="image/*" onchange="actCardPhoto(this)" style="font-size:12.5px;"/></div></details>'+
     '<details class="st-adv"><summary>Más opciones</summary><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:14px;"><button class="cbtn" onclick="actGpxOut()">Exportar GPX</button><button class="cbtn" onclick="openTimerHistToReg(\''+esc(a.histId||'')+'\')">Anotar en un registro</button><button class="cbtn" style="color:var(--bad);" onclick="actDelete(\''+a.id+'\')">Eliminar actividad</button></div></details></div>');
   if(hasMap) actMapDraw(document.getElementById('act-map'), a.route, {color:actCol(a.type)[1], follow:false});
+  var _hc = document.getElementById('act-hero'); if(_hc && hasMap){ var _r = _hc.getBoundingClientRect(), _d = window.devicePixelRatio||1; _hc.width = _r.width*_d; _hc.height = _r.height*_d; var _x = _hc.getContext('2d'); _x.scale(_d,_d); try{ actDrawRoute(_x, a.route, {x:_r.width*.38,y:56,w:_r.width*.58,h:_r.height-70}, '#3ddc84', 4, true); }catch(e){} }
   actCardRender(document.getElementById('act-card'));
   setTimeout(function(){ var m = document.getElementById('act-map'); if(m && m._mp) actMapDraw(m, m._mp.pts, m._mp.opt); }, 450);
 }
@@ -16143,7 +16112,7 @@ function exportGanttXLSX(pid){
     var scr=document.createElement('script');
     scr.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
     scr.onload=doExport;
-    scr.onerror=function(){toast('No se pudo cargar la librería de exportación');};
+    scr.onerror=function(){toast('No se pudo preparar la exportación. Revisa tu conexión.');};
     document.head.appendChild(scr);
   }
 }
@@ -18165,10 +18134,10 @@ function renderObjetivosSwipeArea(){
   var doneN=mine.filter(isDone).length;
   var progBar=mine.length?'<div style="margin-bottom:16px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px;"><span>Progreso del período</span><span>'+doneN+' de '+mine.length+' completadas</span></div>'+mpHTML(doneN/mine.length,5)+'</div>':'';
   var emptyMsgs = {
-    semana:{icon:periodIconSVG('semana',36,1.5),msg:'Sin objetivos esta semana',sub:'¿Qué te gustaría lograr en los próximos 7 días?'},
-    mes:{icon:periodIconSVG('mes',36,1.5),msg:'Sin objetivos este mes',sub:'Piensa en algo importante para este mes.'},
-    semestre:{icon:periodIconSVG('semestre',36,1.5),msg:'Sin objetivos este semestre',sub:'Una meta a mediano plazo puede ayudarte a enfocarte.'},
-    "año":{icon:periodIconSVG('año',36,1.5),msg:'Sin objetivos este año',sub:'¿Cuál es tu gran meta para este año?'}
+    semana:{icon:periodIconSVG('semana',36,1.5),msg:'Sin objetivos esta semana',sub:'Crea uno aquí o vincula tareas de Hoy.'},
+    mes:{icon:periodIconSVG('mes',36,1.5),msg:'Sin objetivos este mes',sub:'Crea uno aquí o vincula tareas de Hoy.'},
+    semestre:{icon:periodIconSVG('semestre',36,1.5),msg:'Sin objetivos este semestre',sub:'Crea uno aquí o vincula tareas de Hoy.'},
+    "año":{icon:periodIconSVG('año',36,1.5),msg:'Sin objetivos este año',sub:'Crea uno aquí o vincula tareas de Hoy.'}
   };
   var em = emptyMsgs[sel] || emptyMsgs.semana;
   var tasksHTML=mine.length?mine.map(function(t){
@@ -18402,6 +18371,17 @@ function selBulkDeleteTracksConfirmed(btn){
   toast(ids.length+' seguimiento'+(ids.length===1?'':'s')+' eliminado'+(ids.length===1?'':'s'));
   exitSelectMode();
 }
+function levelTrackTileHTML(t, idx){
+  var info = lvlInfo(t.xp||0), col = levelTrackColor(t, idx), locked = trackLocked(t);
+  if(locked) return '<div onclick="trackLockedTap()" style="border:1.5px solid var(--line);border-radius:20px;padding:12px;opacity:.6;cursor:pointer;display:flex;flex-direction:column;gap:6px;min-height:176px;"><div style="font-weight:800;font-size:15px;color:var(--ink);">'+esc(t.name)+'</div><div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:26px;">'+lockMark('track_slot').trim()+'</div><div style="font-size:11px;color:var(--muted);">Bloqueado: no suma XP</div></div>';
+  var mh = t.view!=='level' ? skMiniHex(t, 112) : null;
+  var vis = mh ? '<div style="display:flex;justify-content:center;">'+mh.svg+'</div>' : '<div style="display:flex;justify-content:center;">'+levelTrackGemHTML(t, idx, 76)+'</div>';
+  return '<div onclick="openTrackDetail(\''+t.id+'\')" style="border:1.5px solid var(--line);border-radius:20px;padding:12px 12px 11px;cursor:pointer;background:var(--paper);display:flex;flex-direction:column;gap:6px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;"><span style="font-weight:800;font-size:15px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.name)+'</span><span style="flex:none;min-width:26px;height:26px;border-radius:8px;background:'+col+';color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;padding:0 5px;">'+info.lvl+'</span></div>'+
+    vis+
+    '<div style="height:5px;border-radius:3px;background:var(--line-soft);overflow:hidden;"><div style="height:100%;width:'+Math.round(info.ratio*100)+'%;background:'+col+';border-radius:3px;"></div></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-weight:600;"><span>'+(t.xp||0)+' XP</span><span>'+Math.round(info.ratio*100)+'%</span></div></div>';
+}
 function renderLevelTracksSection(){
   var tracks = S.levelTracks||[];
   var maxSlots = maxLevelTrackSlots();
@@ -18411,7 +18391,7 @@ function renderLevelTracksSection(){
       '<div style="font-size:11px;color:var(--muted);">'+tracks.length+(maxSlots>=999?'':'/'+maxSlots)+'</div>'+
     '</div>';
   if(tracks.length){
-    html += tracks.map(function(t,i){return trkSelWrap(t, levelTrackCardHTML(t,i,true));}).join('<div style="height:1px;background:var(--line-soft);margin:0 2px;"></div>');
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">'+tracks.map(function(t,i){return trkSelWrap(t, levelTrackTileHTML(t,i));}).join('')+'</div>';
   } else {
     html += '<div style="font-size:12px;color:var(--muted);line-height:1.5;padding:6px 2px 10px;">Sube de nivel en algo específico — por ejemplo "Deporte" — con las tareas de una categoría o las que tú elijas.</div>';
   }
@@ -19388,7 +19368,25 @@ function openTimerRun(taskId, previewConfig, previewName, isPreview){
   var t = S.tasks.find(function(x){return x.id===taskId;});
   if(!t || !t.timer){ return; }
   if(askResumeTimer(taskId)) return;
+  if(timerPreOpen(taskId)) return;
   buildTimerAndStart(taskId, t.timer, t.text, false);
+}
+function timerPreGo(taskId){ var t = S.tasks.find(function(x){return x.id===taskId;}); removeOverlay('tr-pre'); if(t && t.timer) buildTimerAndStart(taskId, t.timer, t.text, false); }
+function timerPreOpen(taskId){
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(!t || !t.timer) return false;
+  var kind; try{ kind = tmHistKind({tplId:t.tplId, group:t.group, kind:t.kind}); }catch(e){ kind = 'ejercicio'; }
+  if(kind!=='ejercicio') return false;
+  var built = buildTimerSteps(t.timer, true); if(!built.steps.length) return false;
+  var works = built.steps.filter(function(x){return x.type==='work' && x.round===1;});
+  if(works.length<2) return false;
+  var col = colorForWhiteText(works[0].color||'#e0702f'), rounds = built.steps[0].totalRounds||1;
+  var rows = works.slice(0,8).map(function(w,i){ var sub = w.kind==='reps' ? (w.planCount||w.reps||'')+' repeticiones' : fmtDur(w.sec||0); return '<div style="display:flex;gap:14px;position:relative;padding-bottom:'+(i<Math.min(8,works.length)-1?'18':'0')+'px;"><div style="display:flex;flex-direction:column;align-items:center;flex:none;width:12px;"><span style="width:12px;height:12px;border-radius:50%;background:'+(i===0?'#fff':'rgba(255,255,255,.6)')+';margin-top:5px;"></span>'+(i<Math.min(8,works.length)-1?'<span style="flex:1;width:2px;background:rgba(255,255,255,.35);margin-top:3px;"></span>':'')+'</div><div><div style="font-size:17px;font-weight:700;">'+esc(w.name)+'</div><div style="font-size:12.5px;opacity:.8;">'+esc(sub)+'</div></div></div>'; }).join('');
+  removeOverlay('tr-pre'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='tr-pre'; ov.style.cssText='z-index:480;background:'+col+';align-items:stretch;justify-content:stretch;';
+  ov.innerHTML = '<div style="width:100%;max-width:440px;margin:0 auto;height:100%;display:flex;flex-direction:column;color:#fff;font-family:Inter,sans-serif;box-sizing:border-box;padding:calc(16px + env(safe-area-inset-top,0px)) 22px calc(22px + env(safe-area-inset-bottom,0px));"><div><button onclick="removeOverlay(\'tr-pre\')" aria-label="Cerrar" style="width:42px;height:42px;border-radius:21px;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:22px;cursor:pointer;">×</button></div>'+
+    '<div style="font-size:12px;font-weight:800;letter-spacing:.14em;opacity:.85;margin-top:34px;">RUTINA · '+Math.max(1,Math.round(built.totalSec/60))+' MIN'+(rounds>1?' · ×'+rounds+' RONDAS':'')+'</div><div class="serif" style="font-size:40px;font-weight:700;line-height:1.05;margin-top:6px;">'+esc(t.text)+'</div>'+
+    '<div style="flex:1;min-height:0;overflow:auto;margin-top:34px;">'+rows+(works.length>8?'<div style="margin:12px 0 0 26px;font-size:13px;opacity:.8;">+ '+(works.length-8)+' más</div>':'')+'</div>'+
+    '<button onclick="timerPreGo(\''+taskId+'\')" style="margin-top:14px;height:58px;border:none;border-radius:29px;background:#fff;color:'+col+';font-size:16px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;">▶ Empezar</button></div>';
+  document.body.appendChild(ov); return true;
 }
 // ── Mejores marcas (ejercicios por cantidad o con toques) ──────────────────
 // ── Valor propuesto en "¿Cuánto hiciste?" ──────────────────────────────────
@@ -19875,6 +19873,13 @@ function timerNextWork(idx){
   for(var i=idx+1;i<TR.steps.length;i++) if(TR.steps[i].type==='work') return TR.steps[i];
   return null;
 }
+function trStudyDoneHTML(){
+  var today = todayStr(), sec = TR.totalSec;
+  (S.timerHistory||[]).forEach(function(h){ if(!h.del && h.date===today && tmHistKind(h)==='estudio') sec += (h.sec||0); });
+  var hh = Math.floor(sec/3600), mm = Math.round((sec%3600)/60); if(mm===60){ hh++; mm = 0; }
+  var nb = TR.steps.filter(function(x){return x.type==='work';}).length;
+  return '<div style="font-size:12px;font-weight:800;letter-spacing:.16em;opacity:.85;">EN FOCO HOY</div><div style="font-size:84px;font-weight:800;line-height:1.05;letter-spacing:-.03em;margin:6px 0 4px;">'+(hh? hh+' h '+String(mm).padStart(2,'0') : mm+' min')+'</div><div style="font-size:14px;color:rgba(255,255,255,.85);margin-bottom:18px;">'+nb+' bloque'+(nb===1?'':'s')+' · '+esc(TR.taskName)+'</div>';
+}
 function trStudy(){ try{ return tmHistKind({tplId:TR.tplId, group:TR.group, kind:TR.kind})==='estudio'; }catch(e){ return false; } }
 function trStudyHTML(step, idx){
   var rest = step.type!=='work', col = rest ? '#2f9b92' : colorForWhiteText(step.color||'#5b5bd6');
@@ -19930,12 +19935,12 @@ function timerRenderFrame(force){
   if(TR.finished){
     if(TR._finShown && !force) return;
     TR._finShown = true;
-    var _fw = TR.steps.find(function(x){return x.type==='work';}); body.style.background = colorForWhiteText((_fw&&_fw.color)||'#2d8c70');
+    var _fw = TR.steps.find(function(x){return x.type==='work';}); body.style.background = trStudy() ? '#5b5bd6' : colorForWhiteText((_fw&&_fw.color)||'#2d8c70');
     var res = TR.results||[];
     body.innerHTML = '<div style="flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;color:#fff;padding:calc(24px + env(safe-area-inset-top,0px)) 24px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;"><div style="margin:auto 0;width:100%;display:flex;flex-direction:column;align-items:center;">'+
-      '<div style="font-size:12px;font-weight:800;letter-spacing:.16em;opacity:.85;">SESIÓN COMPLETA</div>'+
+      (trStudy() ? trStudyDoneHTML() : '<div style="font-size:12px;font-weight:800;letter-spacing:.16em;opacity:.85;">SESIÓN COMPLETA</div>'+
       '<div style="font-size:84px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.03em;margin:6px 0 4px;">'+timerFmt(TR.totalSec)+'</div>'+
-      '<div style="font-size:14px;color:rgba(255,255,255,.8);margin-bottom:18px;">'+esc(TR.taskName)+'</div>'+timerWeekStripHTML()+
+      '<div style="font-size:14px;color:rgba(255,255,255,.8);margin-bottom:18px;">'+esc(TR.taskName)+'</div>'+timerWeekStripHTML())+
       (res.length?'<div style="width:100%;max-width:320px;margin-bottom:12px;">'+res.map(function(r){
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(255,255,255,.1);border-radius:10px;margin-bottom:6px;font-size:13.5px;"><span>'+esc(r.name)+'</span><span style="font-weight:800;">'+r.n+(r.unit==='s'?' s':'')+(r.real?' <span style="font-size:10px;background:#f5c25a;color:#111;border-radius:6px;padding:2px 6px;margin-left:4px;">RÉCORD</span>':(r.prev?' <span style="font-size:10.5px;opacity:.6;font-weight:500;">mejor '+r.prev+'</span>':''))+(r.saved?'<span style="display:block;font-size:10.5px;opacity:.65;font-weight:500;text-align:right;">anotado en '+esc(r.saved)+'</span>':'')+'</span></div>';
       }).join('')+'</div>':'')+
@@ -19967,9 +19972,9 @@ function timerRenderFrame(force){
     if(step.type==='work' && step.kind==='time' && step.rec){ var _bt=((S.timerBests||{})[step.key+'#t']||{}).n||0; if(_bt) chips += chip('Récord: '+fmtDur(_bt)); }
     var main, sub='';
     if(step.kind==='reps' && step.tap){ main = '<div id="tr-n" style="font-size:110px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;">'+(step.n||0)+'</div>'; sub = '<div style="font-size:14px;color:rgba(255,255,255,.75);margin-top:6px;">de '+step.count+' · toca la pantalla para marcar una repetición</div>'+(step.autoEnd?'':'<div id="tr-meta" style="display:'+((step.n||0)>=step.count?'block':'none')+';font-size:12.5px;font-weight:700;color:#fff;background:rgba(255,255,255,.18);border-radius:10px;padding:5px 10px;margin-top:8px;">Meta alcanzada · sigue o toca “Listo”</div>'); }
-    else if(step.kind==='reps'){ main = '<div style="font-size:110px;font-weight:800;line-height:1;">'+step.count+'</div>'; sub = '<div style="font-size:14px;color:rgba(255,255,255,.75);margin-top:6px;">repeticiones · toca “Listo” al terminar</div>'; }
+    else if(step.kind==='reps'){ main = '<div style="font-size:150px;font-weight:800;line-height:1;letter-spacing:-.03em;">'+step.count+'</div>'; sub = '<div style="font-size:14px;color:rgba(255,255,255,.75);margin-top:6px;">repeticiones · toca “Listo” al terminar</div>'; }
     else {
-      main = '<div id="tr-time" style="font-size:92px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;"></div>';
+      main = '<div id="tr-time" style="font-size:132px;font-weight:800;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums;"></div>';
       if(step.tap) sub = '<div style="margin-top:14px;"><span style="font-size:12px;color:rgba(255,255,255,.7);display:block;margin-bottom:2px;">Toques contados</span><span id="tr-n" style="font-size:54px;font-weight:800;font-variant-numeric:tabular-nums;">'+(step.n||0)+'</span></div><div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;">toca la pantalla para marcar una repetición</div>';
     }
     var timeEl = (step.kind==='reps') ? '<div id="tr-time" style="font-size:13px;color:rgba(255,255,255,.6);margin-top:12px;font-variant-numeric:tabular-nums;"></div>' : '';
@@ -19990,7 +19995,7 @@ function timerRenderFrame(force){
         (step.tap?'<div id="tr-circle" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(78vw,300px);height:min(78vw,300px);border-radius:50%;border:3px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);pointer-events:none;z-index:0;"></div>':'')+
         '<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;">'+
         (function(){ var dm = step.type==='work' ? step.media : (nxt && nxt.media); return dm ? '<div style="margin-bottom:14px;box-shadow:0 6px 20px rgba(0,0,0,.35);border-radius:16px;">'+grmHTML(dm,'min(44vw,190px)',{r:16})+'</div>' : ''; })()+
-        '<div style="font-size:16px;font-weight:700;letter-spacing:.03em;color:rgba(255,255,255,.9);margin-bottom:'+(step.type==='work'&&step.reps>1?'4':'10')+'px;text-transform:uppercase;">'+esc(step.name||(isRest?'Descanso':'Ejercicio'))+'</div>'+
+        '<div class="serif" style="font-size:34px;font-weight:700;line-height:1.1;color:#fff;margin-bottom:'+(step.type==='work'&&step.reps>1?'6':'12')+'px;">'+esc(step.name||(isRest?'Descanso':'Ejercicio'))+'</div>'+
         (step.type==='work'&&step.reps>1?'<div style="font-size:12.5px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px;">Serie '+step.rep+' de '+step.reps+'</div>':'')+
         (step.type==='work'&&step.note?'<div style="font-size:12.5px;color:rgba(255,255,255,.8);margin-bottom:10px;max-width:280px;">'+esc(step.note)+'</div>':'')+
         main+sub+timeEl+
@@ -20866,20 +20871,23 @@ function renderTimerHome(){
     var at = _selE ? 'onclick="toggleSelect(\'enf\',\'r:'+tp.id+'\')"' : 'onclick="if(_selLpFired){_selLpFired=false;return;}startTimerTpl(\''+tp.id+'\')" ontouchstart="selLpStart(\'enf\',\'r:'+tp.id+'\',event)" ontouchmove="selLpMove(event)" ontouchend="selLpEnd()" ontouchcancel="selLpEnd()" onmousedown="selLpStart(\'enf\',\'r:'+tp.id+'\',event)" onmouseup="selLpEnd()" onmouseleave="selLpEnd()"';
     var chk = '<div style="width:20px;height:20px;border-radius:6px;border:2px solid '+(ck?'var(--accent)':'var(--muted-soft)')+';background:'+(ck?'var(--accent)':'transparent')+';flex-shrink:0;display:flex;align-items:center;justify-content:center;">'+(ck?chkSVG():'')+'</div>';
     var more = function(extra){ return '<button onclick="event.stopPropagation();openTimerTplMenu(\''+tp.id+'\')" aria-label="Opciones de '+esc(tp.name)+'" style="background:none;border:none;color:var(--muted);font-size:20px;line-height:1;padding:0 6px;cursor:pointer;'+(extra||'')+'">⋯</button>'; };
-    var lv = tmLvOn('t:'+tp.id) ? '<span onclick="event.stopPropagation();openTmLv(\'t:'+tp.id+'\')" style="display:flex;flex-shrink:0;">'+brBadge(tmLvInfo('t:'+tp.id).lvl,32,tmLvInfo('t:'+tp.id).kind)+'</span>' : '';
-    var nm = '<div style="font-size:'+(_L==='a'?'14.5':'13.5')+'px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(tp.name)+'</div>', mt = '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+enfTplMeta(tp)+'</div>';
+    var lv = '';   // el nivel vive en la tarjeta del modo y en el resumen de la sesión; no se repite en cada rutina
+    var _lvTxt = tmLvOn('t:'+tp.id) ? ' · Nv '+tmLvInfo('t:'+tp.id).lvl : '';
+    var nm = '<div style="font-size:'+(_L==='a'?'14.5':'13.5')+'px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(tp.name)+'</div>', mt = '<div style="font-size:11.5px;color:var(--muted);margin-top:3px;">'+enfTplMeta(tp)+_lvTxt+'</div>';
     var bg = ck?'var(--accent-bg)':'var(--paper)';
     if(_L==='b') return '<div '+at+' style="position:relative;flex:0 0 138px;background:'+bg+';border:1.5px solid '+(ck?'var(--accent)':'var(--line)')+';border-radius:14px;padding:12px;cursor:pointer;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;">'+(lv||'<span style="width:10px;height:10px;border-radius:50%;background:'+col+';display:inline-block;"></span>')+(_selE?chk:more('margin-right:-6px;'))+'</div><div style="margin-top:8px;">'+nm+mt+'</div></div>';
     if(_L==='c') return '<div '+at+' style="position:relative;background:'+bg+';border:1.5px solid '+(ck?'var(--accent)':'var(--line)')+';border-radius:14px;padding:12px 12px 12px 15px;cursor:pointer;overflow:hidden;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;"><span style="position:absolute;left:0;top:0;bottom:0;width:4px;background:'+col+';"></span>'+
       '<div style="display:flex;align-items:flex-start;gap:6px;"><div style="flex:1;min-width:0;">'+nm+mt+'</div>'+(_selE?chk:more('margin:-2px -6px 0 0;'))+'</div><div style="display:flex;align-items:center;gap:8px;margin-top:10px;">'+lv+'<span style="color:var(--accent-text);font-weight:800;font-size:12px;">▶ Empezar</span></div></div>';
-    return '<div '+at+' style="display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line-soft);cursor:pointer;background:'+(ck?'var(--accent-bg)':'transparent')+';"><span style="width:4px;align-self:stretch;border-radius:3px;background:'+col+';flex-shrink:0;"></span>'+lv+
-      '<div style="flex:1;min-width:0;">'+nm+mt+'</div>'+(_selE ? chk : more()+'<span style="width:32px;height:32px;border-radius:50%;background:var(--accent-bg);color:var(--accent-text);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>')+'</div>';
+    var _ico = isB ? 'M12 3c-3 4-6 6-6 10a6 6 0 0012 0c0-4-3-6-6-10z' : (tp.kind==='estudio'||tp.id==='seed-estudio' ? 'M4 5h7a3 3 0 013 3v11a2 2 0 00-2-2H4zM20 5h-7a3 3 0 00-3 3' : 'M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11');
+    var _dots = ''; try{ _dots = (tm.sets||[]).slice(0,6).map(function(x){ return '<i style="width:6px;height:6px;border-radius:50%;background:'+(x.color||col)+';display:inline-block;"></i>'; }).join(''); }catch(e){}
+    return '<div '+at+' style="display:flex;align-items:center;gap:12px;padding:11px 10px 11px 11px;margin-bottom:8px;border:1.5px solid '+(ck?'var(--accent)':'var(--line)')+';border-radius:18px;cursor:pointer;background:'+(ck?'var(--accent-bg)':'var(--paper)')+';"><span style="width:44px;height:44px;border-radius:14px;background:'+col+'22;color:'+col+';display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="'+_ico+'"/></svg></span>'+
+      '<div style="flex:1;min-width:0;">'+nm+mt+(_dots?'<div style="display:flex;gap:4px;margin-top:6px;">'+_dots+'</div>':'')+'</div>'+(_selE ? chk : '<button onclick="event.stopPropagation();openTimerTplMenu(\''+tp.id+'\')" aria-label="Opciones de '+esc(tp.name)+'" style="background:none;border:none;color:var(--muted);font-size:20px;line-height:1;padding:4px 2px;cursor:pointer;">⋯</button><span style="width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>')+'</div>';
   };
   SECS.forEach(function(sc){
     var items = sorter(list.filter(function(tp){ return grpOf(tp)===sc[0]; }));
     var open = S._timerSecOpen[sc[0]] !== false; if(!items.length && sc[0]!==_kind) return;
-    var _hideHd = (_gm==='tipo' && !tmLvOn('k:'+sc[0])); if(_hideHd) open = true;
+    var _hideHd = (_gm==='tipo'); if(_hideHd) open = true;
     if(!_hideHd) html += '<button data-k="'+esc(sc[0])+'" onclick="toggleTimerSec(this.dataset.k)" style="width:100%;display:flex;align-items:center;gap:10px;margin-top:12px;padding:6px 2px;background:none;border:none;font-family:Inter,sans-serif;cursor:pointer;text-align:left;">'+
       (_gm==='tipo' && tmLvOn('k:'+sc[0]) ? '<span onclick="event.stopPropagation();openTmLv(\'k:'+sc[0]+'\')" style="display:flex;flex-shrink:0;width:30px;height:30px;align-items:center;justify-content:center;">'+brBadge(tmLvInfo('k:'+sc[0]).lvl,30,tmLvInfo('k:'+sc[0]).kind)+'</span>' :
         '<span style="position:relative;width:28px;height:28px;border-radius:9px;background:'+sc[2]+'26;color:'+sc[2]+';display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="'+sc[3]+'"/></svg></span>')+
@@ -21321,7 +21329,7 @@ function openLvDetail(lv){
     body += '<div style="font-size:12.5px;color:var(--ink-soft);margin-top:12px;line-height:1.55;">'+lvCycleTitle(lvCycle(lv))+'<br>'+(lv===1?'Es el punto de partida.':'Se alcanzó con <b>'+need+' XP</b>.')+'<br>'+(lv<info.lvl?'Ya lo superaste ✓':'Es tu nivel actual.')+'</div>';
     if(un.length) body += '<div style="margin-top:10px;font-size:12px;font-weight:700;color:var(--accent-text);">Abrió: '+esc(un.join(', '))+'</div>';
     var z = zarHTML(lv);
-    body += '<div style="margin-top:14px;text-align:left;border-top:1px solid var(--line-soft);padding-top:14px;">'+(z || '<div class="lvl-up-msg" style="text-align:center;">'+esc(levelUpMsg(lv))+'</div>')+'</div>';
+    if(z) body += '<div style="margin-top:14px;text-align:left;border-top:1px solid var(--line-soft);padding-top:14px;">'+z+'</div>';
   } else {
     body += '<div style="font-size:12.5px;color:var(--ink-soft);margin-top:12px;line-height:1.55;">'+lvCycleTitle(lvCycle(lv))+'<br>Se alcanza con <b>'+need+' XP</b>.<br>Te faltan <b>'+Math.max(0,need-(S.xp||0))+' XP</b>.</div>'+
       (un.length ? '<div style="margin-top:10px;font-size:12px;font-weight:700;color:var(--accent-text);">Al llegar abre: '+esc(un.join(', '))+'</div>' : '')+
@@ -22223,7 +22231,7 @@ function showBajaWarning(){
   box.innerHTML='<div class="conf-inner" style="max-width:340px;">'+
     '<div style="text-align:center;font-size:32px;margin-bottom:8px;">🌿</div>'+
     '<div class="serif" style="font-weight:700;font-size:19px;margin-bottom:12px;color:var(--ink);text-align:center;">Activar Baja Energía</div>'+
-    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Este modo está pensado para momentos en los que necesitas reducir el ritmo y exigirte menos.</div>'+
+    '<div style="font-size:13px;color:var(--ink-soft);line-height:1.6;margin-bottom:14px;">Muestra menos tareas en Hoy y baja la meta diaria mientras esté activo.</div>'+
     '<div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);line-height:1.7;">'+
       '<div>· Dura <b>'+BAJA_DAYS+' días</b>; antes de terminar te pregunto si quieres extenderlo</div>'+
       '<div>· Solo verás <b>'+be.maxTasks+' tareas/día</b></div>'+
@@ -22234,7 +22242,7 @@ function showBajaWarning(){
     // Invitación a agendar sesión
     '<div style="background:var(--accent-bg);border:1px solid var(--accent-soft);border-radius:10px;padding:12px;margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;color:var(--accent-text);margin-bottom:4px;">¿Te gustaría hablar con alguien?</div>'+
-      '<div style="font-size:11px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">Si estás pasando por un momento difícil, puede comunicarte de emergencia al *4141 [Chile]. También puedes agendar una primera sesión de atención psicológica</div>'+
+      '<div style="font-size:11px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">Si estás pasando por un momento difícil, puedes comunicarte de emergencia al *4141 [Chile]. También puedes agendar una primera sesión de atención psicológica</div>'+
       '<a href="https://psi.setmore.com/" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:6px;background:var(--accent);color:white;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;text-decoration:none;">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>'+
         'Agendar una sesión'+
@@ -24126,7 +24134,7 @@ function bpDraw(){
   var rows = L.map(function(x){ var on = !!BP.sel[x.t.id]; return '<button onclick="BP.sel[\''+x.t.id+'\']=!BP.sel[\''+x.t.id+'\'];bpDraw()" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--bg);border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';border-radius:12px;padding:11px 12px;margin-bottom:8px;cursor:pointer;font-family:Inter,sans-serif;"><span style="width:22px;height:22px;border-radius:7px;border:2px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent)':'transparent')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">'+(on?'✓':'')+'</span><span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(x.t.text)+'</span><span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(x.label)+(x.rec?' · se repite cada semana':'')+'</span></span></button>'; }).join('');
   brPutSheet(ov, '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span class="serif" style="font-weight:700;font-size:19px;">Traer pendientes</span><button onclick="removeOverlay(\'bp-ov\')" aria-label="Cerrar" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+
     (L.length ? '<div style="font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:10px;">Lo que quedó sin hacer en días anteriores. Marca lo que quieres pasar a hoy. Las tareas que se repiten dejan una copia para hoy y siguen su ritmo normal.</div>'+rows+'<button class="sbtn" style="width:100%;margin-top:6px;" onclick="bpBring()" '+(n?'':'disabled style="width:100%;margin-top:6px;opacity:.5;"')+'>Traer '+n+' a hoy</button>'
-      : '<div style="text-align:center;font-size:13.5px;color:var(--ink-soft);padding:22px 8px;line-height:1.6;">No tienes pendientes de días anteriores. ¡Todo al día!</div><button class="cbtn" style="width:100%;" onclick="removeOverlay(\'bp-ov\')">Cerrar</button>')+'</div>');
+      : '<div style="text-align:center;font-size:13.5px;color:var(--ink-soft);padding:22px 8px;line-height:1.6;">No hay pendientes de días anteriores.</div><button class="cbtn" style="width:100%;" onclick="removeOverlay(\'bp-ov\')">Cerrar</button>')+'</div>');
 }
 function bpBring(){
   var ti = todayIdx(), today = todayStr(), mon = bpMonKey(), moved = 0, limit = (currentTaskLimits()||{}).dia || 999;
@@ -24362,7 +24370,7 @@ var INFO_TIPS = {
   reghabit:'Cada día marcas si lo cumpliste o no (tomar vitaminas, dormir temprano, meditar...). Si lo asocias a una tarea, al completarla se marca "sí" solo.',
   trkxp:'Tú decides cuánta XP (de 1 a 15) da cada cosa: completar una tarea, cada avance, completar un ítem del checklist y cada avance de un ítem. Son reglas generales y puedes personalizarlas por tarea e incluso por ítem.',
   trkreg:'Une el seguimiento con un registro. Lo que anotas en el registro suma XP aquí: por cada anotación o por cada unidad (por ejemplo 1 XP por bloque). Y lo que suma XP aquí (tus tareas) queda anotado también en el registro.',
-  tvol:'Pasa del 100% hasta 300% para que se distinga sobre la música. Se usa un limitador para que no distorsione.',
+  tvol:'Pasa del 100% hasta 300% para que se distinga sobre la música.',
   tkind:'Por cantidad: no tiene tiempo fijo, avanzas con "Listo" o contando toques. Contar con toques: cada toque suma una repetición; en un ejercicio por tiempo, cuenta tus toques y guarda tu mejor marca.',
   treg:'Al terminar el ejercicio se anota una entrada en el registro elegido, y tu mejor marca sale de ahí. Puedes sumar el peso o carga como segunda métrica.',
   tpl_sets:'Un set es un grupo de ejercicios reutilizable (por ejemplo un calentamiento) con su color, ícono y descansos. Se agrega a cualquier temporizador.',
@@ -24373,8 +24381,8 @@ var INFO_TIPS = {
 
   trainlink:'La tarea se marca sola cuando haces algo en Entrenar: cualquier cosa, una rutina o actividad concreta, o una categoría de rutinas (Calentamiento, Pliometría…). Cuenta lo hecho con el temporizador, con GPS, importado de Salud o «por mi cuenta». Puedes pedir varias cosas a la vez. Si borras el registro, la tarea se desmarca sola. Distinto de «Rutina», que agrega ejercicios a la propia tarea. Con una tarea de Cantidad, en vez de marcarse sola se suman distancia, tiempo o sesiones de Enfoque dentro del período de la tarea (por ejemplo, 100 km de trote al mes).',
   overgoal:'Con esto activado puedes llevar más que la meta (por ejemplo 5 de 3). El exceso se queda anotado y, si la tarea está vinculada a una de Plan mayor, también le suma a esa. Al reiniciar el período eliges: partir de cero o partir con el exceso que sobró. El XP se da una sola vez, al llegar a la meta.',
-  zarlv:'Al subir de nivel aparece, bajo el mensaje, una reflexión corta inspirada en «Así habló Zaratustra» y, si la app tiene cita para ese nivel, la cita con su fuente. Apágalo cuando quieras; no afecta niveles ni XP.',
-  tabgate:'En cuentas nuevas, Plan, Enfoque y Registros se abren al subir de nivel (2, 3 y 4) para empezar con calma. Con este interruptor las abres todas de inmediato; si lo apagas, vuelve el desbloqueo por nivel sin perder nada. En el modo simplificado todo está abierto.',
+  zarlv:'Al subir de nivel aparece una cita de «Así habló Zaratustra», de Friedrich Nietzsche, con su fuente. Apágalo cuando quieras; no afecta niveles ni XP.',
+  tabgate:'En cuentas nuevas, Plan, Enfoque y Registros se abren al subir de nivel (2, 3 y 4). Con este interruptor las abres todas de inmediato; si lo apagas, vuelve el desbloqueo por nivel sin perder nada. En el modo simplificado todo está abierto.',
   goal:'Simple: se marca y listo. Cantidad: una meta numérica (ej. 8 vasos). Checklist: sub-pasos, con opción de que alcance con algunos. El temporizador se suma aparte y se puede combinar con un checklist.',
   plannotify:'Cuando avanzas una tarea de Hoy que está vinculada a un objetivo del Plan, aparece un aviso breve arriba con el avance (y más largo si lo completas). Se cierra solo; con "Ver" vas a Objetivos.',
   cltimer:'Toca el reloj de un ítem para darle su propia rutina o una cuenta regresiva (por ejemplo 25 min). En Hoy verás un botón de play junto al ítem; al terminar, el ítem se marca solo. Puedes ponerla en uno o en varios ítems; con el play general de la tarea eliges cuáles reproducir, una o varias seguidas.',
@@ -24408,7 +24416,7 @@ var INFO_TIPS = {
   hidedone:'Esconde las tareas ya completadas del día para ver solo lo que falta. También se cambia desde el menú de opciones de Hoy.',
   hoysort:'Manual respeta el orden que tú armaste. Por hora ordena según el horario de cada tarea. Cruciales primero sube las marcadas con estrella.',
   modeweek:'No exige el umbral sábado ni domingo — retómalo el lunes y esos dos días se suman solos a tu racha, sin cortarla.',
-  modebaja:'Este modo está pensado para cuando estás fuera de tu rutina habitual y quieres bajar la exigencia sin perder del todo el hilo.',
+  modebaja:'Este modo es para cuando estás fuera de tu rutina habitual y quieres bajar la exigencia.',
   modebaja2:'Si solo quieres bajar el ritmo unos días sin usar este modo, considera un modo personalizado o una plantilla con menos tareas.',
   hidehelp:'Si quieres ocultar las sugerencias de actividades y los mensajes de apoyo de la aplicación lo puedes hacer en desde Yo → Más ajustes → Ayuda y consejos.',
   modefixed:'Los consejos, tareas elementales y el mensaje de apoyo de este modo son fijos y no se pueden editar. Puedes ocultarlos desde Yo → Más ajustes → Ayuda y consejos.',
@@ -24423,7 +24431,7 @@ var INFO_TIPS = {
   regxp:'La XP de las tareas asociadas a este registro suma al objetivo al que esté vinculado el registro (se configura en la tarea).',
   ptdep:'Marca que esta tarea debe hacerse después de otra. Si la empiezas (o su fecha de inicio cae) antes de que la otra termine, verás un aviso en la lista. No bloquea nada: es solo una alerta.',
   regmet:'Cada métrica lleva su unidad (kg, km, min, bloques...) y si "mejor" es más alto (peso) o más bajo (tiempo), para calcular récords. El campo "concepto" separa ejercicios distintos, ej. "Press de banca".',
-  timercfg:'Estos ajustes valen para todas las tareas con temporizador. Elige un sonido distinto para cada momento (inicio, ejercicio, descanso, segundos finales, fin de ejercicio y fin del entrenamiento) y sube el volumen hasta 300% si escuchas música a la vez. Siguen sonando si cambias de app (depende de que el navegador mantenga la pestaña activa).'
+  timercfg:'Estos ajustes valen para todas las tareas con temporizador. Elige un sonido distinto para cada momento (inicio, ejercicio, descanso, segundos finales, fin de ejercicio y fin del entrenamiento) y sube el volumen hasta 300% si escuchas música a la vez.'
 };
 function infoBtn(key){
   return '<button type="button" class="ibtn" aria-label="Más información" onclick="showTip(\''+key+'\',event)">i</button>';
@@ -24789,7 +24797,7 @@ function trainLinkDate(t){
 function trainCondLabel(c){
   var n = Math.max(1, c.n||1), cosa = n===1 ? '1 cosa' : n+' cosas', unit = function(w1, wn){ return n===1 ? '1 '+w1 : n+' '+wn; };
   switch(c.k){
-    case 'any': return cosa+' de Entrenar';
+    case 'any': return cosa+' de Enfoque';
     case 'rut': return unit('rutina','rutinas');
     case 'act': return unit('actividad','actividades');
     case 'breath': return unit('respiración','respiraciones');
@@ -24826,7 +24834,7 @@ function trainLinkSync(){
       var ok = ev.have>=ev.need, done = isDone(t);
       if(ok && !done){
         finishUpdate(Object.assign({}, t, {done:true, prog:1, trainAuto:d}), true, 1);
-        toast('✓ «'+t.text+'» completada al entrenar');
+        toast('✓ «'+t.text+'» completada desde Enfoque');
       } else if(!ok && done && t.trainAuto===d){
         finishUpdate(Object.assign({}, t, {done:false, prog:0, trainAuto:null}), false, -1);
       }
@@ -24849,7 +24857,7 @@ function tlOptions(){
 }
 function mTrainSectionHTML(){
   var on = trainTaskOn(M.task);
-  return '<div class="frow"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">'+(M.hasQty?'Sumar desde Enfoque':'Completar al entrenar')+infoBtn('trainlink')+'</div>'+
+  return '<div class="frow"><div style="flex:1;font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;">'+(M.hasQty?'Sumar desde Enfoque':'Completar desde Enfoque')+infoBtn('trainlink')+'</div>'+
     '<button type="button" class="tog" id="m-train-tog" onclick="mToggleTrain()" style="background:'+(on?'var(--accent)':'var(--muted-soft)')+';flex-shrink:0;"><span class="tok" style="left:'+(on?22:2)+'px;"></span></button></div>'+
     '<div id="m-train-area">'+mTrainAreaHTML()+'</div>';
 }
@@ -24890,26 +24898,38 @@ function tlChip(on, label, call, sub){
   return '<button type="button" onclick="'+call+'" style="text-align:left;padding:10px 14px;border-radius:14px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';cursor:pointer;font-family:Inter,sans-serif;">'+
     '<span style="display:block;font-size:13.5px;font-weight:700;color:'+(on?'var(--accent-text)':'var(--ink)')+';">'+esc(label)+'</span>'+(sub?'<span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;">'+esc(sub)+'</span>':'')+'</button>';
 }
+function tlSegOf(c){
+  if(c.k==='breath') return 'resp'; if(c.k==='study') return 'estudio';
+  if(c.k==='tpl'){ var tp = timerTplAll().find(function(x){ return x.id===c.id; }); if(tp && tp.kind==='breath') return 'resp'; if(tp && (tp.kind==='estudio' || tp.id==='seed-estudio')) return 'estudio'; }
+  return 'train';
+}
+function tlSeg(i, sg){ TL['seg'+i] = sg; tlDraw(); }
 function tlPickerHTML(i){
   var c = TL.conds[i], h = '';
   var tpls = timerTplAll().filter(function(tp){ return tp.kind!=='breath' && tp.kind!=='estudio' && tp.id!=='seed-estudio'; }), brs = timerTplAll().filter(function(tp){ return tp.kind==='breath'; }), sts = timerTplAll().filter(function(tp){ return tp.kind==='estudio'||tp.id==='seed-estudio'; }), cats = trainCats();
+  var seg = TL['seg'+i] || tlSegOf(c);
+  h += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">'+tlChip(c.k==='any', 'Cualquier cosa de Enfoque', 'tlSet('+i+',\'any\')', 'Entrenar, respiración o estudio · con temporizador, GPS o por tu cuenta')+'</div>';
+  h += '<div style="display:flex;gap:6px;margin-top:12px;background:var(--bg);border-radius:14px;padding:4px;">'+[['train','Entrenar'],['resp','Respiración'],['estudio','Estudio']].map(function(x){ var on = seg===x[0]; return '<button type="button" onclick="tlSeg('+i+',\''+x[0]+'\')" style="flex:1;padding:9px 4px;border:none;border-radius:11px;background:'+(on?'var(--paper)':'transparent')+';color:'+(on?'var(--accent-text)':'var(--muted)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;'+(on?'box-shadow:0 1px 4px rgba(0,0,0,.08);':'')+'">'+x[1]+'</button>'; }).join('')+'</div>';
+  var tplChipsX = function(arr, empty){ return arr.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">'+arr.map(function(tp){ var on = c.k==='tpl' && c.id===tp.id; return '<button type="button" onclick="tlSet('+i+',\'tpl\',\''+tp.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+esc(tp.name)+'</button>'; }).join('')+'</div>' : '<div style="font-size:12.5px;color:var(--muted);margin-top:8px;">'+empty+'</div>'; };
+  var lbl = function(t){ return '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">'+t+'</div>'; };
+  if(seg==='resp'){
+    h += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">'+tlChip(c.k==='breath', 'Cualquier respiración', 'tlSet('+i+',\'breath\')', 'La que sea: de calma, de energía…')+'</div>'+lbl('Una respiración en particular')+tplChipsX(brs, 'Aún no tienes respiraciones guardadas.');
+  } else if(seg==='estudio'){
+    h += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">'+tlChip(c.k==='study', 'Cualquier sesión de estudio', 'tlSet('+i+',\'study\')')+'</div>'+lbl('Una sesión en particular')+tplChipsX(sts, 'Aún no tienes plantillas de estudio.');
+  } else {
   h += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">';
-  h += tlChip(c.k==='any', 'Cualquier cosa', 'tlSet('+i+',\'any\')', 'Rutina, actividad, respiración o estudio · con temporizador, GPS o por tu cuenta');
   h += tlChip(c.k==='rut', 'Cualquier rutina', 'tlSet('+i+',\'rut\')');
   h += tlChip(c.k==='act', 'Cualquier actividad', 'tlSet('+i+',\'act\')', 'Correr, caminar, ciclismo u otra · GPS, importada o a mano');
-  h += tlChip(c.k==='breath', 'Cualquier respiración', 'tlSet('+i+',\'breath\')', 'La que sea: de calma, de energía…');
-  h += tlChip(c.k==='study', 'Cualquier sesión de estudio', 'tlSet('+i+',\'study\')');
   h += '</div>';
   h += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Una rutina en particular</div>';
   h += tpls.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+tpls.map(function(tp){ var on = c.k==='tpl' && c.id===tp.id; return '<button type="button" onclick="tlSet('+i+',\'tpl\',\''+tp.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(tp.name)+'</button>'; }).join('')+'</div>'
     : '<div style="font-size:12.5px;color:var(--muted);">Aún no tienes rutinas. Créalas en Entrenar.</div>';
-  var tplChipsX = function(arr){ return arr.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">'+arr.map(function(tp){ var on = c.k==='tpl' && c.id===tp.id; return '<button type="button" onclick="tlSet('+i+',\'tpl\',\''+tp.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(tp.name)+'</button>'; }).join('')+'</div>' : ''; };
-  h += tplChipsX(brs.concat(sts));
   h += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Un tipo de actividad</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+
     ACT_TYPES.map(function(ty){ var on = c.k==='atype' && c.id===ty.id; return '<button type="button" onclick="tlSet('+i+',\'atype\',\''+ty.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+(ty.id==='otro'?'Otra actividad':ty.name)+'</button>'; }).join('')+'</div>';
   h += '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Una categoría de rutinas</div>';
   h += cats.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+cats.map(function(ct){ var on = c.k==='cat' && c.id===ct.id, nr = tpls.filter(function(tp){ return tp.cat===ct.id; }).length; return '<button type="button" onclick="tlSet('+i+',\'cat\',\''+ct.id+'\')" style="padding:8px 13px;border-radius:999px;border:1.5px solid '+(on?'var(--accent)':'var(--line)')+';background:'+(on?'var(--accent-bg)':'var(--paper)')+';color:'+(on?'var(--accent-text)':'var(--ink)')+';font-size:13px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">'+esc(ct.name)+' <span style="font-weight:600;color:var(--muted);">· '+nr+'</span></button>'; }).join('')+'</div>'
     : '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;">Todavía no hay categorías. Asígnalas desde el ⋯ de cada rutina (Enfoque › Entrenar › «Categoría»), por ejemplo Calentamiento o Pliometría.</div>';
+  }
   return h;
 }
 function tlDraw(){
@@ -24924,15 +24944,15 @@ function tlDraw(){
           '<span style="min-width:22px;text-align:center;font-weight:800;font-size:16px;color:var(--ink);">'+(c.n||1)+'</span>'+
           '<button type="button" onclick="tlN('+i+',1)" aria-label="Más" style="width:32px;height:38px;border:none;background:none;color:var(--accent-text);font-size:19px;font-weight:700;cursor:pointer;">+</button></span>'+
         '<button type="button" onclick="tlPick('+i+')" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;background:var(--paper);border:1.5px solid '+(open?'var(--accent)':'var(--line)')+';border-radius:12px;padding:10px 12px;cursor:pointer;font-family:Inter,sans-serif;">'+
-          '<span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.3;">'+esc(trainCondLabel(Object.assign({}, c, {n:1})).replace(/^1 /,'').replace(/^cosa de Entrenar$/,'Cualquier cosa de Entrenar'))+'</span>'+
+          '<span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.3;">'+esc(trainCondLabel(Object.assign({}, c, {n:1})).replace(/^1 /,'').replace(/^cosa de Enfoque$/,'Cualquier cosa de Enfoque'))+'</span>'+
           '<span style="color:var(--muted);display:inline-flex;transform:'+(open?'rotate(180deg)':'none')+';">'+ico('chev',15,2)+'</span></button>'+
         (TL.conds.length>1 ? '<button type="button" onclick="tlDel('+i+')" aria-label="Quitar condición" style="width:34px;height:38px;border:none;background:none;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">'+ico('x',16,2)+'</button>' : '')+
       '</div>'+(open ? tlPickerHTML(i) : '')+'</div>';
   }).join('');
   var L = {conds: TL.conds};
   brPutSheet(ov, '<div class="sheet" style="padding-top:0;padding-bottom:0;max-height:88vh;overflow-y:auto;">'+
-    '<div style="position:sticky;top:0;z-index:5;background:var(--paper);display:flex;justify-content:space-between;align-items:flex-start;padding:18px 0 10px;"><div><span class="serif" style="font-weight:700;font-size:21px;">Completar al entrenar</span>'+
-      '<div style="font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:4px;max-width:290px;">La tarea se marca sola al cumplir esto en Entrenar. Cuenta lo hecho con temporizador, GPS, importado o «por mi cuenta», también respiración y estudio.</div></div>'+
+    '<div style="position:sticky;top:0;z-index:5;background:var(--paper);display:flex;justify-content:space-between;align-items:flex-start;padding:18px 0 10px;"><div><span class="serif" style="font-weight:700;font-size:21px;">Completar desde Enfoque</span>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:4px;max-width:290px;">La tarea se marca sola al cumplir esto en Enfoque. Cuenta lo hecho con temporizador, GPS, importado o «por mi cuenta».</div></div>'+
       '<button type="button" class="st-x" onclick="tlClose()" aria-label="Cerrar">×</button></div>'+
     '<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:8px 0 8px;">Hay que hacer</div>'+rows+
     (TL.conds.length<4 ? '<button type="button" onclick="tlAdd()" style="width:100%;padding:12px;border:1.5px dashed var(--line);border-radius:14px;background:none;color:var(--accent-text);font-size:13.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">+ Y además…</button>' : '')+
@@ -24979,7 +24999,7 @@ function trainChipHTML(t){
   var label, tip;
   if(t.trainSum){ var v = t.prog||0; label = trainFmt(v)+'/'+t.qty+' '+trainSumUnit(t.trainSum.metric); tip = trainSumSummary(t); }
   else { var d = trainLinkDate(t) || todayStr(), ev = trainLinkEval(t, d); if(!ev) return ''; label = ev.have+'/'+ev.need; tip = trainLinkSummary(t.trainLink); }
-  return '<button onclick="event.stopPropagation();setTab(\'timer\')" title="Se completa al entrenar: '+esc(tip)+'" aria-label="Se completa al entrenar" style="background:var(--accent-bg);border:none;color:var(--accent-text);border-radius:999px;height:26px;padding:0 9px;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+ico('bolt',12,2.2)+label+'</button>';
+  return '<button onclick="event.stopPropagation();setTab(\'timer\')" title="Se completa desde Enfoque: '+esc(tip)+'" aria-label="Se completa desde Enfoque" style="background:var(--accent-bg);border:none;color:var(--accent-text);border-radius:999px;height:26px;padding:0 9px;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+ico('bolt',12,2.2)+label+'</button>';
 }
 // Categorías de rutinas (para «una categoría de Entrenar»)
 function openTplCatSheet(tplId){
@@ -27379,7 +27399,7 @@ function openBreathRun(b, name, tplId){
   b = brNorm(b);
   var AC = window.AudioContext||window.webkitAudioContext, ctx = null;
   try{ ctx = new AC(); if(ctx.resume) ctx.resume(); }catch(e){}
-  if(!ctx){ toast('Este dispositivo no permite audio ni reloj de alta precisión'); return; }
+  if(!ctx){ toast('Este dispositivo no permite reproducir los sonidos del temporizador'); return; }
   var P = brPhases(b), cycles = brCycles(b), master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
   BR = {b:b, name:name, tplId:tplId, ctx:ctx, master:master, P:P, cycles:cycles, total:cycles*P.cycle, t0:ctx.currentTime+.15+(b.lead||0),
         next:0, muted:false, paused:false, raf:0, sched:0, lastIdx:-1, started:Date.now(), done:false, view:b.view, wake:null,
@@ -27417,8 +27437,8 @@ function brBuild(){
     '<div id="br-stage" style="flex:1;width:100%;max-width:440px;display:flex;align-items:center;justify-content:center;position:relative;"></div>'+
     '<div style="width:100%;max-width:440px;padding:0 24px calc(26px + env(safe-area-inset-bottom));box-sizing:border-box;">'+
       '<div style="height:4px;background:#ffffff22;border-radius:2px;overflow:hidden;"><div id="br-prog" style="height:100%;width:0;background:#fff;border-radius:2px;"></div></div>'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;opacity:.85;"><span id="br-cyc"></span>'+
-      '<button id="br-pause" onclick="brPause()" style="padding:10px 26px;border-radius:22px;border:none;background:#ffffff2a;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Pausar</button><span id="br-left"></span></div></div>';
+      '<div style="text-align:center;margin-top:14px;font-size:13px;opacity:.8;"><span id="br-cyc"></span> · <span id="br-left"></span></div>'+
+      '<div style="display:flex;justify-content:center;margin-top:14px;"><button id="br-pause" onclick="brPause()" style="padding:13px 34px;border-radius:26px;border:none;background:#ffffff26;color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">Pausar</button></div></div>';
   brBuildStage();
 }
 function brBuildStage(){
@@ -27522,7 +27542,7 @@ function brFrame(){
   }
   set('br-prog', function(e){ e.style.width = (Math.max(0,t)/BR.total*100).toFixed(2)+'%'; });
   set('br-cyc', function(e){ e.textContent = pos ? 'Ciclo '+(pos.cy+1)+' de '+BR.cycles : 'Ciclo 1 de '+BR.cycles; });
-  set('br-left', function(e){ e.textContent = fmtDur(Math.max(0,Math.ceil(BR.total-Math.max(0,t))))+' resta'; });
+  set('br-left', function(e){ e.textContent = fmtDur(Math.max(0,Math.ceil(BR.total-Math.max(0,t))))+' quedan'; });
 }
 // Respiración: suma al nivel global y al de la técnica (se crea sola si tienes la plantilla instalada).
 function brSkillsFor(name){
@@ -28154,7 +28174,7 @@ function shDeflate(text){
 function shInflate(txt){
   if(txt.indexOf('GR0:')===0) return Promise.resolve(new TextDecoder().decode(shFromB64u(txt.slice(4))));
   if(txt.indexOf('GR1:')!==0) return Promise.reject(new Error('formato'));
-  if(typeof DecompressionStream==='undefined') return Promise.reject(new Error('Este navegador no puede leer este código'));
+  if(typeof DecompressionStream==='undefined') return Promise.reject(new Error('No se pudo leer este código'));
   var ds = new DecompressionStream('deflate-raw'), w = ds.writable.getWriter(); w.write(shFromB64u(txt.slice(4))); w.close();
   return new Response(ds.readable).arrayBuffer().then(function(buf){ return new TextDecoder().decode(buf); });
 }
@@ -30103,7 +30123,7 @@ function mSave(){
   if(isDay&&specificDate&&M.repeatEvery>0) Object.assign(saved,mRepeatSave());
   if(!(M.hasQty||M.hasCL)){ delete saved.over; delete saved.carry; }
   if(saved.trainSum && (saved.checklist&&saved.checklist.length || (saved.qty||1)<=1)){ delete saved.trainSum; }
-  if(saved.trainLink && ((saved.checklist&&saved.checklist.length) || (saved.qty||1)>1)){ delete saved.trainLink; toast('Completar al entrenar solo funciona con tareas «Simple»: se quitó el vínculo'); }
+  if(saved.trainLink && ((saved.checklist&&saved.checklist.length) || (saved.qty||1)>1)){ delete saved.trainLink; toast('Completar desde Enfoque solo funciona con tareas «Simple»: se quitó el vínculo'); }
   // Si algún ítem vinculado cambió su avance mientras se editaba en este
   // modal (se le sumó/restó cantidad, o se marcó/desmarcó un ítem simple),
   // empujar ese cambio hacia el ítem vinculado — comparando contra el
@@ -31634,7 +31654,7 @@ function scDrawGoal(c, W, H, R, p, d, ic, tier){
   var txt = scOn('names') ? (d.text||'Una meta') : 'Una meta que me propuse';
   var wf = scWrapFit(c, txt, R.w, compact?3:4, compact?72:84, 700, SC_SERIF, 36);
   wf.lines.forEach(function(l,i){ scText(c, l, cx, y+wf.px*.9+i*wf.px*1.08, wf.px, 700, SC_SERIF, p.ink, 'center'); }); y += wf.lines.length*wf.px*1.08 + 30;
-  var ph = {mes:'Un mes de trabajo, una meta lograda.', semestre:'Seis meses de constancia dieron resultado.', 'año':'Un año entero para llegar hasta acá.'}[d.period];
+  var ph = {mes:'Meta del mes cumplida.', semestre:'Meta del semestre cumplida.', 'año':'Meta del año cumplida.'}[d.period];
   if(ph && y+30 < R.y+R.h+20) scText(c, ph, cx, y+30, 32, 500, SC_SANS, p.soft, 'center', R.w); y += 56;
   if(scOn('date') && d.date && y+30 < R.y+R.h+30) scText(c, scFmtDay(d.date)+' · '+parseLocalDate(d.date).getFullYear(), cx, y+30, 28, 600, SC_SANS, col, 'center');
 }
@@ -32120,7 +32140,7 @@ function showFirstLevelUpTip(){
     _tourSteps = [{
       target: null,
       title: '¡Subiste de nivel!',
-      body: (isPremium() ? 'Cada nivel que ganas desbloquea un cupo más en cada período (hasta 32). Sigue completando tu umbral cada día para avanzar.' : 'Cada nivel que ganas desbloquea un cupo más en cada período (hasta 20). Sigue completando tu umbral cada día para avanzar.')
+      body: (isPremium() ? 'Cada nivel que ganas desbloquea un cupo más en cada período (hasta 32).' : 'Cada nivel que ganas desbloquea un cupo más en cada período (hasta 20).')
     }];
     _tourIdx=0; _tourActive=true; _tourOnDone=null;
     _slRender();
@@ -32176,7 +32196,7 @@ function welcomeRender(){
   if(_WEL.step===1){
     var ex = ['Tomar agua','Caminar 20 minutos','Leer 10 páginas','Ordenar mi escritorio'];
     body = '<div class="serif" style="font-weight:700;font-size:24px;margin-bottom:6px;color:var(--ink);">Bienvenida/o a Gramifica</div>'+
-      '<div style="font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px;">Empecemos por lo simple: ¿qué te gustaría hacer hoy? Después puedes agregar horarios, metas, repeticiones y mucho más.</div>'+
+      '<div style="font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px;">Escribe tu primera tarea. Después puedes agregar horarios, metas y repeticiones.</div>'+
       '<input id="wel-input" class="finp" value="'+esc(_WEL.text)+'" placeholder="Ej. Caminar 20 minutos" maxlength="80" style="font-size:16px;" onkeydown="if(event.key===\'Enter\')welcomeNext()"/>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 20px;">'+ex.map(function(t){ return '<button type="button" onclick="welcomeSuggest(\''+t+'\')" style="padding:6px 11px;border-radius:16px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink-soft);font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">'+t+'</button>'; }).join('')+'</div>'+
       '<div style="display:flex;gap:8px;"><button class="sbtn" onclick="welcomeNext()">Continuar</button><button class="cbtn" onclick="welcomeClose()">Explorar solo</button></div>';
@@ -33655,7 +33675,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.23.196';
+var APP_VERSION = '2026.11.23.199';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
