@@ -8075,7 +8075,10 @@ function findTaskEntry(reg, t, itemId){
 //  - registrada como "Esperado": se abre ese mismo registro para confirmarlo o ajustarlo;
 //  - sin registro: se abre la hoja de siempre.
 function maybeOpenRegEntryForTask(taskId, extra){
-  var t = S.tasks.find(function(x){return x.id===taskId;}); if(t && t.clientRef) return; // tareas de pacientes/clientes: el cobro se lleva en su ficha, no se pregunta
+  var t = S.tasks.find(function(x){return x.id===taskId;}); if(t && t.clientRef){   // tareas de pacientes/clientes: el cobro se lleva en su ficha; solo se pregunta si la tarea tiene registro propio y esa fecha aún no tiene pago
+    var _c = clFindClient(t.clientRef.pid, t.clientRef.cid); if(!_c || !taskRegIds(t).length) return;
+    var _d0 = taskEntryDate(t); if((_c.pays||[]).some(function(py){ return py.date===_d0; })) return;
+  }
   var ids = taskRegIds(t); if(!ids.length) return;
   window._regQ = {taskId:taskId, extra:extra||null, rest:ids.slice(1)};
   if(!regOpenOne(taskId, extra, ids[0])) regQueueNext();
@@ -8095,18 +8098,55 @@ function regOpenOne(taskId, extra, regId){
     if(pend.length && (!ex || ex.status!=='expected')) ex = pend[0];
     else if(ex && ex.status!=='expected') return false;
     // Ya hay un pendiente que todavía no vence: no se vuelve a preguntar hasta esa fecha.
-    if(ex && ex.status==='expected' && ex.date>_td) return false;
+    if(ex && ex.status==='expected' && ex.date>_td){ if(t.regDue && t.regDue.mode && t.regDue.mode!=='now' && !ex.clAuto) regSilentPending(reg, t, extra); return false; }
     // Cobro o pago diferido (fin de mes, en N días): al completar la tarea no se pregunta nada; queda pendiente y se avisa ese día.
     if(!ex && t.regDue && t.regDue.mode && t.regDue.mode!=='now'){ regSilentPending(reg, t, extra); return false; }
   } else if(ex && ex.status!=='expected') return false;
   if(ex){ openExpectedQuick(reg.id, ex.id, t.id); return true; }
   openRegEntryForTask(taskId, true, extra, reg.id); return true;
 }
+// Pendientes de una misma tarea: se juntan en uno solo (monto sumado + lista de fechas).
+function pendFmtOcc(e){ return (e.occ||[]).map(function(o){ return fmtShortDate(o.d); }).join(', '); }
+function pendAccum(reg, ne){
+  if(!ne || !ne.taskId || ne.status!=='expected' || ne.projClientId || ne.clAuto || ne.recKey) return false;
+  var ex = (reg.entries||[]).find(function(e){ return !e.del && e.status==='expected' && e.taskId===ne.taskId && (e.itemId||null)===(ne.itemId||null) && e.dir===ne.dir && !e.clAuto && !e.projClientId && !e.recKey; });
+  if(!ex) return false;
+  var od = ne.postponedFrom || ne.date;
+  var occ = (ex.occ && ex.occ.length) ? ex.occ.slice() : [{d:ex.postponedFrom||ex.date, a:+ex.amount||0}];
+  if(occ.some(function(o){ return o.d===od; })) return true;   // esa fecha ya está anotada
+  occ.push({d:od, a:+ne.amount||0}); occ.sort(function(a,b){ return a.d<b.d?-1:(a.d>b.d?1:0); });
+  var tot = occ.reduce(function(a,o){ return a+(o.a||0); },0);
+  ex.occ = occ; ex.amount = tot; ex.expectedAmount = tot; ex.noAmount = tot<=0; ex.ts = Date.now();
+  if(ne.date < ex.date) ex.date = ne.date;
+  if(ne.remindAt && ex.remindAt) ex.remindAt = ne.remindAt<ex.remindAt ? ne.remindAt : ex.remindAt; else if(ne.remindAt || ex.remindAt) ex.remindAt = ex.remindAt || ne.remindAt;
+  if(!ex.label && ne.label) ex.label = ne.label;
+  return true;
+}
+// Junta los pendientes sueltos que ya existían de una misma tarea.
+function pendMergeOld(){
+  var ch = false;
+  regList().forEach(function(reg){
+    if(reg.kind!=='finance') return;
+    var groups = {};
+    (reg.entries||[]).forEach(function(e){ if(e.del || e.status!=='expected' || !e.taskId || e.clAuto || e.projClientId || e.recKey) return; var k=e.taskId+'|'+(e.itemId||'')+'|'+e.dir; (groups[k]=groups[k]||[]).push(e); });
+    Object.keys(groups).forEach(function(k){
+      var g = groups[k]; if(g.length<2) return;
+      g.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+      var base = g[0];
+      g.slice(1).forEach(function(e){
+        if(pendAccum(reg, Object.assign({}, e, {postponedFrom: e.postponedFrom||e.date}))){ e.del = true; e.label = ''; e.ts = Date.now(); ch = true; }
+      });
+    });
+    if(ch) reg.updatedAt = new Date().toISOString();
+  });
+  if(ch){ try{ saveState(); refreshRegViews(); }catch(e){} }
+}
 function regSilentPending(reg, t, extra){
   var due = regDueDate(t.regDue, taskEntryDate(t)), last = regLastEntry(reg, t.id), mine = last && last.taskId===t.id ? last : null;
   var amt = mine && mine.amount>0 ? mine.amount : 0;
-  reg.entries = (reg.entries||[]).concat([{id:uid(), status:'expected', dir:t.regDir || (mine&&mine.dir) || 'out', amount:amt, date:due, label:(extra&&extra.label)||(mine&&mine.label)||'', catId:(mine&&mine.catId)||null, taskId:t.id, itemId:(extra&&extra.itemId)||null,
-    taskName:t.text, ts:Date.now(), postponedFrom:taskEntryDate(t), remindAt:due, noAmount:amt<=0}]);
+  var ne = {id:uid(), status:'expected', dir:t.regDir || (mine&&mine.dir) || 'out', amount:amt, date:due, label:(extra&&extra.label)||(mine&&mine.label)||'', catId:(mine&&mine.catId)||null, taskId:t.id, itemId:(extra&&extra.itemId)||null,
+    taskName:t.text, ts:Date.now(), postponedFrom:taskEntryDate(t), remindAt:due, noAmount:amt<=0};
+  var merged = pendAccum(reg, ne); if(!merged) reg.entries = (reg.entries||[]).concat([ne]);
   reg.updatedAt = new Date().toISOString(); saveState(); try{ refreshRegViews(); }catch(e){}
   toast('Anotado como pendiente para el '+fmtShortDate(due)+' · te aviso ese día');
 }
@@ -8490,8 +8530,9 @@ function enMakePending(date, remember){
   var reg = regById(EN.regId); if(!reg) return;
   var task = EN.taskId ? S.tasks.find(function(t){return t.id===EN.taskId;}) : null, amt = enPendAmount();
   var lab = ((document.getElementById('en-label')||{value:''}).value||'').trim();
-  reg.entries = (reg.entries||[]).concat([{id:uid(), status:'expected', dir:EN.dir, amount:amt, date:date, label:lab, catId:EN.catId||null, taskId:EN.taskId||null, itemId:EN.itemId||null,
-    taskName:task?task.text:null, ts:Date.now(), postponedFrom:EN.date||todayStr(), noAmount:amt<=0}]);
+  var ne = {id:uid(), status:'expected', dir:EN.dir, amount:amt, date:date, label:lab, catId:EN.catId||null, taskId:EN.taskId||null, itemId:EN.itemId||null,
+    taskName:task?task.text:null, ts:Date.now(), postponedFrom:EN.date||todayStr(), noAmount:amt<=0};
+  if(!pendAccum(reg, ne)) reg.entries = (reg.entries||[]).concat([ne]);
   reg.updatedAt = new Date().toISOString();
   if(remember && task){ S.tasks = S.tasks.map(function(t){ return t.id===task.id ? Object.assign({},t,{regDue:remember}) : t; }); }
   EN.saved = true; saveState(); try{ refreshRegViews(); }catch(e){}
@@ -8644,6 +8685,7 @@ function saveRegEntry(){
     var _cs = document.getElementById('en-client');
     if(_cs){ if(_cs.value) entry.projClientId = _cs.value; if(ex && ex.clAuto && ex.projClientId===_cs.value) entry.clAuto = ex.clAuto; }
     else if(ex && ex.projClientId){ entry.projClientId = ex.projClientId; if(ex.clAuto) entry.clAuto = ex.clAuto; }
+    if(!entry.projClientId && task && task.clientRef && EN.dir==='in' && EN.status==='done') entry.projClientId = task.clientRef.cid;
     if(EN.status==='expected'){ entry.expectedAmount = amt; toastMsg = 'Guardado como esperado'; }
     else if(ex){
       if(EN.confirming){
@@ -9219,6 +9261,7 @@ function pendRowHTML(reg, e, showReg){
     '<div onclick="openExpectedQuick(\''+reg.id+'\',\''+e.id+'\')" style="display:flex;align-items:baseline;gap:10px;cursor:pointer;">'+
       '<div style="flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(e.label||e.taskName||(isIn?'Ingreso esperado':'Gasto esperado'))+'</div>'+
       '<span style="font-size:14px;font-weight:700;color:var(--ink);flex-shrink:0;">'+(isIn?'+':'−')+fmtMoney(e.amount,reg.currency).replace('−','')+'</span></div>'+
+    (e.occ && e.occ.length>1 ? '<div style="font-size:11.5px;color:var(--ink-soft);margin-top:3px;line-height:1.4;">'+e.occ.length+' fechas: '+esc(pendFmtOcc(e))+'</div>' : '')+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.4;">'+(showReg?esc(reg.name)+' · ':'')+'<span style="color:'+w.col+';">'+w.txt+'</span>'+(e.remindAt?' · '+(pendSnoozed(e)?'<b style="color:var(--ink-soft);">pospuesto hasta el '+fmtShortDate(e.remindAt)+'</b>':'te avisé el '+fmtShortDate(e.remindAt)):'')+'</div>'+pendTagsHTML(e)+
     '<div style="display:flex;gap:8px;margin-top:9px;width:100%;box-sizing:border-box;">'+
       '<button onclick="openSnoozeMenu(\''+reg.id+'\',\''+e.id+'\')" style="flex:1;min-width:0;background:none;border:1.5px solid var(--line);color:var(--ink-soft);border-radius:10px;padding:9px 8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;">'+ico('clock',13,2)+'Posponer</button>'+
@@ -9282,6 +9325,7 @@ function pendTagsHTML(e){
     else tag('Ficha','#3f7fbf');
   }
   if(e.taskId) tag('Tarea con cobro','#a0762c');
+  if(e.occ && e.occ.length>1) tag(e.occ.length+' fechas juntas','#a0762c');
   if(e.recKey) tag('Mensual fijo','#6b5fa8');
   if(e.postponedFrom && !pendSnoozed(e)) tag('Dejado pendiente','#8a7a68');
   return t.length?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">'+t.join('')+'</div>':'';
@@ -11830,9 +11874,16 @@ function openActSummary(id){
   removeOverlay('act-sum'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='act-sum'; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('act-sum'); });
   document.body.appendChild(ov); actSumDraw();
 }
+// ¿Esta actividad se mide en distancia? Correr, caminar y ciclismo siempre; «Otra» solo si tiene ruta/km o es de un tipo de desplazamiento (senderismo, natación, remo…).
+var ACT_DIST_HC = /run|walk|hik|cycl|bik|swim|row|ski|skat|paddl|kayak|wheel|trail|snowshoe|surf/i;
+function actHasDist(a){
+  if(!a) return false; if(a.type && a.type!=='otro') return true;
+  if((+a.km||0)>0.05 || (a.route||[]).length>=2) return true;
+  return ACT_DIST_HC.test((a.hcType||'')+' '+(a.name||''));
+}
 function actStatsOf(a){
   var t = actType(a.type), pace = t.unit==='kmh' ? ((a.movSec>0 ? (a.km/(a.movSec/3600)).toFixed(1).replace('.',',') : '--')) : actFmtPace(a.movSec||a.sec, a.km);
-  return {km:actFmtKm(a.km), time:actFmtTime(a.sec), pace:pace, paceL:t.unit==='kmh'?'km/h':'/km', gain:a.gain||0, kcal:a.kcal};
+  return {dist:actHasDist(a), km:actFmtKm(a.km), time:actFmtTime(a.sec), pace:pace, paceL:t.unit==='kmh'?'km/h':'/km', gain:a.gain||0, kcal:a.kcal};
 }
 function actSumDraw(){
   var ov = document.getElementById('act-sum'); if(!ov||!ACTV) return; var a = ACTV.a, st = actStatsOf(a), ty = actType(a.type), sp = actGetSplits(a);
@@ -11848,9 +11899,9 @@ function actSumDraw(){
   var keep = document.getElementById('act-name'), nm = keep ? keep.value : a.name;
   var _c1 = actCol(a.type)[1], _cell2 = function(v,l){ return '<div><div style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.01em;">'+v+'</div><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">'+l+'</div></div>'; };
   var _best = _bs==null ? '—' : (ty.unit==='kmh' ? (3600/_bs).toFixed(1).replace('.',',') : actFmtPace(_bs,1));
-  brPutSheet(ov, '<div class="sheet"><div style="position:relative;border-radius:22px;overflow:hidden;background:linear-gradient(170deg,#0f1613,#15271e);color:#fff;padding:14px 16px 18px;margin-bottom:14px;"><canvas id="act-hero" style="position:absolute;inset:0;width:100%;height:100%;"></canvas><div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;"><button onclick="removeOverlay(\'act-sum\')" aria-label="Cerrar" style="width:38px;height:38px;border-radius:19px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:20px;cursor:pointer;">×</button><div style="text-align:center;min-width:0;"><input id="act-name" class="finp" maxlength="30" value="'+esc(nm)+'" onchange="actRename(this.value)" style="margin:0;font-weight:800;font-size:15px;border:none;border-bottom:1.5px dashed rgba(255,255,255,.4);padding:0 0 2px;background:transparent;color:#fff;text-align:center;width:100%;" placeholder="Ponle nombre"/><div style="font-size:11.5px;opacity:.7;">'+esc(timerHistDayLabel(a.date))+'</div></div><button onclick="actCardOut(true)" aria-label="Compartir" style="width:38px;height:38px;border-radius:19px;border:none;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></button></div><div style="position:relative;margin-top:62px;display:flex;align-items:baseline;gap:8px;"><span style="font-size:60px;font-weight:800;letter-spacing:-.03em;line-height:1;">'+st.km+'</span><span style="font-size:17px;opacity:.8;font-weight:700;">km</span></div>'+(_bs!=null?'<div style="position:relative;display:inline-block;margin-top:10px;background:#f6c344;color:#3b2a00;border-radius:14px;padding:5px 12px;font-size:12px;font-weight:800;">Mejor km · '+_best+'</div>':'')+'</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 8px;margin-bottom:16px;">'+_cell2(st.time,'tiempo')+_cell2(st.pace,st.paceL==='/km'?'ritmo /km':st.paceL)+_cell2(a.kcal!=null?a.kcal:'—','kcal')+_cell2(actFmtTime(a.movSec||a.sec),'en movimiento')+_cell2(a.gain>0?'+'+a.gain+' m':'—','desnivel')+_cell2(_best,ty.unit==='kmh'?'mejor km/h':'mejor km')+'</div>'+
-    (hasMap ? '<div style="border-radius:16px;overflow:hidden;margin-bottom:14px;height:220px;border:1px solid var(--line-soft);position:relative;"><canvas id="act-map" style="width:100%;height:100%;display:block;"></canvas>'+actMapBtnHTML()+'</div>' : '<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;">La ruta está solo en el dispositivo donde se grabó.</div>')+
+  brPutSheet(ov, '<div class="sheet"><div style="position:relative;border-radius:22px;overflow:hidden;background:linear-gradient(170deg,#0f1613,#15271e);color:#fff;padding:14px 16px 18px;margin-bottom:14px;"><canvas id="act-hero" style="position:absolute;inset:0;width:100%;height:100%;"></canvas><div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;"><button onclick="removeOverlay(\'act-sum\')" aria-label="Cerrar" style="width:38px;height:38px;border-radius:19px;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:20px;cursor:pointer;">×</button><div style="text-align:center;min-width:0;"><input id="act-name" class="finp" maxlength="30" value="'+esc(nm)+'" onchange="actRename(this.value)" style="margin:0;font-weight:800;font-size:15px;border:none;border-bottom:1.5px dashed rgba(255,255,255,.4);padding:0 0 2px;background:transparent;color:#fff;text-align:center;width:100%;" placeholder="Ponle nombre"/><div style="font-size:11.5px;opacity:.7;">'+esc(timerHistDayLabel(a.date))+'</div></div><button onclick="actCardOut(true)" aria-label="Compartir" style="width:38px;height:38px;border-radius:19px;border:none;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></button></div><div style="position:relative;margin-top:62px;display:flex;align-items:baseline;gap:8px;"><span style="font-size:60px;font-weight:800;letter-spacing:-.03em;line-height:1;">'+(st.dist?st.km:st.time)+'</span><span style="font-size:17px;opacity:.8;font-weight:700;">'+(st.dist?'km':'duración')+'</span></div>'+(st.dist&&_bs!=null?'<div style="position:relative;display:inline-block;margin-top:10px;background:#f6c344;color:#3b2a00;border-radius:14px;padding:5px 12px;font-size:12px;font-weight:800;">Mejor km · '+_best+'</div>':'')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px 8px;margin-bottom:16px;">'+(st.dist ? _cell2(st.time,'tiempo')+_cell2(st.pace,st.paceL==='/km'?'ritmo /km':st.paceL)+_cell2(a.kcal!=null?a.kcal:'—','kcal')+_cell2(actFmtTime(a.movSec||a.sec),'en movimiento')+_cell2(a.gain>0?'+'+a.gain+' m':'—','desnivel')+_cell2(_best,ty.unit==='kmh'?'mejor km/h':'mejor km') : _cell2(st.time,'tiempo')+(a.kcal!=null?_cell2(a.kcal,'kcal'):'')+(a.hrAvg?_cell2(a.hrAvg,'pulso medio'):'')) +'</div>'+
+    (hasMap ? '<div style="border-radius:16px;overflow:hidden;margin-bottom:14px;height:220px;border:1px solid var(--line-soft);position:relative;"><canvas id="act-map" style="width:100%;height:100%;display:block;"></canvas>'+actMapBtnHTML()+'</div>' : (st.dist ? '<div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:14px;">La ruta está solo en el dispositivo donde se grabó.</div>' : ''))+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">'+tiles.join('')+'</div>'+
     actSplitsHTML(a)+actElevHTML(a)+
     '<div style="font-weight:800;font-size:14px;color:var(--ink);margin:4px 0 8px;">Imagen para compartir</div>'+
@@ -11859,7 +11910,7 @@ function actSumDraw(){
     '<details class="st-adv"><summary>Personalizar la tarjeta</summary><div style="padding-bottom:14px;"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'+[['clasico','Clásico'],['minimal','Minimal'],['franja','Franja']].map(function(d){return chip(ACTV.design===d[0], d[1], 'ACTV.design=\''+d[0]+'\';actSumDraw()');}).join('')+'</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+QC_SIZES.map(function(z,i){return chip(ACTV.size===i, z[0], 'ACTV.size='+i+';actSumDraw()');}).join('')+chip(ACTV.transparent,'Fondo transparente','ACTV.transparent=!ACTV.transparent;actSumDraw()')+chip(ACTV.map&&actMapOn(),'Mapa de fondo','ACTV.map=!ACTV.map;if(ACTV.map&&!actMapOn())actMapToggle(actSumDraw);else actSumDraw()')+'</div>'+shareBrandChipsHTML('actSumDraw')+
     '<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px;">Poner tus datos sobre una foto:</div><input type="file" accept="image/*" onchange="actCardPhoto(this)" style="font-size:12.5px;"/></div></details>'+
-    '<details class="st-adv"><summary>Más opciones</summary><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:14px;"><button class="cbtn" onclick="actGpxOut()">Exportar GPX</button><button class="cbtn" onclick="openTimerHistToReg(\''+esc(a.histId||'')+'\')">Anotar en un registro</button><button class="cbtn" style="color:var(--bad);" onclick="actDelete(\''+a.id+'\')">Eliminar actividad</button></div></details></div>');
+    '<details class="st-adv"><summary>Más opciones</summary><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:14px;">'+(st.dist?'<button class="cbtn" onclick="actGpxOut()">Exportar GPX</button>':'')+'<button class="cbtn" onclick="openTimerHistToReg(\''+esc(a.histId||'')+'\')">Anotar en un registro</button><button class="cbtn" style="color:var(--bad);" onclick="actDelete(\''+a.id+'\')">Eliminar actividad</button></div></details></div>');
   if(hasMap) actMapDraw(document.getElementById('act-map'), a.route, {color:actCol(a.type)[1], follow:false});
   var _hc = document.getElementById('act-hero'); if(_hc && hasMap){ var _r = _hc.getBoundingClientRect(), _d = window.devicePixelRatio||1; _hc.width = _r.width*_d; _hc.height = _r.height*_d; var _x = _hc.getContext('2d'); _x.scale(_d,_d); try{ actDrawRoute(_x, a.route, {x:_r.width*.38,y:56,w:_r.width*.58,h:_r.height-70}, '#3ddc84', 4, true); }catch(e){} }
   actCardRender(document.getElementById('act-card'));
@@ -11906,21 +11957,22 @@ function actCardRender(cv){
   if(ACTV.design==='clasico'){
     F('600',30); c.textAlign = 'center'; c.globalAlpha = .85; c.fillText(label, W/2, pad+10); c.globalAlpha = 1;
     var _dh = actCardDiff(c, a, W/2, pad+34, W-pad*2, 'center'); if(_dh) _dh += 14;
-    actCardRoute(c, route, {x:pad, y:pad+50+_dh, w:W-pad*2, h:H*0.46-_dh*0.6}, rc, 14);
-    var y = H-pad-30, cols = [[st.km,'KM'],[st.time,'TIEMPO'],[st.pace,'RITMO '+st.paceL]];
-    cols.forEach(function(cc,i){ var x = pad + (W-pad*2)*(i+0.5)/3; c.textAlign='center'; F('800',i===0?92:70); c.fillText(cc[0], x, y-40); F('600',24); c.globalAlpha=.8; c.fillText(cc[1], x, y+6); c.globalAlpha=1; });
+    if(st.dist) actCardRoute(c, route, {x:pad, y:pad+50+_dh, w:W-pad*2, h:H*0.46-_dh*0.6}, rc, 14);
+    var y = H-pad-30, cols = st.dist ? [[st.km,'KM'],[st.time,'TIEMPO'],[st.pace,'RITMO '+st.paceL]] : [[st.time,'TIEMPO']].concat(a.kcal!=null?[[String(a.kcal),'KCAL']]:[]).concat(a.hrAvg?[[String(a.hrAvg),'PULSO']]:[]);
+    cols.forEach(function(cc,i){ var x = pad + (W-pad*2)*(i+0.5)/cols.length; c.textAlign='center'; F('800',(i===0&&st.dist)?92:70); c.fillText(cc[0], x, y-40); F('600',24); c.globalAlpha=.8; c.fillText(cc[1], x, y+6); c.globalAlpha=1; });
   } else if(ACTV.design==='minimal'){
-    actCardRoute(c, route, {x:W*0.5, y:pad, w:W*0.5-pad, h:H*0.3}, rc, 10);
+    if(st.dist) actCardRoute(c, route, {x:W*0.5, y:pad, w:W*0.5-pad, h:H*0.3}, rc, 10);
     actCardDiff(c, a, pad, pad+H*0.3+20, W-pad*2, 'left');
     c.textAlign = 'left'; F('600',30); c.globalAlpha = .85; c.fillText(label, pad, H-pad-330); c.globalAlpha = 1;
-    F('800',230); c.fillText(st.km, pad, H-pad-110); F('700',46); c.fillText('km', pad+ c.measureText(st.km).width*0 + 4, H-pad-50);
-    F('600',40); c.fillText(st.time+'   ·   '+st.pace+' '+st.paceL, pad, H-pad+10);
+    if(st.dist){ F('800',230); c.fillText(st.km, pad, H-pad-110); F('700',46); c.fillText('km', pad+ c.measureText(st.km).width*0 + 4, H-pad-50);
+    F('600',40); c.fillText(st.time+'   ·   '+st.pace+' '+st.paceL, pad, H-pad+10); }
+    else { F('800',200); c.fillText(st.time, pad, H-pad-110); F('700',46); c.fillText('duración', pad+4, H-pad-50); if(a.kcal!=null){ F('600',40); c.fillText(a.kcal+' kcal'+(a.hrAvg?'   ·   '+a.hrAvg+' lpm':''), pad, H-pad+10); } }
   } else {
     var _dh2 = actCardDiff(c, a, pad, pad, W-pad*2, 'left');
-    actCardRoute(c, route, {x:pad, y:pad+30+(_dh2?_dh2:0), w:W-pad*2, h:H*0.5-(_dh2?_dh2*0.8:0)}, rc, 14);
+    if(st.dist) actCardRoute(c, route, {x:pad, y:pad+30+(_dh2?_dh2:0), w:W-pad*2, h:H*0.5-(_dh2?_dh2*0.8:0)}, rc, 14);
     c.shadowBlur = 0; var by = H-pad-250; c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, by, W, 250); c.fillStyle = '#fff'; c.shadowBlur = 0;
-    var items = [[st.km,'KM'],[st.time,'TIEMPO'],[st.pace,st.paceL==='/km'?'RITMO':'KM/H'],[a.kcal!=null?a.kcal:st.gain, a.kcal!=null?'KCAL':'DESN. M']];
-    items.forEach(function(cc,i){ var x = W*(i+0.5)/4; c.textAlign='center'; F('800',58); c.fillText(String(cc[0]), x, by+112); F('600',22); c.globalAlpha=.75; c.fillText(cc[1], x, by+156); c.globalAlpha=1; });
+    var items = st.dist ? [[st.km,'KM'],[st.time,'TIEMPO'],[st.pace,st.paceL==='/km'?'RITMO':'KM/H'],[a.kcal!=null?a.kcal:st.gain, a.kcal!=null?'KCAL':'DESN. M']] : [[st.time,'TIEMPO']].concat(a.kcal!=null?[[a.kcal,'KCAL']]:[]).concat(a.hrAvg?[[a.hrAvg,'PULSO']]:[]);
+    items.forEach(function(cc,i){ var x = W*(i+0.5)/items.length; c.textAlign='center'; F('800',58); c.fillText(String(cc[0]), x, by+112); F('600',22); c.globalAlpha=.75; c.fillText(cc[1], x, by+156); c.globalAlpha=1; });
   }
   c.save(); c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 8; shareStamp(c, W, H, '#fff', '#ffffff'); c.restore();
 }
@@ -12223,7 +12275,7 @@ function openActHistory(){
   removeOverlay('act-hist'); var ov = document.createElement('div'); ov.className='overlay'; ov.id='act-hist'; ov.style.zIndex = 650; ov.addEventListener('click',function(e){ if(e.target===ov) removeOverlay('act-hist'); });
   var list = actLive().sort(function(a,b){return b.ts-a.ts;}).slice(0,100);
   ov.innerHTML = '<div class="sheet"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="serif" style="font-weight:700;font-size:18px;">Historial de actividades</span><button onclick="removeOverlay(\'act-hist\')" style="background:none;border:none;font-size:24px;color:var(--muted);cursor:pointer;line-height:1;">×</button></div>'+actBestsHTML()+
-    (list.length ? list.map(function(a){ var st = actStatsOf(a); return '<div onclick="removeOverlay(\'act-hist\');'+(a.route?'':'toast(\'La ruta está solo en el dispositivo donde se grabó\');')+'openActSummary(\''+a.id+'\')" style="background:var(--bg);border-radius:12px;padding:11px 12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;"><span style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(a.name)+'</span><span style="font-size:12px;color:var(--muted);">'+st.km+' km · '+st.time+' · '+esc(timerHistDayLabel(a.date))+'</span></div>'; }).join('') : '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:22px 0;">Aún no hay actividades.</div>')+'</div>';
+    (list.length ? list.map(function(a){ var st = actStatsOf(a); return '<div onclick="removeOverlay(\'act-hist\');'+((a.route||!actHasDist(a))?'':'toast(\'La ruta está solo en el dispositivo donde se grabó\');')+'openActSummary(\''+a.id+'\')" style="background:var(--bg);border-radius:12px;padding:11px 12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:baseline;"><span style="font-weight:700;font-size:14px;color:var(--ink);">'+esc(a.name)+'</span><span style="font-size:12px;color:var(--muted);">'+(st.dist?st.km+' km · ':'')+st.time+' · '+esc(timerHistDayLabel(a.date))+'</span></div>'; }).join('') : '<div style="font-size:12.5px;color:var(--muted);text-align:center;padding:22px 0;">Aún no hay actividades.</div>')+'</div>';
   document.body.appendChild(ov);
 }
 function actDelete(id){
@@ -15026,11 +15078,29 @@ function clTaskPickerDraw(q){
   box.innerHTML=list.length?list.map(function(t){ var on=(c.taskIds||[]).indexOf(t.id)>=0;
     return '<button type="button" onclick="clTaskToggle(\''+t.id+'\')" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:'+(on?'var(--accent-bg)':'var(--bg)')+';border:1.5px solid '+(on?'var(--accent)':'transparent')+';border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:Inter,sans-serif;"><span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(t.text||'(sin nombre)')+'</span><span style="font-size:11.5px;color:var(--muted);flex-shrink:0;">'+esc(clTaskLabel(t))+'</span><span style="font-size:16px;color:var(--accent-text);">'+(on?'✓':'')+'</span></button>'; }).join(''):'<div style="font-size:12.5px;color:var(--muted);padding:14px 4px;">No hay tareas disponibles. Puedes crear una nueva desde la ficha.</div>';
 }
+function clRetroFind(c,t){
+  var mk=clMk(), out=[];
+  clFinRegs().forEach(function(reg){ regEntries(reg).forEach(function(e){ if(e.taskId===t.id && e.status==='done' && e.dir==='in' && (e.date||'').slice(0,7)===mk && !e.projClientId) out.push({reg:reg,e:e}); }); });
+  return out.sort(function(a,b){ return a.e.date<b.e.date?-1:1; });
+}
+function clRetroOffer(cid, t){
+  var c0=clStored(); if(!c0) return; var L=clRetroFind(c0,t); if(!L.length) return;
+  var ds=L.map(function(x){ return fmtShortDate(x.e.date); }).join(', ');
+  clAsk('¿Sincronizar con el historial?','«'+t.text+'» ya tiene '+L.length+(L.length===1?' cobro':' cobros')+' este mes ('+ds+'). Se marcarán como pagos de '+(clDispName(c0)||'este cliente')+' y no se volverán a pedir.','Sincronizar',function(){
+    var c=clStored(), p=clProj(CLE.pid); if(!c||!p) return;
+    L.forEach(function(x){
+      x.e.projClientId=c.id; x.e.ts=Date.now(); x.reg.updatedAt=new Date().toISOString();
+      if(clIsSess(c) && !(c.log||[]).some(function(l){ return l.date===x.e.date && l.taskId===t.id; })) (c.log=c.log||[]).push({id:uid(),date:x.e.date,taskId:t.id,rate:clRate(c)});
+    });
+    p.updatedAt=new Date().toISOString(); saveState(); clSyncAll(true); clRefreshDraft(); CLE.bg=true; clEditorDraw(); toast('Historial sincronizado · '+L.length+(L.length===1?' pago':' pagos'));
+  });
+}
 function clTaskToggle(tid){
   var c=clStored(), p=clProj(CLE.pid); if(!c||!p) return; var t=S.tasks.find(function(x){return x.id===tid;}); if(!t) return;
   var i=(c.taskIds||[]).indexOf(tid);
   if(i>=0){ c.taskIds.splice(i,1); delete t.clientRef; } else { c.taskIds.push(tid); t.clientRef={pid:p.id,cid:c.id}; }
   p.updatedAt=new Date().toISOString(); saveState(); clSyncAll(true); clRefreshDraft(); clTaskPickerDraw((document.querySelector('#cl-tp input')||{}).value||''); CLE.bg=true; clEditorDraw();
+  if(i<0) setTimeout(function(){ try{ clRetroOffer(c.id,t); }catch(e){} },200);
 }
 function clTaskUnlink(tid){ clTaskToggleAct(tid); }
 function clTaskToggleAct(tid){ clAct(function(c){ var t=S.tasks.find(function(x){return x.id===tid;}); c.taskIds=(c.taskIds||[]).filter(function(x){return x!==tid;}); if(t) delete t.clientRef; }); }
@@ -23699,6 +23769,19 @@ function resetTasksOfPeriod(period){
       gone.forEach(function(id){ forgetTaskRewards(id); });
     }
   }
+  // XP fraccionada: lo que quedó a medias al cerrar el período da la parte proporcional de su XP (5 de 7 → 5/7).
+  try{
+    if(!S.rewardedTaskIds) S.rewardedTaskIds = {};
+    var _fx = 0, _fn = 0;
+    S.tasks.forEach(function(t){
+      if(t.del || !taskBelongsToResetPeriod(t, period) || S.rewardedTaskIds[t.id] || isSkipped(t)) return;
+      var r = tRatio(t); if(!(r>0) || r>=1) return;
+      var pts = Math.round((PT[t.period]||1)*r*100)/100; if(!(pts>0)) return;
+      _fx += pts; _fn++; try{ awardTrackXP(t, pts); }catch(e){}
+    });
+    var _fr = Math.round(_fx);
+    if(_fr>0){ addXP(_fr); setTimeout(function(){ toast('Avance parcial sumado: '+_fn+(_fn===1?' tarea':' tareas')+' · +'+_fr+' XP'); }, 1500); }
+  }catch(e){}
   S.tasks = S.tasks.map(function(t){
     if(!taskBelongsToResetPeriod(t, period)) return t;
     var clr = resetChecklistForCycle(t);
@@ -24772,9 +24855,9 @@ function trainCondMatch(c, e){
   }
   return false;
 }
-function trainLinkEval(t, dateKey){
+function trainLinkEval(t, dateKey, dateTo){
   var L = t && t.trainLink; if(!L || !L.conds || !L.conds.length) return null;
-  var E = trainEntries(dateKey), slots = [];
+  var E = trainEntriesRange(dateKey, dateTo||dateKey), slots = [];
   L.conds.forEach(function(c, ci){ for(var k=0; k<Math.max(1, Math.min(9, c.n||1)); k++) slots.push(ci); });
   var ofEntry = E.map(function(){ return -1; });
   function place(si, seen){
@@ -24829,8 +24912,10 @@ function trainLinkSync(){
         return;
       }
       if((t.checklist&&t.checklist.length) || (t.qty||1)>1) return;
-      var d = trainLinkDate(t); if(!d) return;
-      var ev = trainLinkEval(t, d); if(!ev) return;
+      var d, ev;
+      if((t.period||'dia')!=='dia'){ var w2 = trainWindow(t); if(!w2) return; d = w2.to; ev = trainLinkEval(t, w2.from, w2.to); }
+      else { d = trainLinkDate(t); if(!d) return; ev = trainLinkEval(t, d); }
+      if(!ev) return;
       var ok = ev.have>=ev.need, done = isDone(t);
       if(ok && !done){
         finishUpdate(Object.assign({}, t, {done:true, prog:1, trainAuto:d}), true, 1);
@@ -24847,6 +24932,7 @@ function trainLinkSync(){
   var b = timerHistRevoke; timerHistRevoke = function(){ var r = b.apply(this, arguments); trainLinkSyncSoon(); return r; };
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) trainLinkSyncSoon(1500); });
   setTimeout(trainLinkSync, 3500);
+  setTimeout(function(){ try{ pendMergeOld(); }catch(e){} }, 4500);
 })();
 
 // Hoja «Completar al entrenar» (editor de la tarea)
@@ -24998,7 +25084,7 @@ function trainChipHTML(t){
   if(isDone(t)) return '';
   var label, tip;
   if(t.trainSum){ var v = t.prog||0; label = trainFmt(v)+'/'+t.qty+' '+trainSumUnit(t.trainSum.metric); tip = trainSumSummary(t); }
-  else { var d = trainLinkDate(t) || todayStr(), ev = trainLinkEval(t, d); if(!ev) return ''; label = ev.have+'/'+ev.need; tip = trainLinkSummary(t.trainLink); }
+  else { var d = trainLinkDate(t) || todayStr(), ev = ((t.period||'dia')!=='dia') ? (function(){ var w3=trainWindow(t); return w3?trainLinkEval(t,w3.from,w3.to):null; })() : trainLinkEval(t, d); if(!ev) return ''; label = ev.have+'/'+ev.need; tip = trainLinkSummary(t.trainLink); }
   return '<button onclick="event.stopPropagation();setTab(\'timer\')" title="Se completa desde Enfoque: '+esc(tip)+'" aria-label="Se completa desde Enfoque" style="background:var(--accent-bg);border:none;color:var(--accent-text);border-radius:999px;height:26px;padding:0 9px;flex-shrink:0;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">'+ico('bolt',12,2.2)+label+'</button>';
 }
 // Categorías de rutinas (para «una categoría de Entrenar»)
@@ -30107,7 +30193,7 @@ function mSave(){
   // para que un vínculo hacia otra tarea (t.clLinkUp) calcule bien el
   // delta la próxima vez que se marque/desmarque. Antes quedaba siempre en
   // 0 acá, pisando lo que tapTask() hubiera dejado.
-  var prog=M.hasQty?Math.min(M.task.prog||0,qty):(done_?1:0);
+  var prog=M.hasQty?(M.task.over?(M.task.prog||0):Math.min(M.task.prog||0,qty)):(done_?1:0);
   // Fecha específica (tarea puntual, no recurrente) — si está activa, además
   // recalculamos el día de semana correspondiente por si se desactiva luego.
   var dateInp = isDay ? document.getElementById('m-date-input') : null;
@@ -33675,7 +33761,7 @@ proCapturePendingFromURL();
 // Aquí se compara APP_VERSION con version.json (siempre pedido sin caché).
 // Los datos viven en localStorage/Firebase, que NO se tocan al recargar.
 // IMPORTANTE: al publicar una versión nueva, cambiar el número aquí Y en version.json.
-var APP_VERSION = '2026.11.23.199';
+var APP_VERSION = '2026.11.24.202';
 function checkForUpdate(){
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
     .then(function(r){ return r.json(); })
